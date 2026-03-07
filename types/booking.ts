@@ -12,6 +12,51 @@ export interface BookingFormData {
   clientName: string
   clientEmail: string
   clientPhone: string
+  isRepeatCustomer: boolean
+}
+
+export interface BookingPricing {
+  servicePrice: number
+  upsellsTotal: number
+  subtotal: number
+  discountAmount: number
+  discountType: 'repeat_customer' | null
+  finalTotal: number
+  depositAmount: number
+}
+
+export function calculateBookingPricing(
+  servicePrice: number,
+  selectedUpsells: string[],
+  isRepeatCustomer: boolean
+): BookingPricing {
+  const selectedUpsellsData = MOCK_UPSELLS.filter((upsell) =>
+    selectedUpsells.includes(upsell.id)
+  )
+
+  const upsellsTotal = selectedUpsellsData.reduce((sum, upsell) => sum + upsell.price, 0)
+  const subtotal = servicePrice + upsellsTotal
+
+  let discountAmount = 0
+  let discountType: 'repeat_customer' | null = null
+
+  if (isRepeatCustomer) {
+    discountAmount = Math.round(subtotal * 0.1)
+    discountType = 'repeat_customer'
+  }
+
+  const finalTotal = subtotal - discountAmount
+  const depositAmount = Math.round(finalTotal * 0.5)
+
+  return {
+    servicePrice,
+    upsellsTotal,
+    subtotal,
+    discountAmount,
+    discountType,
+    finalTotal,
+    depositAmount,
+  }
 }
 
 export const MOCK_UPSELLS: Upsell[] = [

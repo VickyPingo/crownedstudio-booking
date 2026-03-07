@@ -29,6 +29,7 @@ export function BookingModal() {
     clientName: '',
     clientEmail: '',
     clientPhone: '',
+    isRepeatCustomer: false,
   })
 
   if (!isOpen || !selectedService) return null
@@ -54,6 +55,7 @@ export function BookingModal() {
       clientName: '',
       clientEmail: '',
       clientPhone: '',
+      isRepeatCustomer: false,
     })
     closeModal()
   }
@@ -101,6 +103,7 @@ export function BookingModal() {
             clientName={formData.clientName}
             clientEmail={formData.clientEmail}
             clientPhone={formData.clientPhone}
+            isRepeatCustomer={formData.isRepeatCustomer}
             onUpdateClient={(updates) => updateFormData(updates)}
           />
         )

@@ -1,6 +1,6 @@
 'use client'
 
-import { BookingFormData, MOCK_UPSELLS } from '@/types/booking'
+import { BookingFormData, MOCK_UPSELLS, calculateBookingPricing } from '@/types/booking'
 
 interface Service {
   id: string
@@ -21,9 +21,11 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
     formData.selectedUpsells.includes(upsell.id)
   )
 
-  const upsellsTotal = selectedUpsellsData.reduce((sum, upsell) => sum + upsell.price, 0)
-  const totalAmount = servicePrice + upsellsTotal
-  const depositAmount = Math.round(totalAmount * 0.5)
+  const pricing = calculateBookingPricing(
+    servicePrice,
+    formData.selectedUpsells,
+    formData.isRepeatCustomer
+  )
 
   return (
     <div className="space-y-6">
@@ -40,7 +42,7 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
               <p className="font-medium">{service.name}</p>
               <p className="text-sm text-gray-600">{service.description}</p>
             </div>
-            <p className="font-semibold">R{servicePrice}</p>
+            <p className="font-semibold">R{pricing.servicePrice}</p>
           </div>
         </div>
 
@@ -89,16 +91,42 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         <div className="p-4 bg-gray-50">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>R{totalAmount}</span>
+              <span>Service Price</span>
+              <span>R{pricing.servicePrice}</span>
             </div>
+
+            {pricing.upsellsTotal > 0 && (
+              <div className="flex justify-between text-sm">
+                <span>Additional Services</span>
+                <span>R{pricing.upsellsTotal}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between text-sm font-medium pt-2 border-t">
+              <span>Subtotal</span>
+              <span>R{pricing.subtotal}</span>
+            </div>
+
+            {pricing.discountAmount > 0 && pricing.discountType === 'repeat_customer' && (
+              <div className="flex justify-between text-sm text-green-700 bg-green-50 -mx-4 px-4 py-2">
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Repeat Customer Discount (10%)
+                </span>
+                <span>-R{pricing.discountAmount}</span>
+              </div>
+            )}
+
             <div className="flex justify-between font-semibold text-lg pt-2 border-t">
               <span>Total Amount</span>
-              <span>R{totalAmount}</span>
+              <span>R{pricing.finalTotal}</span>
             </div>
+
             <div className="flex justify-between text-green-700 font-semibold pt-2 border-t border-green-200 bg-green-50 -mx-4 px-4 py-2 mt-2">
               <span>50% Deposit Required</span>
-              <span>R{depositAmount}</span>
+              <span>R{pricing.depositAmount}</span>
             </div>
           </div>
         </div>
