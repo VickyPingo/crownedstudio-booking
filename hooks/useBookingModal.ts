@@ -1,16 +1,10 @@
 import { create } from 'zustand'
-
-interface Service {
-  id: string
-  name: string
-  slug: string
-  description: string
-}
+import { ServiceWithUpsells } from '@/types/service'
 
 interface BookingModalStore {
   isOpen: boolean
-  selectedService: Service | null
-  openModal: (service: Service) => void
+  selectedService: ServiceWithUpsells | null
+  openModal: (service: ServiceWithUpsells) => void
   closeModal: () => void
 }
 

@@ -2,15 +2,9 @@
 
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { BookingModal } from './BookingModal'
+import { ServiceWithUpsells } from '@/types/service'
 
-interface Service {
-  id: string
-  name: string
-  slug: string
-  description: string
-}
-
-export function ServiceList({ services }: { services: Service[] }) {
+export function ServiceList({ services }: { services: ServiceWithUpsells[] }) {
   const { openModal } = useBookingModal()
 
   return (

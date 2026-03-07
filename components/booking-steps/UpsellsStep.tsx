@@ -1,13 +1,14 @@
 'use client'
 
-import { MOCK_UPSELLS } from '@/types/booking'
+import { Upsell } from '@/types/service'
 
 interface UpsellsStepProps {
+  availableUpsells: Upsell[]
   selectedUpsells: string[]
   onUpdateUpsells: (upsells: string[]) => void
 }
 
-export function UpsellsStep({ selectedUpsells, onUpdateUpsells }: UpsellsStepProps) {
+export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells }: UpsellsStepProps) {
   const toggleUpsell = (upsellId: string) => {
     if (selectedUpsells.includes(upsellId)) {
       onUpdateUpsells(selectedUpsells.filter((id) => id !== upsellId))
@@ -16,13 +17,22 @@ export function UpsellsStep({ selectedUpsells, onUpdateUpsells }: UpsellsStepPro
     }
   }
 
+  if (availableUpsells.length === 0) {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-xl font-semibold">Enhance Your Service</h3>
+        <p className="text-sm text-gray-600">No additional services available for this service</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <h3 className="text-xl font-semibold">Enhance Your Service</h3>
       <p className="text-sm text-gray-600">Select any additional services you would like to add</p>
 
       <div className="space-y-3">
-        {MOCK_UPSELLS.map((upsell) => {
+        {availableUpsells.map((upsell) => {
           const isSelected = selectedUpsells.includes(upsell.id)
           return (
             <div
@@ -52,7 +62,11 @@ export function UpsellsStep({ selectedUpsells, onUpdateUpsells }: UpsellsStepPro
                     </div>
                     <h4 className="font-semibold">{upsell.name}</h4>
                   </div>
-                  <p className="text-sm text-gray-600 mt-1 ml-7">{upsell.description}</p>
+                  {upsell.duration_added_minutes > 0 && (
+                    <p className="text-xs text-gray-500 mt-1 ml-7">
+                      +{upsell.duration_added_minutes} minutes
+                    </p>
+                  )}
                 </div>
                 <p className="font-semibold ml-4">R{upsell.price}</p>
               </div>

@@ -1,14 +1,9 @@
 'use client'
 
-interface Service {
-  id: string
-  name: string
-  slug: string
-  description: string
-}
+import { ServiceWithUpsells } from '@/types/service'
 
 interface ServiceDetailsStepProps {
-  service: Service
+  service: ServiceWithUpsells
 }
 
 export function ServiceDetailsStep({ service }: ServiceDetailsStepProps) {
@@ -22,14 +17,21 @@ export function ServiceDetailsStep({ service }: ServiceDetailsStepProps) {
       </div>
 
       <div className="border rounded-lg p-4 bg-gray-50">
-        <p className="text-sm text-gray-500 mb-1">Service Slug</p>
-        <p className="text-sm font-mono">{service.slug}</p>
+        <p className="text-sm text-gray-500 mb-1">Price (1 person)</p>
+        <p className="text-lg font-semibold">R{service.price_1_person}</p>
       </div>
 
       <div className="border rounded-lg p-4 bg-gray-50">
-        <p className="text-sm text-gray-500 mb-1">Description</p>
-        <p className="text-sm">{service.description}</p>
+        <p className="text-sm text-gray-500 mb-1">Duration</p>
+        <p className="text-sm">{service.duration_minutes} minutes</p>
       </div>
+
+      {service.description && (
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <p className="text-sm text-gray-500 mb-1">Description</p>
+          <p className="text-sm">{service.description}</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,29 +1,23 @@
 'use client'
 
-import { BookingFormData, MOCK_UPSELLS, calculateBookingPricing } from '@/types/booking'
-
-interface Service {
-  id: string
-  name: string
-  slug: string
-  description: string
-}
+import { BookingFormData, calculateBookingPricing } from '@/types/booking'
+import { ServiceWithUpsells } from '@/types/service'
 
 interface PaymentStepProps {
-  service: Service
+  service: ServiceWithUpsells
   formData: BookingFormData
 }
 
 export function PaymentStep({ service, formData }: PaymentStepProps) {
-  const servicePrice = 1500
+  const servicePrice = service.price_1_person
 
-  const selectedUpsellsData = MOCK_UPSELLS.filter((upsell) =>
+  const selectedUpsellsData = service.upsells.filter((upsell) =>
     formData.selectedUpsells.includes(upsell.id)
   )
 
   const pricing = calculateBookingPricing(
     servicePrice,
-    formData.selectedUpsells,
+    selectedUpsellsData,
     formData.isRepeatCustomer
   )
 

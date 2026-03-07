@@ -84,6 +84,7 @@ export function BookingModal() {
       case 1:
         return (
           <UpsellsStep
+            availableUpsells={selectedService.upsells}
             selectedUpsells={formData.selectedUpsells}
             onUpdateUpsells={(upsells) => updateFormData({ selectedUpsells: upsells })}
           />
