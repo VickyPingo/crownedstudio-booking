@@ -27,6 +27,10 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
   )
 
   const handleCreateBooking = async () => {
+    if (savedBooking) {
+      return
+    }
+
     setIsCreatingBooking(true)
 
     try {

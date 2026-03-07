@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 
+const PAYMENT_EXPIRY_MINUTES = 30
+
+function createSouthAfricaDateTime(dateString: string, timeString: string): Date {
+  const saTimeString = `${dateString}T${timeString}:00+02:00`
+  return new Date(saTimeString)
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
@@ -39,8 +46,9 @@ export async function POST(request: NextRequest) {
       customerId = newCustomer.id
     }
 
-    const startDateTime = new Date(`${payload.selectedDate}T${payload.selectedTime}:00`)
+    const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
+    const paymentExpiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60000)
 
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
@@ -57,8 +65,9 @@ export async function POST(request: NextRequest) {
         discount_type: payload.discountType,
         total_price: payload.totalPrice,
         deposit_due: payload.depositDue,
+        payment_expires_at: paymentExpiresAt.toISOString(),
       })
-      .select('id, customer_id, status, deposit_due, total_price, start_time, created_at')
+      .select('id, customer_id, status, deposit_due, total_price, start_time, payment_expires_at, created_at')
       .single()
 
     if (bookingError) {
@@ -97,6 +106,7 @@ export async function POST(request: NextRequest) {
         depositDue: booking.deposit_due,
         totalPrice: booking.total_price,
         startTime: booking.start_time,
+        paymentExpiresAt: booking.payment_expires_at,
         createdAt: booking.created_at,
       },
     })

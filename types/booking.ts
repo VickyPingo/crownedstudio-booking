@@ -43,6 +43,7 @@ export interface SavedBooking {
   depositDue: number
   totalPrice: number
   startTime: string
+  paymentExpiresAt?: string
   createdAt: string
 }
 
