@@ -8,6 +8,7 @@ import { DateTimeStep } from './booking-steps/DateTimeStep'
 import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
 import { PaymentStep } from './booking-steps/PaymentStep'
 import { ConfirmationStep } from './booking-steps/ConfirmationStep'
+import { BookingFormData } from '@/types/booking'
 
 const STEPS = [
   { id: 'service', label: 'Service Details' },
@@ -21,6 +22,14 @@ const STEPS = [
 export function BookingModal() {
   const { isOpen, selectedService, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
+  const [formData, setFormData] = useState<BookingFormData>({
+    selectedUpsells: [],
+    selectedDate: '',
+    selectedTime: '',
+    clientName: '',
+    clientEmail: '',
+    clientPhone: '',
+  })
 
   if (!isOpen || !selectedService) return null
 
@@ -38,7 +47,32 @@ export function BookingModal() {
 
   const handleClose = () => {
     setCurrentStep(0)
+    setFormData({
+      selectedUpsells: [],
+      selectedDate: '',
+      selectedTime: '',
+      clientName: '',
+      clientEmail: '',
+      clientPhone: '',
+    })
     closeModal()
+  }
+
+  const updateFormData = (updates: Partial<BookingFormData>) => {
+    setFormData((prev) => ({ ...prev, ...updates }))
+  }
+
+  const canProceedToNext = () => {
+    switch (currentStep) {
+      case 3:
+        return (
+          formData.clientName.trim() !== '' &&
+          formData.clientEmail.trim() !== '' &&
+          formData.clientPhone.trim() !== ''
+        )
+      default:
+        return true
+    }
   }
 
   const renderStep = () => {
@@ -46,13 +80,37 @@ export function BookingModal() {
       case 0:
         return <ServiceDetailsStep service={selectedService} />
       case 1:
-        return <UpsellsStep />
+        return (
+          <UpsellsStep
+            selectedUpsells={formData.selectedUpsells}
+            onUpdateUpsells={(upsells) => updateFormData({ selectedUpsells: upsells })}
+          />
+        )
       case 2:
-        return <DateTimeStep />
+        return (
+          <DateTimeStep
+            selectedDate={formData.selectedDate}
+            selectedTime={formData.selectedTime}
+            onUpdateDate={(date) => updateFormData({ selectedDate: date })}
+            onUpdateTime={(time) => updateFormData({ selectedTime: time })}
+          />
+        )
       case 3:
-        return <ClientDetailsStep />
+        return (
+          <ClientDetailsStep
+            clientName={formData.clientName}
+            clientEmail={formData.clientEmail}
+            clientPhone={formData.clientPhone}
+            onUpdateClient={(updates) => updateFormData(updates)}
+          />
+        )
       case 4:
-        return <PaymentStep />
+        return (
+          <PaymentStep
+            service={selectedService}
+            formData={formData}
+          />
+        )
       case 5:
         return <ConfirmationStep />
       default:
@@ -127,9 +185,9 @@ export function BookingModal() {
 
             <button
               onClick={handleNext}
-              disabled={currentStep === STEPS.length - 1}
+              disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
               className={`px-6 py-2 rounded-lg ${
-                currentStep === STEPS.length - 1
+                currentStep === STEPS.length - 1 || !canProceedToNext()
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : 'bg-black text-white hover:bg-gray-800'
               }`}
