@@ -18,6 +18,34 @@ export interface BookingPricing {
   depositAmount: number
 }
 
+export interface CreateBookingPayload {
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  serviceSlug: string
+  selectedDate: string
+  selectedTime: string
+  durationMinutes: number
+  peopleCount: number
+  selectedUpsellIds: string[]
+  basePrice: number
+  upsellsTotal: number
+  discountAmount: number
+  discountType: string | null
+  totalPrice: number
+  depositDue: number
+}
+
+export interface SavedBooking {
+  id: string
+  customerId: string
+  status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'expired'
+  depositDue: number
+  totalPrice: number
+  startTime: string
+  createdAt: string
+}
+
 export function calculateBookingPricing(
   servicePrice: number,
   selectedUpsellsData: Array<{ id: string; price: number }>,

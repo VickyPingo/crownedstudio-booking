@@ -1,7 +1,9 @@
 'use client'
 
-import { BookingFormData, calculateBookingPricing } from '@/types/booking'
+import { useState } from 'react'
+import { BookingFormData, calculateBookingPricing, CreateBookingPayload } from '@/types/booking'
 import { ServiceWithUpsells } from '@/types/service'
+import { useBookingModal } from '@/hooks/useBookingModal'
 
 interface PaymentStepProps {
   service: ServiceWithUpsells
@@ -9,6 +11,9 @@ interface PaymentStepProps {
 }
 
 export function PaymentStep({ service, formData }: PaymentStepProps) {
+  const [isCreatingBooking, setIsCreatingBooking] = useState(false)
+  const { savedBooking, setSavedBooking } = useBookingModal()
+
   const servicePrice = service.price_1_person
 
   const selectedUpsellsData = service.upsells.filter((upsell) =>
@@ -20,6 +25,53 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
     selectedUpsellsData,
     formData.isRepeatCustomer
   )
+
+  const handleCreateBooking = async () => {
+    setIsCreatingBooking(true)
+
+    try {
+      const payload: CreateBookingPayload = {
+        customerName: formData.clientName,
+        customerEmail: formData.clientEmail,
+        customerPhone: formData.clientPhone,
+        serviceSlug: service.slug,
+        selectedDate: formData.selectedDate,
+        selectedTime: formData.selectedTime,
+        durationMinutes: service.duration_minutes,
+        peopleCount: 1,
+        selectedUpsellIds: formData.selectedUpsells,
+        basePrice: pricing.servicePrice,
+        upsellsTotal: pricing.upsellsTotal,
+        discountAmount: pricing.discountAmount,
+        discountType: pricing.discountType,
+        totalPrice: pricing.finalTotal,
+        depositDue: pricing.depositAmount,
+      }
+
+      const response = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create booking')
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.booking) {
+        setSavedBooking(result.booking)
+      }
+    } catch (error) {
+      console.error('Error creating booking:', error)
+      alert('Failed to create booking. Please try again.')
+    } finally {
+      setIsCreatingBooking(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -126,14 +178,46 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         </div>
       </div>
 
-      <button
-        className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
-      >
-        Continue to Payment
-      </button>
+      {savedBooking && (
+        <div className="border border-green-200 bg-green-50 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-green-700 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <div className="flex-1">
+              <h4 className="font-semibold text-green-900 mb-1">Booking Created Successfully</h4>
+              <p className="text-sm text-green-800 mb-2">
+                Your booking reference: <span className="font-mono font-semibold">{savedBooking.id.slice(0, 8).toUpperCase()}</span>
+              </p>
+              <p className="text-xs text-green-700">
+                Status: Awaiting Payment
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!savedBooking ? (
+        <button
+          onClick={handleCreateBooking}
+          disabled={isCreatingBooking}
+          className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          {isCreatingBooking ? 'Creating Booking...' : 'Continue to Payment'}
+        </button>
+      ) : (
+        <button
+          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors"
+        >
+          Pay Deposit (R{pricing.depositAmount})
+        </button>
+      )}
 
       <p className="text-xs text-gray-500 text-center">
-        You will be redirected to our secure payment provider to complete your booking
+        {!savedBooking
+          ? 'Your booking will be created and you will be redirected to payment'
+          : 'You will be redirected to PayFast to complete your deposit payment'
+        }
       </p>
     </div>
   )
