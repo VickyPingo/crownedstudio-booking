@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/bookings/cleanup-expired",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}
