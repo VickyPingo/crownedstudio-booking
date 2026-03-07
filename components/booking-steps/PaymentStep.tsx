@@ -12,6 +12,7 @@ interface PaymentStepProps {
 
 export function PaymentStep({ service, formData }: PaymentStepProps) {
   const [isCreatingBooking, setIsCreatingBooking] = useState(false)
+  const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const { savedBooking, setSavedBooking } = useBookingModal()
 
   const servicePrice = service.price_1_person
@@ -74,6 +75,38 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
       alert('Failed to create booking. Please try again.')
     } finally {
       setIsCreatingBooking(false)
+    }
+  }
+
+  const handlePayDeposit = async () => {
+    if (!savedBooking) {
+      return
+    }
+
+    setIsInitiatingPayment(true)
+
+    try {
+      const response = await fetch('/api/payment/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ bookingId: savedBooking.id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to initiate payment')
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.paymentUrl) {
+        window.location.href = result.paymentUrl
+      }
+    } catch (error) {
+      console.error('Error initiating payment:', error)
+      alert('Failed to initiate payment. Please try again.')
+      setIsInitiatingPayment(false)
     }
   }
 
@@ -211,9 +244,11 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         </button>
       ) : (
         <button
-          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors"
+          onClick={handlePayDeposit}
+          disabled={isInitiatingPayment}
+          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          Pay Deposit (R{pricing.depositAmount})
+          {isInitiatingPayment ? 'Redirecting to PayFast...' : `Pay Deposit (R${pricing.depositAmount})`}
         </button>
       )}
 
