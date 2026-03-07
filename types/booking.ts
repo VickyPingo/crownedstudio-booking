@@ -39,7 +39,7 @@ export interface CreateBookingPayload {
 export interface SavedBooking {
   id: string
   customerId: string
-  status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'expired'
+  status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'cancelled_expired'
   depositDue: number
   totalPrice: number
   startTime: string

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 
-const PAYMENT_EXPIRY_MINUTES = 30
+const PAYMENT_EXPIRY_MINUTES = 15
 
 function createSouthAfricaDateTime(dateString: string, timeString: string): Date {
   const saTimeString = `${dateString}T${timeString}:00+02:00`
