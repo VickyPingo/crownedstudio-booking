@@ -11,13 +11,13 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = supabaseAdmin
-    const now = new Date().toISOString()
+    const graceTime = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
     const { data: expiredBookings, error: fetchError } = await supabase
       .from('bookings')
       .select('id')
       .eq('status', 'pending_payment')
-      .lt('payment_expires_at', now)
+      .lt('payment_expires_at', graceTime)
 
     if (fetchError) {
       console.error('Error fetching expired bookings:', fetchError)
