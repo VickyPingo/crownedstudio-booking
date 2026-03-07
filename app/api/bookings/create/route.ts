@@ -51,15 +51,23 @@ export async function POST(request: NextRequest) {
     const paymentExpiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60000)
 
     // Check for overlapping bookings
+    const now = new Date().toISOString()
     const { data: conflictingBookings } = await supabase
       .from('bookings')
-      .select('id')
+      .select('id, status, payment_expires_at')
       .in('status', ['confirmed', 'pending_payment'])
       .lt('start_time', endDateTime.toISOString())
       .gt('end_time', startDateTime.toISOString())
-      .limit(1)
 
-    if (conflictingBookings && conflictingBookings.length > 0) {
+    const activeConflicts = conflictingBookings?.filter(booking => {
+      if (booking.status === 'confirmed') return true
+      if (booking.status === 'pending_payment' && booking.payment_expires_at) {
+        return booking.payment_expires_at > now
+      }
+      return false
+    })
+
+    if (activeConflicts && activeConflicts.length > 0) {
       return NextResponse.json(
         { error: 'That time slot is no longer available. Please choose another time.' },
         { status: 409 }
