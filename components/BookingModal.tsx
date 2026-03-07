@@ -1,22 +1,75 @@
 'use client'
 
+import { useState } from 'react'
 import { useBookingModal } from '@/hooks/useBookingModal'
+import { ServiceDetailsStep } from './booking-steps/ServiceDetailsStep'
+import { UpsellsStep } from './booking-steps/UpsellsStep'
+import { DateTimeStep } from './booking-steps/DateTimeStep'
+import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
+import { PaymentStep } from './booking-steps/PaymentStep'
+import { ConfirmationStep } from './booking-steps/ConfirmationStep'
+
+const STEPS = [
+  { id: 'service', label: 'Service Details' },
+  { id: 'upsells', label: 'Upsells' },
+  { id: 'datetime', label: 'Date & Time' },
+  { id: 'client', label: 'Client Details' },
+  { id: 'payment', label: 'Payment' },
+  { id: 'confirmation', label: 'Confirmation' },
+]
 
 export function BookingModal() {
   const { isOpen, selectedService, closeModal } = useBookingModal()
+  const [currentStep, setCurrentStep] = useState(0)
 
   if (!isOpen || !selectedService) return null
+
+  const handleNext = () => {
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(currentStep + 1)
+    }
+  }
+
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1)
+    }
+  }
+
+  const handleClose = () => {
+    setCurrentStep(0)
+    closeModal()
+  }
+
+  const renderStep = () => {
+    switch (currentStep) {
+      case 0:
+        return <ServiceDetailsStep service={selectedService} />
+      case 1:
+        return <UpsellsStep />
+      case 2:
+        return <DateTimeStep />
+      case 3:
+        return <ClientDetailsStep />
+      case 4:
+        return <PaymentStep />
+      case 5:
+        return <ConfirmationStep />
+      default:
+        return null
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/50"
-        onClick={closeModal}
+        onClick={handleClose}
       />
 
       <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6">
         <button
-          onClick={closeModal}
+          onClick={handleClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -24,14 +77,65 @@ export function BookingModal() {
           </svg>
         </button>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <h2 className="text-2xl font-bold">Book Service</h2>
 
-          <div className="border-t pt-4">
-            <p className="text-sm text-gray-500">Selected Service:</p>
-            <p className="text-xl font-semibold">{selectedService.name}</p>
-            <p className="text-sm text-gray-600 mt-2">{selectedService.description}</p>
-            <p className="text-sm text-gray-400 mt-1">Slug: {selectedService.slug}</p>
+          <div className="flex items-center justify-between">
+            {STEPS.map((step, index) => (
+              <div key={step.id} className="flex items-center flex-1">
+                <div className="flex flex-col items-center flex-1">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      index === currentStep
+                        ? 'bg-black text-white'
+                        : index < currentStep
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {index < currentStep ? '✓' : index + 1}
+                  </div>
+                  <p className="text-xs mt-1 text-center hidden sm:block">{step.label}</p>
+                </div>
+                {index < STEPS.length - 1 && (
+                  <div
+                    className={`h-0.5 flex-1 ${
+                      index < currentStep ? 'bg-green-500' : 'bg-gray-200'
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t pt-6 min-h-[200px]">
+            {renderStep()}
+          </div>
+
+          <div className="flex justify-between pt-4 border-t">
+            <button
+              onClick={handleBack}
+              disabled={currentStep === 0}
+              className={`px-6 py-2 rounded-lg ${
+                currentStep === 0
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+              }`}
+            >
+              Back
+            </button>
+
+            <button
+              onClick={handleNext}
+              disabled={currentStep === STEPS.length - 1}
+              className={`px-6 py-2 rounded-lg ${
+                currentStep === STEPS.length - 1
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-black text-white hover:bg-gray-800'
+              }`}
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
