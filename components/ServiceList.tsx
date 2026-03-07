@@ -51,7 +51,7 @@ export function ServiceList({ services }: { services: ServiceWithUpsells[] }) {
         ))}
       </div>
 
-      <BookingModal />
+      <BookingModal services={services} />
     </>
   )
 }

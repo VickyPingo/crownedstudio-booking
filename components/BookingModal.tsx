@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { ServiceDetailsStep } from './booking-steps/ServiceDetailsStep'
 import { UpsellsStep } from './booking-steps/UpsellsStep'
@@ -9,6 +9,7 @@ import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
 import { PaymentStep } from './booking-steps/PaymentStep'
 import { ConfirmationStep } from './booking-steps/ConfirmationStep'
 import { BookingFormData } from '@/types/booking'
+import { ServiceWithUpsells } from '@/types/service'
 
 const STEPS = [
   { id: 'service', label: 'Service Details' },
@@ -19,8 +20,8 @@ const STEPS = [
   { id: 'confirmation', label: 'Confirmation' },
 ]
 
-export function BookingModal() {
-  const { isOpen, selectedService, closeModal } = useBookingModal()
+export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
+  const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<BookingFormData>({
     selectedUpsells: [],
@@ -31,8 +32,20 @@ export function BookingModal() {
     clientPhone: '',
     isRepeatCustomer: false,
   })
+  const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
-  if (!isOpen || !selectedService) return null
+  useEffect(() => {
+    if (selectedService) {
+      setResolvedService(selectedService)
+    } else if (serviceSlug) {
+      const service = services.find(s => s.slug === serviceSlug)
+      setResolvedService(service || null)
+    } else {
+      setResolvedService(null)
+    }
+  }, [selectedService, serviceSlug, services])
+
+  if (!isOpen || !resolvedService) return null
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) {
@@ -80,11 +93,11 @@ export function BookingModal() {
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <ServiceDetailsStep service={selectedService} />
+        return <ServiceDetailsStep service={resolvedService} />
       case 1:
         return (
           <UpsellsStep
-            availableUpsells={selectedService.upsells}
+            availableUpsells={resolvedService.upsells}
             selectedUpsells={formData.selectedUpsells}
             onUpdateUpsells={(upsells) => updateFormData({ selectedUpsells: upsells })}
           />
@@ -111,7 +124,7 @@ export function BookingModal() {
       case 4:
         return (
           <PaymentStep
-            service={selectedService}
+            service={resolvedService}
             formData={formData}
           />
         )
