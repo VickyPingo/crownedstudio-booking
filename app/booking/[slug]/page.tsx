@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/server"
-import { Service, ServiceWithUpsells, Upsell } from "@/types/service"
+import { ServiceWithUpsells } from "@/types/service"
 import { BookingPageClient } from "./BookingPageClient"
 
 export default async function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -30,19 +30,19 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
     .select("id, slug, name, price, quantity_rule, duration_added_minutes")
     .eq("active", true)
 
-  const servicesWithUpsells: ServiceWithUpsells[] = (services || []).map((service: Service) => {
+  const servicesWithUpsells: ServiceWithUpsells[] = (services || []).map((service) => {
     const allowedUpsellSlugs = service.allowed_upsells
-      ? service.allowed_upsells.split(',').map(s => s.trim())
+      ? service.allowed_upsells.split(',').map((s: string) => s.trim())
       : []
 
-    const serviceUpsells = (allUpsells || []).filter((upsell: Upsell) =>
+    const serviceUpsells = (allUpsells || []).filter((upsell) =>
       allowedUpsellSlugs.includes(upsell.slug)
     )
 
     return {
       ...service,
       upsells: serviceUpsells
-    }
+    } as ServiceWithUpsells
   })
 
   const requestedService = servicesWithUpsells.find(s => s.slug === slug)
