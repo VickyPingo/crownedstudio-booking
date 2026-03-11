@@ -6,6 +6,9 @@ export interface Service {
   price_1_person: number
   price_2_people: number
   price_3_people: number
+  price_4_people: number
+  price_5_people: number
+  price_6_people: number
   max_people: number
   duration_minutes: number
   allowed_upsells: string | null

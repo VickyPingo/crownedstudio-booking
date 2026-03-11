@@ -8,7 +8,7 @@ interface ServiceDetailsStepProps {
   onUpdatePeopleCount: (count: number) => void
 }
 
-function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number {
+function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number | null {
   switch (count) {
     case 1:
       return service.price_1_person
@@ -16,18 +16,27 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
       return service.price_2_people
     case 3:
       return service.price_3_people
+    case 4:
+      return service.price_4_people
+    case 5:
+      return service.price_5_people
+    case 6:
+      return service.price_6_people
     default:
-      return service.price_1_person
+      return null
   }
 }
 
 export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }: ServiceDetailsStepProps) {
   const peopleOptions: number[] = []
-  for (let i = 1; i <= service.max_people && i <= 3; i++) {
-    peopleOptions.push(i)
+  for (let i = 1; i <= service.max_people && i <= 6; i++) {
+    const price = getPriceForPeopleCount(service, i)
+    if (price !== null && price > 0) {
+      peopleOptions.push(i)
+    }
   }
 
-  const currentPrice = getPriceForPeopleCount(service, peopleCount)
+  const currentPrice = getPriceForPeopleCount(service, peopleCount) ?? service.price_1_person
 
   return (
     <div className="space-y-4">
@@ -40,7 +49,7 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
 
       <div className="border rounded-lg p-4 bg-gray-50">
         <p className="text-sm text-gray-500 mb-2">Number of People</p>
-        <div className="flex gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {peopleOptions.map((count) => {
             const price = getPriceForPeopleCount(service, count)
             const isSelected = peopleCount === count
@@ -49,7 +58,7 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
                 key={count}
                 type="button"
                 onClick={() => onUpdatePeopleCount(count)}
-                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
+                className={`p-3 rounded-lg border-2 transition-colors ${
                   isSelected
                     ? 'border-black bg-black text-white'
                     : 'border-gray-200 bg-white hover:border-gray-300'

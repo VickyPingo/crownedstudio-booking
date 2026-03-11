@@ -13,6 +13,9 @@ export default async function Home() {
       price_1_person,
       price_2_people,
       price_3_people,
+      price_4_people,
+      price_5_people,
+      price_6_people,
       max_people,
       duration_minutes,
       allowed_upsells

@@ -13,6 +13,12 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
       return service.price_2_people
     case 3:
       return service.price_3_people
+    case 4:
+      return service.price_4_people
+    case 5:
+      return service.price_5_people
+    case 6:
+      return service.price_6_people
     default:
       return service.price_1_person
   }
