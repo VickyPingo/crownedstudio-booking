@@ -2,8 +2,8 @@ import { supabaseAdmin } from "@/lib/supabase/server"
 import { Service, ServiceWithUpsells, Upsell } from "@/types/service"
 import { BookingPageClient } from "./BookingPageClient"
 
-export default async function BookingPage({ params }: { params: { slug: string } }) {
-  const { slug } = params
+export default async function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
 
   const { data: services, error } = await supabaseAdmin
     .from("services")
