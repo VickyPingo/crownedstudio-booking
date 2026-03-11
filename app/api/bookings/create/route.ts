@@ -3,10 +3,27 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 
 const PAYMENT_EXPIRY_MINUTES = 15
+const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
+const DEPOSIT_PERCENT = 0.5
 
 function createSouthAfricaDateTime(dateString: string, timeString: string): Date {
   const saTimeString = `${dateString}T${timeString}:00+02:00`
   return new Date(saTimeString)
+}
+
+async function checkRepeatCustomer(
+  supabase: typeof supabaseAdmin,
+  email: string,
+  phone: string
+): Promise<boolean> {
+  const { data: confirmedBookings } = await supabase
+    .from('bookings')
+    .select('id, customers!inner(email, phone)')
+    .eq('status', 'confirmed')
+    .or(`email.eq.${email},phone.eq.${phone}`, { referencedTable: 'customers' })
+    .limit(1)
+
+  return confirmedBookings !== null && confirmedBookings.length > 0
 }
 
 export async function POST(request: NextRequest) {
@@ -45,6 +62,14 @@ export async function POST(request: NextRequest) {
 
       customerId = newCustomer.id
     }
+
+    const isRepeatCustomer = await checkRepeatCustomer(supabase, payload.customerEmail, payload.customerPhone)
+
+    const subtotal = payload.basePrice + payload.upsellsTotal
+    const discountAmount = isRepeatCustomer ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT) : 0
+    const discountType = isRepeatCustomer ? 'repeat_customer' : null
+    const totalPrice = subtotal - discountAmount
+    const depositDue = Math.round(totalPrice * DEPOSIT_PERCENT)
 
     const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
@@ -85,13 +110,13 @@ export async function POST(request: NextRequest) {
         end_time: endDateTime.toISOString(),
         base_price: payload.basePrice,
         upsells_total: payload.upsellsTotal,
-        discount_amount: payload.discountAmount,
-        discount_type: payload.discountType,
-        total_price: payload.totalPrice,
-        deposit_due: payload.depositDue,
+        discount_amount: discountAmount,
+        discount_type: discountType,
+        total_price: totalPrice,
+        deposit_due: depositDue,
         payment_expires_at: paymentExpiresAt.toISOString(),
       })
-      .select('id, customer_id, status, deposit_due, total_price, start_time, payment_expires_at, created_at')
+      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at')
       .single()
 
     if (bookingError) {
@@ -128,6 +153,8 @@ export async function POST(request: NextRequest) {
         customerId: booking.customer_id,
         status: booking.status,
         depositDue: booking.deposit_due,
+        discountAmount: booking.discount_amount,
+        discountType: booking.discount_type,
         totalPrice: booking.total_price,
         startTime: booking.start_time,
         paymentExpiresAt: booking.payment_expires_at,

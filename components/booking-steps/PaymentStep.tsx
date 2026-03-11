@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BookingFormData, calculateBookingPricing, CreateBookingPayload } from '@/types/booking'
+import { BookingFormData, CreateBookingPayload, BookingPricing } from '@/types/booking'
 import { ServiceWithUpsells } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 
@@ -21,11 +21,28 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
     formData.selectedUpsells.includes(upsell.id)
   )
 
-  const pricing = calculateBookingPricing(
-    servicePrice,
-    selectedUpsellsData,
-    formData.isRepeatCustomer
-  )
+  const upsellsTotal = selectedUpsellsData.reduce((sum, upsell) => sum + upsell.price, 0)
+  const subtotal = servicePrice + upsellsTotal
+
+  const pricing: BookingPricing = savedBooking
+    ? {
+        servicePrice,
+        upsellsTotal,
+        subtotal,
+        discountAmount: savedBooking.discountAmount,
+        discountType: savedBooking.discountType,
+        finalTotal: savedBooking.totalPrice,
+        depositAmount: savedBooking.depositDue,
+      }
+    : {
+        servicePrice,
+        upsellsTotal,
+        subtotal,
+        discountAmount: 0,
+        discountType: null,
+        finalTotal: subtotal,
+        depositAmount: Math.round(subtotal * 0.5),
+      }
 
   const handleCreateBooking = async () => {
     if (savedBooking) {
@@ -45,12 +62,12 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         durationMinutes: service.duration_minutes,
         peopleCount: 1,
         selectedUpsellIds: formData.selectedUpsells,
-        basePrice: pricing.servicePrice,
-        upsellsTotal: pricing.upsellsTotal,
-        discountAmount: pricing.discountAmount,
-        discountType: pricing.discountType,
-        totalPrice: pricing.finalTotal,
-        depositDue: pricing.depositAmount,
+        basePrice: servicePrice,
+        upsellsTotal: upsellsTotal,
+        discountAmount: 0,
+        discountType: null,
+        totalPrice: subtotal,
+        depositDue: Math.round(subtotal * 0.5),
       }
 
       const response = await fetch('/api/bookings/create', {

@@ -30,7 +30,6 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
     clientName: '',
     clientEmail: '',
     clientPhone: '',
-    isRepeatCustomer: false,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
@@ -68,7 +67,6 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
       clientName: '',
       clientEmail: '',
       clientPhone: '',
-      isRepeatCustomer: false,
     })
     closeModal()
   }
@@ -117,7 +115,6 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
             clientName={formData.clientName}
             clientEmail={formData.clientEmail}
             clientPhone={formData.clientPhone}
-            isRepeatCustomer={formData.isRepeatCustomer}
             onUpdateClient={(updates) => updateFormData(updates)}
           />
         )

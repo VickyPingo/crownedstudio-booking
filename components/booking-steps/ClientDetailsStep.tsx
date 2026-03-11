@@ -4,12 +4,10 @@ interface ClientDetailsStepProps {
   clientName: string
   clientEmail: string
   clientPhone: string
-  isRepeatCustomer: boolean
   onUpdateClient: (updates: {
     clientName?: string
     clientEmail?: string
     clientPhone?: string
-    isRepeatCustomer?: boolean
   }) => void
 }
 
@@ -17,7 +15,6 @@ export function ClientDetailsStep({
   clientName,
   clientEmail,
   clientPhone,
-  isRepeatCustomer,
   onUpdateClient,
 }: ClientDetailsStepProps) {
   return (
@@ -75,25 +72,6 @@ export function ClientDetailsStep({
             <p className="text-xs text-red-500 mt-1">Phone number is required</p>
           )}
         </div>
-      </div>
-
-      <div className="border-t pt-4">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isRepeatCustomer}
-            onChange={(e) => onUpdateClient({ isRepeatCustomer: e.target.checked })}
-            className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black"
-          />
-          <div>
-            <p className="text-sm font-medium text-gray-900">
-              I am a repeat customer
-            </p>
-            <p className="text-xs text-gray-600">
-              Repeat customers receive 10% off their booking
-            </p>
-          </div>
-        </label>
       </div>
 
       {clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== '' && (
