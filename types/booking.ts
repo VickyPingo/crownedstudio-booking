@@ -1,4 +1,5 @@
 export interface BookingFormData {
+  peopleCount: number
   selectedUpsells: string[]
   selectedDate: string
   selectedTime: string

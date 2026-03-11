@@ -24,6 +24,7 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
   const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<BookingFormData>({
+    peopleCount: 1,
     selectedUpsells: [],
     selectedDate: '',
     selectedTime: '',
@@ -61,6 +62,7 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
   const handleClose = () => {
     setCurrentStep(0)
     setFormData({
+      peopleCount: 1,
       selectedUpsells: [],
       selectedDate: '',
       selectedTime: '',
@@ -91,7 +93,13 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
   const renderStep = () => {
     switch (currentStep) {
       case 0:
-        return <ServiceDetailsStep service={resolvedService} />
+        return (
+          <ServiceDetailsStep
+            service={resolvedService}
+            peopleCount={formData.peopleCount}
+            onUpdatePeopleCount={(count) => updateFormData({ peopleCount: count })}
+          />
+        )
       case 1:
         return (
           <UpsellsStep

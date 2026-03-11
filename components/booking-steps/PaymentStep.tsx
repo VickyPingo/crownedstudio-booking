@@ -5,6 +5,19 @@ import { BookingFormData, CreateBookingPayload, BookingPricing } from '@/types/b
 import { ServiceWithUpsells } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 
+function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number {
+  switch (count) {
+    case 1:
+      return service.price_1_person
+    case 2:
+      return service.price_2_people
+    case 3:
+      return service.price_3_people
+    default:
+      return service.price_1_person
+  }
+}
+
 interface PaymentStepProps {
   service: ServiceWithUpsells
   formData: BookingFormData
@@ -15,7 +28,7 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const { savedBooking, setSavedBooking } = useBookingModal()
 
-  const servicePrice = service.price_1_person
+  const servicePrice = getPriceForPeopleCount(service, formData.peopleCount)
 
   const selectedUpsellsData = service.upsells.filter((upsell) =>
     formData.selectedUpsells.includes(upsell.id)
@@ -60,7 +73,7 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         selectedDate: formData.selectedDate,
         selectedTime: formData.selectedTime,
         durationMinutes: service.duration_minutes,
-        peopleCount: 1,
+        peopleCount: formData.peopleCount,
         selectedUpsellIds: formData.selectedUpsells,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
@@ -140,7 +153,9 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
           <div className="flex justify-between items-start">
             <div>
               <p className="font-medium">{service.name}</p>
-              <p className="text-sm text-gray-600">{service.description}</p>
+              <p className="text-sm text-gray-600">
+                {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
+              </p>
             </div>
             <p className="font-semibold">R{pricing.servicePrice}</p>
           </div>
@@ -191,7 +206,7 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
         <div className="p-4 bg-gray-50">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Service Price</span>
+              <span>Service ({formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'})</span>
               <span>R{pricing.servicePrice}</span>
             </div>
 
