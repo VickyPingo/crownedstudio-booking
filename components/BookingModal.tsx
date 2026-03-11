@@ -147,18 +147,18 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
         onClick={handleClose}
       />
 
-      <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 p-6">
-        <button
-          onClick={handleClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-        >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col" style={{ maxHeight: '90vh' }}>
+        <div className="sticky top-0 bg-white z-10 p-6 pb-4 border-b border-gray-200">
+          <button
+            onClick={handleClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
 
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold">Book Service</h2>
+          <h2 className="text-2xl font-bold mb-4">Book Service</h2>
 
           <div className="flex items-center justify-between">
             {STEPS.map((step, index) => (
@@ -187,36 +187,38 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="border-t pt-6 min-h-[200px]">
+        <div className="flex-1 overflow-y-auto p-6 pt-4">
+          <div className="min-h-[200px]">
             {renderStep()}
           </div>
+        </div>
 
-          <div className="flex justify-between pt-4 border-t">
-            <button
-              onClick={handleBack}
-              disabled={currentStep === 0}
-              className={`px-6 py-2 rounded-lg ${
-                currentStep === 0
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-              }`}
-            >
-              Back
-            </button>
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 pt-4 flex justify-between">
+          <button
+            onClick={handleBack}
+            disabled={currentStep === 0}
+            className={`px-6 py-2 rounded-lg ${
+              currentStep === 0
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+            }`}
+          >
+            Back
+          </button>
 
-            <button
-              onClick={handleNext}
-              disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
-              className={`px-6 py-2 rounded-lg ${
-                currentStep === STEPS.length - 1 || !canProceedToNext()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-black text-white hover:bg-gray-800'
-              }`}
-            >
-              Next
-            </button>
-          </div>
+          <button
+            onClick={handleNext}
+            disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
+            className={`px-6 py-2 rounded-lg ${
+              currentStep === STEPS.length - 1 || !canProceedToNext()
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-black text-white hover:bg-gray-800'
+            }`}
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>
