@@ -2,18 +2,21 @@
 
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
 interface Client {
-  client_email: string
-  client_name: string
-  client_phone: string
+  id: string
+  full_name: string
+  email: string | null
+  phone: string | null
   bookingCount: number
   totalSpent: number
   lastBooking: string | null
 }
 
 export default function AdminClientsPage() {
+  const router = useRouter()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -22,49 +25,64 @@ export default function AdminClientsPage() {
     const fetchClients = async () => {
       setLoading(true)
 
-      const { data, error } = await supabase
-        .from('bookings')
-        .select('client_email, client_name, client_phone, total_amount, booking_date, payment_status')
-        .not('client_email', 'is', null)
-        .order('booking_date', { ascending: false })
+      const { data: customers, error: customersError } = await supabase
+        .from('customers')
+        .select('id, full_name, email, phone')
 
-      if (error) {
-        console.error('Error fetching clients:', error)
+      if (customersError || !customers) {
+        setLoading(false)
+        return
+      }
+
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select(`
+          customer_id,
+          total_price,
+          start_time,
+          payment_transactions(status, amount)
+        `)
+        .order('start_time', { ascending: false })
+
+      if (bookingsError) {
         setLoading(false)
         return
       }
 
       const clientMap = new Map<string, Client>()
 
-      data?.forEach((booking) => {
-        const email = booking.client_email
-        if (!email) return
+      customers.forEach((customer) => {
+        clientMap.set(customer.id, {
+          id: customer.id,
+          full_name: customer.full_name,
+          email: customer.email,
+          phone: customer.phone,
+          bookingCount: 0,
+          totalSpent: 0,
+          lastBooking: null,
+        })
+      })
 
-        const existing = clientMap.get(email)
-        const isPaid = booking.payment_status === 'completed'
+      bookings?.forEach((booking) => {
+        const client = clientMap.get(booking.customer_id)
+        if (!client) return
 
-        if (existing) {
-          existing.bookingCount += 1
-          if (isPaid) {
-            existing.totalSpent += booking.total_amount || 0
-          }
-          if (!existing.lastBooking || booking.booking_date > existing.lastBooking) {
-            existing.lastBooking = booking.booking_date
-          }
-        } else {
-          clientMap.set(email, {
-            client_email: email,
-            client_name: booking.client_name || 'Unknown',
-            client_phone: booking.client_phone || '',
-            bookingCount: 1,
-            totalSpent: isPaid ? (booking.total_amount || 0) : 0,
-            lastBooking: booking.booking_date,
-          })
+        client.bookingCount += 1
+
+        const paid = (booking.payment_transactions as { status: string; amount: number }[])
+          ?.filter(p => p.status === 'complete')
+          .reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+        client.totalSpent += paid
+
+        if (!client.lastBooking || booking.start_time > client.lastBooking) {
+          client.lastBooking = booking.start_time
         }
       })
 
       const clientList = Array.from(clientMap.values())
-      clientList.sort((a, b) => b.bookingCount - a.bookingCount)
+        .filter(c => c.bookingCount > 0)
+        .sort((a, b) => b.bookingCount - a.bookingCount)
+
       setClients(clientList)
       setLoading(false)
     }
@@ -76,9 +94,9 @@ export default function AdminClientsPage() {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
     return (
-      client.client_name?.toLowerCase().includes(query) ||
-      client.client_email?.toLowerCase().includes(query) ||
-      client.client_phone?.includes(query)
+      client.full_name?.toLowerCase().includes(query) ||
+      client.email?.toLowerCase().includes(query) ||
+      client.phone?.includes(query)
     )
   })
 
@@ -145,13 +163,17 @@ export default function AdminClientsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredClients.map((client) => (
-                    <tr key={client.client_email} className="hover:bg-gray-50">
+                    <tr
+                      key={client.id}
+                      onClick={() => router.push(`/admin/clients/${client.id}`)}
+                      className="hover:bg-gray-50 cursor-pointer"
+                    >
                       <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">{client.client_name}</p>
+                        <p className="font-medium text-gray-900">{client.full_name}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-gray-900">{client.client_email}</p>
-                        <p className="text-sm text-gray-600">{client.client_phone}</p>
+                        <p className="text-gray-900">{client.email || '-'}</p>
+                        <p className="text-sm text-gray-600">{client.phone || '-'}</p>
                       </td>
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -164,7 +186,7 @@ export default function AdminClientsPage() {
                       <td className="px-6 py-4">
                         <p className="text-gray-900">
                           {client.lastBooking
-                            ? new Date(client.lastBooking + 'T00:00:00').toLocaleDateString('en-ZA')
+                            ? new Date(client.lastBooking).toLocaleDateString('en-ZA')
                             : '-'}
                         </p>
                       </td>

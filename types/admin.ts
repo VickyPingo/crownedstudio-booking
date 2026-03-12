@@ -1,0 +1,82 @@
+export type BookingStatus = 'pending_payment' | 'confirmed' | 'completed' | 'cancelled' | 'expired' | 'cancelled_expired' | 'no_show'
+
+export interface BookingDetail {
+  id: string
+  customer_id: string
+  service_slug: string
+  pricing_option_slug: string | null
+  people_count: number
+  status: BookingStatus
+  start_time: string
+  end_time: string
+  base_price: number
+  surcharge_total: number
+  upsells_total: number
+  total_price: number
+  deposit_due: number
+  balance_paid: number
+  balance_paid_at: string | null
+  balance_paid_by: string | null
+  internal_notes: string | null
+  allergies: string | null
+  massage_pressure: string
+  medical_history: string | null
+  created_at: string
+  customer: {
+    id: string
+    full_name: string
+    email: string | null
+    phone: string | null
+  }
+  service: {
+    name: string
+    category: string
+    duration_minutes: number
+  }
+  booking_upsells: {
+    upsell_id: string
+    quantity: number
+    price_total: number
+    person_number: number
+    upsell: {
+      name: string
+      slug: string
+    }
+  }[]
+  booking_notes: {
+    id: string
+    note: string
+    created_at: string
+    created_by: string | null
+  }[]
+  payment_transactions: {
+    id: string
+    status: string
+    amount: number
+    created_at: string
+  }[]
+}
+
+export interface TimeBlock {
+  id: string
+  block_date: string
+  start_time: string | null
+  end_time: string | null
+  is_full_day: boolean
+  reason: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface CustomerProfile {
+  id: string
+  full_name: string
+  email: string | null
+  phone: string | null
+  allergies: string | null
+  massage_pressure: string
+  medical_notes: string | null
+  private_notes: string | null
+  created_at: string
+  updated_at: string
+}
