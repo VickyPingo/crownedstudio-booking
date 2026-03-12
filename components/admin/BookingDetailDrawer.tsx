@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import type { BookingDetail, BookingStatus } from '@/types/admin'
+import type { BookingDetail, BookingStatus, Room } from '@/types/admin'
 
 interface BookingDetailDrawerProps {
   bookingId: string | null
@@ -28,10 +28,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [markingBalancePaid, setMarkingBalancePaid] = useState(false)
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [showRoomSelect, setShowRoomSelect] = useState(false)
+  const [updatingRoom, setUpdatingRoom] = useState(false)
 
   useEffect(() => {
     if (bookingId) {
       fetchBooking()
+      fetchRooms()
     }
   }, [bookingId])
 
@@ -46,6 +50,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         customer:customers(id, full_name, email, phone),
         service:services(name, category, duration_minutes),
         voucher:vouchers(code, discount_type, discount_value),
+        room:rooms(id, room_name, capacity),
         booking_upsells(
           upsell_id,
           quantity,
@@ -63,6 +68,35 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       setBooking(data as unknown as BookingDetail)
     }
     setLoading(false)
+  }
+
+  const fetchRooms = async () => {
+    const { data } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('active', true)
+      .order('priority', { ascending: true })
+
+    if (data) {
+      setRooms(data as Room[])
+    }
+  }
+
+  const handleRoomChange = async (roomId: string | null) => {
+    if (!booking) return
+
+    setUpdatingRoom(true)
+    const { error } = await supabase
+      .from('bookings')
+      .update({ room_id: roomId })
+      .eq('id', booking.id)
+
+    if (!error) {
+      fetchBooking()
+      onUpdate()
+      setShowRoomSelect(false)
+    }
+    setUpdatingRoom(false)
   }
 
   const handleStatusChange = async (newStatus: BookingStatus) => {
@@ -237,6 +271,73 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     minute: '2-digit',
                   })}
                 </p>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Room Assignment</h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                {!showRoomSelect ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      {booking.room ? (
+                        <div>
+                          <p className="font-medium text-gray-900">{booking.room.room_name}</p>
+                          <p className="text-sm text-gray-600">Capacity: {booking.room.capacity}</p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">No room assigned</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowRoomSelect(true)}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      {rooms.map((room) => (
+                        <button
+                          key={room.id}
+                          onClick={() => handleRoomChange(room.id)}
+                          disabled={updatingRoom}
+                          className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                            booking.room_id === room.id
+                              ? 'border-gray-900 bg-gray-900 text-white'
+                              : 'border-gray-200 bg-white hover:border-gray-400 text-gray-900'
+                          } disabled:opacity-50`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">{room.room_name}</span>
+                            <span className={`text-sm ${booking.room_id === room.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                              Cap: {room.capacity}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handleRoomChange(null)}
+                        disabled={updatingRoom}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                          !booking.room_id
+                            ? 'border-gray-900 bg-gray-900 text-white'
+                            : 'border-gray-200 bg-white hover:border-gray-400 text-gray-500'
+                        } disabled:opacity-50`}
+                      >
+                        Unassign Room
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setShowRoomSelect(false)}
+                      className="w-full px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
 

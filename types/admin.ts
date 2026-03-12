@@ -24,6 +24,7 @@ export interface BookingDetail {
   voucher_code: string | null
   voucher_discount: number
   voucher_id: string | null
+  room_id: string | null
   created_at: string
   customer: {
     id: string
@@ -40,6 +41,11 @@ export interface BookingDetail {
     code: string
     discount_type: string
     discount_value: number
+  } | null
+  room: {
+    id: string
+    room_name: string
+    capacity: number
   } | null
   booking_upsells: {
     upsell_id: string
@@ -63,6 +69,15 @@ export interface BookingDetail {
     amount: number
     created_at: string
   }[]
+}
+
+export interface Room {
+  id: string
+  room_name: string
+  room_area: string
+  capacity: number
+  priority: number
+  active: boolean
 }
 
 export interface TimeBlock {

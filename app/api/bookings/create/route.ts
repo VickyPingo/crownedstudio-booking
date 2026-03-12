@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers'
 import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
+import { allocateRoom } from '@/lib/roomAllocation'
 
 const PAYMENT_EXPIRY_MINUTES = 15
 
@@ -128,26 +129,24 @@ export async function POST(request: NextRequest) {
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
     const paymentExpiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60000)
 
-    // Check for overlapping bookings
-    const now = new Date().toISOString()
-    const { data: conflictingBookings } = await supabase
-      .from('bookings')
-      .select('id, status, payment_expires_at')
-      .in('status', ['confirmed', 'pending_payment'])
-      .lt('start_time', endDateTime.toISOString())
-      .gt('end_time', startDateTime.toISOString())
+    const { data: service } = await supabase
+      .from('services')
+      .select('room_area')
+      .eq('slug', payload.serviceSlug)
+      .maybeSingle()
 
-    const activeConflicts = conflictingBookings?.filter(booking => {
-      if (booking.status === 'confirmed') return true
-      if (booking.status === 'pending_payment' && booking.payment_expires_at) {
-        return booking.payment_expires_at > now
-      }
-      return false
-    })
+    const serviceRoomArea = service?.room_area || 'treatment'
 
-    if (activeConflicts && activeConflicts.length > 0) {
+    const roomAllocation = await allocateRoom(
+      serviceRoomArea,
+      startDateTime,
+      endDateTime,
+      payload.peopleCount
+    )
+
+    if (roomAllocation.error && !roomAllocation.room_id) {
       return NextResponse.json(
-        { error: 'That time slot is no longer available. Please choose another time.' },
+        { error: 'No rooms available for this time slot. Please choose another time.' },
         { status: 409 }
       )
     }
@@ -176,8 +175,9 @@ export async function POST(request: NextRequest) {
         voucher_code: payload.voucherCode || null,
         voucher_id: payload.voucherId || null,
         voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),
+        room_id: roomAllocation.room_id,
       })
-      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount')
+      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount, room_id')
       .single()
 
     if (bookingError) {
@@ -274,6 +274,7 @@ export async function POST(request: NextRequest) {
         createdAt: booking.created_at,
         voucherCode: booking.voucher_code,
         voucherDiscount: booking.voucher_discount,
+        roomId: booking.room_id,
       },
     })
   } catch (error) {
