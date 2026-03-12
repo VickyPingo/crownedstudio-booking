@@ -97,8 +97,10 @@ export async function POST(request: NextRequest) {
     }
 
     const subtotal = payload.basePrice + payload.upsellsTotal
-    const totalPrice = subtotal - discountAmount
-    const depositDue = Math.round(totalPrice * DEPOSIT_PERCENT)
+    const cappedDiscount = Math.min(discountAmount, subtotal)
+    const totalPrice = Math.max(0, subtotal - cappedDiscount)
+    const depositDue = Math.max(0, Math.round(totalPrice * DEPOSIT_PERCENT))
+    const isZeroPayment = totalPrice === 0 || depositDue === 0
 
     const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
@@ -128,28 +130,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const bookingStatus = isZeroPayment ? 'confirmed' : 'pending_payment'
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         customer_id: customerId,
         service_slug: payload.serviceSlug,
         people_count: payload.peopleCount,
-        status: 'pending_payment',
+        status: bookingStatus,
         start_time: startDateTime.toISOString(),
         end_time: endDateTime.toISOString(),
         base_price: payload.basePrice,
         upsells_total: payload.upsellsTotal,
-        discount_amount: discountAmount,
+        discount_amount: cappedDiscount,
         discount_type: discountType,
         total_price: totalPrice,
         deposit_due: depositDue,
-        payment_expires_at: paymentExpiresAt.toISOString(),
+        payment_expires_at: isZeroPayment ? null : paymentExpiresAt.toISOString(),
         allergies: payload.customerAllergies || null,
         massage_pressure: payload.customerMassagePressure,
         medical_history: payload.customerMedicalHistory || null,
         voucher_code: payload.voucherCode || null,
         voucher_id: payload.voucherId || null,
-        voucher_discount: payload.voucherDiscount || 0,
+        voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),
       })
       .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount')
       .single()

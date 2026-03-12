@@ -124,11 +124,13 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge
 
   const calculateVoucherDiscount = (voucher: Voucher, amount: number): number => {
+    let discount: number
     if (voucher.discount_type === 'fixed') {
-      return Math.min(voucher.discount_value, amount)
+      discount = voucher.discount_value
     } else {
-      return Math.round((amount * voucher.discount_value) / 100)
+      discount = Math.round((amount * voucher.discount_value) / 100)
     }
+    return Math.min(discount, amount)
   }
 
   const handleApplyVoucher = async () => {
@@ -184,8 +186,10 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
     setVoucherError('')
   }
 
-  const finalTotal = subtotal - voucherDiscount
-  const depositAmount = Math.round(finalTotal * 0.5)
+  const cappedVoucherDiscount = Math.min(voucherDiscount, subtotal)
+  const finalTotal = Math.max(0, subtotal - cappedVoucherDiscount)
+  const depositAmount = Math.max(0, Math.round(finalTotal * 0.5))
+  const isZeroPayment = finalTotal === 0 || depositAmount === 0
 
   const pricing: BookingPricing = savedBooking
     ? {
@@ -195,15 +199,15 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         subtotal,
         discountAmount: savedBooking.discountAmount,
         discountType: savedBooking.discountType,
-        finalTotal: savedBooking.totalPrice,
-        depositAmount: savedBooking.depositDue,
+        finalTotal: Math.max(0, savedBooking.totalPrice),
+        depositAmount: Math.max(0, savedBooking.depositDue),
       }
     : {
         servicePrice,
         upsellsTotal,
         afterHoursSurcharge,
         subtotal,
-        discountAmount: voucherDiscount,
+        discountAmount: cappedVoucherDiscount,
         discountType: appliedVoucher ? 'voucher' : null,
         finalTotal,
         depositAmount,
@@ -233,13 +237,14 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
-        discountAmount: voucherDiscount,
+        discountAmount: cappedVoucherDiscount,
         discountType: appliedVoucher ? 'voucher' : null,
         totalPrice: finalTotal,
         depositDue: depositAmount,
         voucherCode: appliedVoucher?.code || null,
         voucherId: appliedVoucher?.id || null,
-        voucherDiscount: voucherDiscount,
+        voucherDiscount: cappedVoucherDiscount,
+        isZeroPayment,
       }
 
       const response = await fetch('/api/bookings/create', {
@@ -517,10 +522,17 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
               <span className="text-gray-900">R{pricing.finalTotal}</span>
             </div>
 
-            <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
-              <span>50% Deposit Required</span>
-              <span>R{pricing.depositAmount}</span>
-            </div>
+            {pricing.depositAmount > 0 ? (
+              <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
+                <span>50% Deposit Required</span>
+                <span>R{pricing.depositAmount}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
+                <span>Fully Covered by Voucher</span>
+                <span>R0</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -532,12 +544,14 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <div className="flex-1">
-              <h4 className="font-semibold text-green-900 mb-1">Booking Created Successfully</h4>
+              <h4 className="font-semibold text-green-900 mb-1">
+                {savedBooking.status === 'confirmed' ? 'Booking Confirmed' : 'Booking Created Successfully'}
+              </h4>
               <p className="text-sm text-green-800 mb-2">
                 Your booking reference: <span className="font-mono font-semibold">{savedBooking.id.slice(0, 8).toUpperCase()}</span>
               </p>
               <p className="text-sm text-green-800">
-                Status: Awaiting Payment
+                Status: {savedBooking.status === 'confirmed' ? 'Confirmed' : 'Awaiting Payment'}
               </p>
             </div>
           </div>
@@ -550,8 +564,19 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
           disabled={isCreatingBooking}
           className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
         >
-          {isCreatingBooking ? 'Creating Booking...' : 'Continue to Payment'}
+          {isCreatingBooking
+            ? 'Creating Booking...'
+            : isZeroPayment
+              ? 'Confirm Booking'
+              : 'Continue to Payment'}
         </button>
+      ) : savedBooking.status === 'confirmed' ? (
+        <a
+          href="/booking/success"
+          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors text-center block"
+        >
+          View Confirmation
+        </a>
       ) : (
         <button
           onClick={handlePayDeposit}
@@ -564,8 +589,12 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
 
       <p className="text-sm text-gray-700 text-center">
         {!savedBooking
-          ? 'Your booking will be created and you will be redirected to payment'
-          : 'You will be redirected to PayFast to complete your deposit payment'
+          ? isZeroPayment
+            ? 'Your voucher fully covers this booking. Click to confirm.'
+            : 'Your booking will be created and you will be redirected to payment'
+          : savedBooking.status === 'confirmed'
+            ? 'Your booking has been confirmed. No payment required.'
+            : 'You will be redirected to PayFast to complete your deposit payment'
         }
       </p>
     </div>

@@ -51,6 +51,7 @@ export interface CreateBookingPayload {
   voucherCode?: string | null
   voucherId?: string | null
   voucherDiscount?: number
+  isZeroPayment?: boolean
 }
 
 export interface SavedBooking {
