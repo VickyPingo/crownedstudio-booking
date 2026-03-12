@@ -1,6 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getPayfastConfig, verifyPayfastSignature } from '@/lib/payfast'
+import { fetchBookingForEmail, buildBookingEmailData, buildPaymentEmailData } from '@/lib/email/helpers'
+import {
+  sendPaymentReceivedToSpa,
+  sendPaymentConfirmationToClient,
+  sendBookingConfirmationToClient,
+  scheduleReminder,
+} from '@/lib/email/service'
+
+async function sendPaymentEmails(bookingId: string, amountPaid: number, paymentReference: string) {
+  try {
+    const bookingData = await fetchBookingForEmail(bookingId)
+    if (!bookingData) return
+
+    const bookingEmailData = buildBookingEmailData(bookingData)
+    const paymentEmailData = buildPaymentEmailData(bookingData, amountPaid, paymentReference)
+
+    await Promise.all([
+      sendPaymentReceivedToSpa(paymentEmailData),
+      sendPaymentConfirmationToClient(paymentEmailData),
+      sendBookingConfirmationToClient(bookingEmailData),
+    ])
+
+    const appointmentTime = new Date(bookingData.start_time)
+    await scheduleReminder(bookingId, appointmentTime)
+  } catch (error) {
+    console.error('Error sending payment emails:', error)
+  }
+}
 
 interface PayfastITN {
   m_payment_id: string
@@ -133,6 +161,12 @@ export async function POST(request: NextRequest) {
       if (bookingUpdateError) {
         console.error('Failed to update booking:', bookingUpdateError)
       }
+
+      sendPaymentEmails(
+        transaction.booking_id,
+        receivedAmount,
+        payfastPaymentId
+      )
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
     } else {

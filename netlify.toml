@@ -4,3 +4,10 @@ publish = ".next"
 
 [[plugins]]
 package = "@netlify/plugin-nextjs"
+
+[functions]
+included_files = ["lib/**"]
+
+[[edge_functions]]
+function = "send-reminders-cron"
+path = "/api/cron/trigger-reminders"

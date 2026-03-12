@@ -1,8 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
+import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers'
+import { sendNewBookingToSpa, sendBookingConfirmationToClient, scheduleReminder } from '@/lib/email/service'
 
 const PAYMENT_EXPIRY_MINUTES = 15
+
+async function sendEmailNotifications(bookingId: string, startDateTime: Date, isZeroPayment: boolean) {
+  try {
+    const bookingData = await fetchBookingForEmail(bookingId)
+    if (!bookingData) return
+
+    const emailData = buildBookingEmailData(bookingData)
+
+    await sendNewBookingToSpa(emailData)
+
+    if (isZeroPayment) {
+      await sendBookingConfirmationToClient(emailData)
+      await scheduleReminder(bookingId, startDateTime)
+    }
+  } catch (error) {
+    console.error('Error sending booking emails:', error)
+  }
+}
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
 const DEPOSIT_PERCENT = 0.5
 
@@ -234,6 +254,8 @@ export async function POST(request: NextRequest) {
     if (hasVoucher && payload.voucherId) {
       await recordVoucherUsage(supabase, payload.voucherId, booking.id, payload.voucherDiscount || 0)
     }
+
+    sendEmailNotifications(booking.id, startDateTime, isZeroPayment)
 
     return NextResponse.json({
       success: true,

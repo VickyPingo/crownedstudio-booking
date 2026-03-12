@@ -527,6 +527,15 @@ export function ManualBookingModal({
         })
       }
 
+      fetch('/api/bookings/send-emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          sendConfirmation: bookingStatus === 'confirmed',
+        }),
+      }).catch((err) => console.error('Email sending error:', err))
+
       onSuccess()
       onClose()
     } catch (error) {
