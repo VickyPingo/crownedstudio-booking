@@ -40,8 +40,8 @@ export function ServiceList({ services, businessHours, serviceTimeWindows }: Ser
               {service.description || "No description yet."}
             </p>
 
-            <button
-              onClick={() => openModal(service)}
+            <a
+              href={`https://book.crownedstudio.co.za/booking/${service.slug}`}
               style={{
                 display: "inline-block",
                 padding: "12px 18px",
@@ -50,10 +50,11 @@ export function ServiceList({ services, businessHours, serviceTimeWindows }: Ser
                 border: "none",
                 borderRadius: "6px",
                 cursor: "pointer",
+                textDecoration: "none",
               }}
             >
               Book Now
-            </button>
+            </a>
           </div>
         ))}
       </div>
