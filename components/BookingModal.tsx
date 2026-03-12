@@ -21,6 +21,25 @@ const STEPS = [
   { id: 'confirmation', label: 'Confirmation' },
 ]
 
+function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number | null {
+  switch (count) {
+    case 1:
+      return service.price_1_person
+    case 2:
+      return service.price_2_people
+    case 3:
+      return service.price_3_people
+    case 4:
+      return service.price_4_people
+    case 5:
+      return service.price_5_people
+    case 6:
+      return service.price_6_people
+    default:
+      return null
+  }
+}
+
 const DEFAULT_BUSINESS_HOURS: BusinessHoursData = {
   open_time: '08:30',
   close_time: '16:30',
@@ -252,6 +271,13 @@ export function BookingModal({
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+              <div className="mb-4 rounded-lg bg-white p-4 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900">{resolvedService.name}</h3>
+                <p className="mt-1 text-sm text-gray-700">
+                  {resolvedService.duration_minutes} minutes • R{getPriceForPeopleCount(resolvedService, formData.peopleCount) ?? resolvedService.price_1_person} for {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
+                </p>
+              </div>
+
               <div className="min-h-[200px]">{renderStep()}</div>
             </div>
 
