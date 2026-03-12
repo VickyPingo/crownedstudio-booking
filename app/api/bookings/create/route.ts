@@ -137,16 +137,22 @@ export async function POST(request: NextRequest) {
 
     const serviceArea = service?.service_area || 'treatment'
 
-    const roomAllocation = await allocateRoom(
-      serviceArea,
-      startDateTime,
-      endDateTime,
-      payload.peopleCount
-    )
+    let roomAllocation: { room_id: string | null; room_name: string | null; error?: string }
+    try {
+      roomAllocation = await allocateRoom(
+        serviceArea,
+        startDateTime,
+        endDateTime,
+        payload.peopleCount
+      )
+    } catch (err) {
+      console.error('Room allocation error:', err)
+      roomAllocation = { room_id: null, room_name: null, error: 'Room allocation failed' }
+    }
 
-    if (roomAllocation.error && !roomAllocation.room_id) {
+    if (roomAllocation.error || !roomAllocation.room_id) {
       return NextResponse.json(
-        { error: 'No rooms available for this time slot. Please choose another time.' },
+        { error: roomAllocation.error || 'No rooms available for this time slot. Please choose another time.' },
         { status: 409 }
       )
     }

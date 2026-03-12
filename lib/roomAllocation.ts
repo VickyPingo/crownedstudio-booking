@@ -50,8 +50,14 @@ export async function allocateRoom(
     .gte('capacity', peopleCount)
     .order('priority', { ascending: true })
 
-  if (roomsError || !rooms || rooms.length === 0) {
-    return { room_id: null, room_name: null, error: 'No suitable rooms available' }
+  if (roomsError) {
+    console.error('Room query error:', roomsError)
+    return { room_id: null, room_name: null, error: `Room query failed: ${roomsError.message}` }
+  }
+
+  if (!rooms || rooms.length === 0) {
+    console.error('No rooms found for:', { serviceRoomArea, peopleCount })
+    return { room_id: null, room_name: null, error: `No rooms available for area "${serviceRoomArea}" with capacity >= ${peopleCount}` }
   }
 
   const dayStart = new Date(startTime)
