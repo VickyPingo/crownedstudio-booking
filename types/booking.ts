@@ -6,11 +6,13 @@ export interface BookingFormData {
   clientName: string
   clientEmail: string
   clientPhone: string
+  afterHoursSurcharge: number
 }
 
 export interface BookingPricing {
   servicePrice: number
   upsellsTotal: number
+  afterHoursSurcharge: number
   subtotal: number
   discountAmount: number
   discountType: 'repeat_customer' | null
@@ -49,13 +51,15 @@ export interface SavedBooking {
   createdAt: string
 }
 
-export const MOCK_TIME_SLOTS = [
-  '09:00',
-  '10:00',
-  '11:00',
-  '12:00',
-  '14:00',
-  '15:00',
-  '16:00',
-  '17:00',
-]
+export interface BusinessHoursData {
+  open_time: string
+  close_time: string
+  after_hours_enabled: boolean
+  after_hours_end_time: string | null
+}
+
+export interface ServiceTimeWindowData {
+  service_slug: string
+  start_time: string
+  end_time: string
+}

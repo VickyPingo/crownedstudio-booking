@@ -1,9 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { BookingFormData, CreateBookingPayload, BookingPricing } from '@/types/booking'
+import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData } from '@/types/booking'
 import { ServiceWithUpsells } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
+import { isAfterHoursSlot } from '@/lib/timeSlots'
+
+const AFTER_HOURS_SURCHARGE_PP = 100
 
 function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number {
   switch (count) {
@@ -27,9 +30,10 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
 interface PaymentStepProps {
   service: ServiceWithUpsells
   formData: BookingFormData
+  businessHours: BusinessHoursData
 }
 
-export function PaymentStep({ service, formData }: PaymentStepProps) {
+export function PaymentStep({ service, formData, businessHours }: PaymentStepProps) {
   const [isCreatingBooking, setIsCreatingBooking] = useState(false)
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const { savedBooking, setSavedBooking } = useBookingModal()
@@ -41,12 +45,19 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
   )
 
   const upsellsTotal = selectedUpsellsData.reduce((sum, upsell) => sum + upsell.price, 0)
-  const subtotal = servicePrice + upsellsTotal
+
+  const isAfterHours = formData.selectedTime
+    ? isAfterHoursSlot(formData.selectedTime, service.slug, businessHours)
+    : false
+  const afterHoursSurcharge = isAfterHours ? AFTER_HOURS_SURCHARGE_PP * formData.peopleCount : 0
+
+  const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge
 
   const pricing: BookingPricing = savedBooking
     ? {
         servicePrice,
         upsellsTotal,
+        afterHoursSurcharge,
         subtotal,
         discountAmount: savedBooking.discountAmount,
         discountType: savedBooking.discountType,
@@ -56,6 +67,7 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
     : {
         servicePrice,
         upsellsTotal,
+        afterHoursSurcharge,
         subtotal,
         discountAmount: 0,
         discountType: null,
@@ -193,6 +205,11 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
                   day: 'numeric'
                 })}
                 {formData.selectedTime && ` at ${formData.selectedTime}`}
+                {isAfterHours && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                    After-hours
+                  </span>
+                )}
               </>
             ) : (
               'Not selected'
@@ -220,6 +237,18 @@ export function PaymentStep({ service, formData }: PaymentStepProps) {
               <div className="flex justify-between text-sm">
                 <span>Additional Services</span>
                 <span>R{pricing.upsellsTotal}</span>
+              </div>
+            )}
+
+            {pricing.afterHoursSurcharge > 0 && (
+              <div className="flex justify-between text-sm text-amber-700 bg-amber-50 -mx-4 px-4 py-2">
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  After-hours surcharge (R{AFTER_HOURS_SURCHARGE_PP} x {formData.peopleCount})
+                </span>
+                <span>R{pricing.afterHoursSurcharge}</span>
               </div>
             )}
 

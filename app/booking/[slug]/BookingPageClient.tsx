@@ -4,14 +4,23 @@ import { useEffect } from 'react'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { BookingModal } from '@/components/BookingModal'
 import { ServiceWithUpsells } from '@/types/service'
+import { BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
 
 interface BookingPageClientProps {
   services: ServiceWithUpsells[]
   serviceSlug: string
   serviceName: string
+  businessHours: BusinessHoursData
+  serviceTimeWindows: Record<string, ServiceTimeWindowData>
 }
 
-export function BookingPageClient({ services, serviceSlug, serviceName }: BookingPageClientProps) {
+export function BookingPageClient({
+  services,
+  serviceSlug,
+  serviceName,
+  businessHours,
+  serviceTimeWindows,
+}: BookingPageClientProps) {
   const { openModalBySlug } = useBookingModal()
 
   useEffect(() => {
@@ -28,7 +37,11 @@ export function BookingPageClient({ services, serviceSlug, serviceName }: Bookin
         Complete your booking details below.
       </p>
 
-      <BookingModal services={services} />
+      <BookingModal
+        services={services}
+        businessHours={businessHours}
+        serviceTimeWindows={serviceTimeWindows}
+      />
     </main>
   )
 }

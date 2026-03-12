@@ -3,8 +3,15 @@
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { BookingModal } from './BookingModal'
 import { ServiceWithUpsells } from '@/types/service'
+import { BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
 
-export function ServiceList({ services }: { services: ServiceWithUpsells[] }) {
+interface ServiceListProps {
+  services: ServiceWithUpsells[]
+  businessHours: BusinessHoursData
+  serviceTimeWindows: Record<string, ServiceTimeWindowData>
+}
+
+export function ServiceList({ services, businessHours, serviceTimeWindows }: ServiceListProps) {
   const { openModal } = useBookingModal()
 
   return (
@@ -51,7 +58,11 @@ export function ServiceList({ services }: { services: ServiceWithUpsells[] }) {
         ))}
       </div>
 
-      <BookingModal services={services} />
+      <BookingModal
+        services={services}
+        businessHours={businessHours}
+        serviceTimeWindows={serviceTimeWindows}
+      />
     </>
   )
 }

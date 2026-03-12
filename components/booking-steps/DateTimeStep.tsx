@@ -1,12 +1,18 @@
 'use client'
 
-import { MOCK_TIME_SLOTS } from '@/types/booking'
+import { useMemo } from 'react'
+import { BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
+import { generateTimeSlots, isAfterHoursSlot } from '@/lib/timeSlots'
 
 interface DateTimeStepProps {
   selectedDate: string
   selectedTime: string
   onUpdateDate: (date: string) => void
   onUpdateTime: (time: string) => void
+  serviceSlug: string
+  serviceDurationMinutes: number
+  businessHours: BusinessHoursData
+  serviceTimeWindow?: ServiceTimeWindowData | null
 }
 
 export function DateTimeStep({
@@ -14,7 +20,22 @@ export function DateTimeStep({
   selectedTime,
   onUpdateDate,
   onUpdateTime,
+  serviceSlug,
+  serviceDurationMinutes,
+  businessHours,
+  serviceTimeWindow,
 }: DateTimeStepProps) {
+  const timeSlots = useMemo(() => {
+    return generateTimeSlots({
+      serviceSlug,
+      serviceDurationMinutes,
+      businessHours,
+      serviceTimeWindow,
+    })
+  }, [serviceSlug, serviceDurationMinutes, businessHours, serviceTimeWindow])
+
+  const isCrownedNight = serviceSlug === 'crowned-night-a' || serviceSlug === 'crowned-night-b'
+
   return (
     <div className="space-y-6">
       <div>
@@ -37,22 +58,41 @@ export function DateTimeStep({
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Preferred Time
+          {isCrownedNight && (
+            <span className="ml-2 text-xs text-amber-700 font-normal">
+              (Evening service: {serviceTimeWindow?.start_time?.slice(0, 5)} - {serviceTimeWindow?.end_time?.slice(0, 5)})
+            </span>
+          )}
         </label>
         <div className="grid grid-cols-4 gap-2">
-          {MOCK_TIME_SLOTS.map((time) => (
-            <button
-              key={time}
-              onClick={() => onUpdateTime(time)}
-              className={`py-2 px-4 rounded-lg border transition-all ${
-                selectedTime === time
-                  ? 'bg-black text-white border-black'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              {time}
-            </button>
-          ))}
+          {timeSlots.map((time) => {
+            const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
+            return (
+              <button
+                key={time}
+                onClick={() => onUpdateTime(time)}
+                className={`py-2 px-4 rounded-lg border transition-all relative ${
+                  selectedTime === time
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                {time}
+                {isAfterHours && (
+                  <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
+                    selectedTime === time ? 'bg-amber-300' : 'bg-amber-500'
+                  }`} title="After-hours slot (+R100/person)" />
+                )}
+              </button>
+            )
+          })}
         </div>
+        {!isCrownedNight && businessHours.after_hours_enabled && (
+          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+            After-hours slots include R100 surcharge per person
+          </p>
+        )}
       </div>
 
       {selectedDate && selectedTime && (

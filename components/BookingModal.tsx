@@ -8,8 +8,9 @@ import { DateTimeStep } from './booking-steps/DateTimeStep'
 import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
 import { PaymentStep } from './booking-steps/PaymentStep'
 import { ConfirmationStep } from './booking-steps/ConfirmationStep'
-import { BookingFormData } from '@/types/booking'
+import { BookingFormData, BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
 import { ServiceWithUpsells } from '@/types/service'
+import { calculateAfterHoursSurcharge } from '@/lib/timeSlots'
 
 const STEPS = [
   { id: 'service', label: 'Service Details' },
@@ -20,7 +21,24 @@ const STEPS = [
   { id: 'confirmation', label: 'Confirmation' },
 ]
 
-export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
+const DEFAULT_BUSINESS_HOURS: BusinessHoursData = {
+  open_time: '08:30',
+  close_time: '16:30',
+  after_hours_enabled: true,
+  after_hours_end_time: '20:00',
+}
+
+interface BookingModalProps {
+  services: ServiceWithUpsells[]
+  businessHours?: BusinessHoursData
+  serviceTimeWindows?: Record<string, ServiceTimeWindowData>
+}
+
+export function BookingModal({
+  services,
+  businessHours = DEFAULT_BUSINESS_HOURS,
+  serviceTimeWindows = {},
+}: BookingModalProps) {
   const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState<BookingFormData>({
@@ -31,6 +49,7 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
     clientName: '',
     clientEmail: '',
     clientPhone: '',
+    afterHoursSurcharge: 0,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
@@ -57,10 +76,26 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
     }
   }, [isOpen])
 
+  useEffect(() => {
+    if (resolvedService && formData.selectedTime) {
+      const surcharge = calculateAfterHoursSurcharge(
+        formData.selectedTime,
+        resolvedService.slug,
+        formData.peopleCount,
+        businessHours
+      )
+      if (surcharge !== formData.afterHoursSurcharge) {
+        setFormData((prev) => ({ ...prev, afterHoursSurcharge: surcharge }))
+      }
+    }
+  }, [formData.selectedTime, formData.peopleCount, resolvedService, businessHours, formData.afterHoursSurcharge])
+
   console.log('BookingModal - resolvedService:', resolvedService)
   console.log('BookingModal - resolvedService?.upsells:', resolvedService?.upsells)
 
   if (!isOpen || !resolvedService) return null
+
+  const serviceTimeWindow = serviceTimeWindows[resolvedService.slug] || null
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) {
@@ -84,6 +119,7 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
       clientName: '',
       clientEmail: '',
       clientPhone: '',
+      afterHoursSurcharge: 0,
     })
     closeModal()
   }
@@ -130,6 +166,10 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
             selectedTime={formData.selectedTime}
             onUpdateDate={(date) => updateFormData({ selectedDate: date })}
             onUpdateTime={(time) => updateFormData({ selectedTime: time })}
+            serviceSlug={resolvedService.slug}
+            serviceDurationMinutes={resolvedService.duration_minutes}
+            businessHours={businessHours}
+            serviceTimeWindow={serviceTimeWindow}
           />
         )
       case 3:
@@ -142,7 +182,13 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
           />
         )
       case 4:
-        return <PaymentStep service={resolvedService} formData={formData} />
+        return (
+          <PaymentStep
+            service={resolvedService}
+            formData={formData}
+            businessHours={businessHours}
+          />
+        )
       case 5:
         return <ConfirmationStep />
       default:

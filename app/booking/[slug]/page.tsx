@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/server"
 import { ServiceWithUpsells } from "@/types/service"
+import { BusinessHoursData, ServiceTimeWindowData } from "@/types/booking"
 import { BookingPageClient } from "./BookingPageClient"
 
 export default async function BookingPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -29,6 +30,30 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
     .from("upsells")
     .select("id, slug, name, price, quantity_rule, duration_added_minutes")
     .eq("active", true)
+
+  const { data: businessHoursRow } = await supabaseAdmin
+    .from("business_hours")
+    .select("open_time, close_time, after_hours_enabled, after_hours_end_time")
+    .eq("day_of_week", 1)
+    .maybeSingle()
+
+  const businessHours: BusinessHoursData = businessHoursRow || {
+    open_time: "08:30",
+    close_time: "16:30",
+    after_hours_enabled: true,
+    after_hours_end_time: "20:00",
+  }
+
+  const { data: serviceTimeWindows } = await supabaseAdmin
+    .from("service_time_windows")
+    .select("service_slug, start_time, end_time")
+
+  const timeWindowsMap: Record<string, ServiceTimeWindowData> = {}
+  if (serviceTimeWindows) {
+    for (const window of serviceTimeWindows) {
+      timeWindowsMap[window.service_slug] = window
+    }
+  }
 
   const servicesWithUpsells: ServiceWithUpsells[] = (services || []).map((service) => {
     const allowedUpsellNames = service.allowed_upsells
@@ -89,6 +114,8 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
       services={servicesWithUpsells}
       serviceSlug={slug}
       serviceName={requestedService.name}
+      businessHours={businessHours}
+      serviceTimeWindows={timeWindowsMap}
     />
   )
 }
