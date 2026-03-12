@@ -82,7 +82,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Site URL not configured' }, { status: 500 })
     }
 
+    if (!config.merchantId || !config.merchantKey) {
+      console.error('[Payment Initiate] PayFast credentials missing:', {
+        merchantId_present: !!config.merchantId,
+        merchantKey_present: !!config.merchantKey,
+      })
+      return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 500 })
+    }
+
     console.log('[Payment Initiate] Using base URL:', baseUrl)
+    console.log('[Payment Initiate] Merchant credentials verified:', {
+      merchantId_present: !!config.merchantId,
+      merchantKey_present: !!config.merchantKey,
+      passphrase_present: !!config.passphrase,
+    })
 
     const paymentData = {
       merchant_id: config.merchantId,

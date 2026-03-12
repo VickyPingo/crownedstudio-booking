@@ -29,12 +29,23 @@ export function getPayfastConfig(): PayfastConfig {
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY || ''
   const passphrase = process.env.PAYFAST_PASSPHRASE || ''
 
-  console.log('[PayFast Config]', {
+  console.log('[PayFast Config] Credential check:', {
     mode,
-    merchantId,
-    merchantKeyLength: merchantKey.length,
-    passphraseLength: passphrase.length,
+    merchantId_present: merchantId.length > 0,
+    merchantId_length: merchantId.length,
+    merchantKey_present: merchantKey.length > 0,
+    merchantKey_length: merchantKey.length,
+    passphrase_present: passphrase.length > 0,
+    passphrase_length: passphrase.length,
   })
+
+  if (!merchantId || !merchantKey) {
+    console.error('[PayFast Config] MISSING CREDENTIALS:', {
+      PAYFAST_MERCHANT_ID: merchantId ? 'SET' : 'MISSING',
+      PAYFAST_MERCHANT_KEY: merchantKey ? 'SET' : 'MISSING',
+      PAYFAST_PASSPHRASE: passphrase ? 'SET' : 'MISSING',
+    })
+  }
 
   return {
     merchantId,

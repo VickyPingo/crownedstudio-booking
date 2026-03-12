@@ -21,16 +21,16 @@ export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells
   if (availableUpsells.length === 0) {
     return (
       <div className="space-y-4">
-        <h3 className="text-xl font-semibold">Enhance Your Service</h3>
-        <p className="text-sm text-gray-600">No additional services available for this service</p>
+        <h3 className="text-xl font-semibold text-gray-900">Enhance Your Service</h3>
+        <p className="text-sm text-gray-700">No additional services available for this service</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xl font-semibold">Enhance Your Service</h3>
-      <p className="text-sm text-gray-600">Select any additional services you would like to add</p>
+      <h3 className="text-xl font-semibold text-gray-900">Enhance Your Service</h3>
+      <p className="text-sm text-gray-700">Select any additional services you would like to add</p>
 
       <div className="space-y-3">
         {availableUpsells.map((upsell) => {
@@ -52,7 +52,7 @@ export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells
                       className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                         isSelected
                           ? 'bg-black border-black'
-                          : 'border-gray-300'
+                          : 'border-gray-400'
                       }`}
                     >
                       {isSelected && (
@@ -61,15 +61,15 @@ export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells
                         </svg>
                       )}
                     </div>
-                    <h4 className="font-semibold">{upsell.name}</h4>
+                    <h4 className="font-semibold text-gray-900">{upsell.name}</h4>
                   </div>
                   {upsell.duration_added_minutes > 0 && (
-                    <p className="text-xs text-gray-500 mt-1 ml-7">
+                    <p className="text-sm text-gray-700 mt-1 ml-7">
                       +{upsell.duration_added_minutes} minutes
                     </p>
                   )}
                 </div>
-                <p className="font-semibold ml-4">R{upsell.price}</p>
+                <p className="font-semibold text-gray-900 ml-4">R{upsell.price}</p>
               </div>
             </div>
           )
@@ -77,7 +77,7 @@ export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells
       </div>
 
       {selectedUpsells.length === 0 && (
-        <p className="text-sm text-gray-500 text-center py-4">No upsells selected</p>
+        <p className="text-sm text-gray-700 text-center py-4">No upsells selected</p>
       )}
     </div>
   )
