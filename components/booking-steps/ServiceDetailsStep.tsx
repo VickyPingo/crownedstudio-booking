@@ -49,7 +49,7 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
         <p className="text-sm text-gray-700 mb-2">Number of People</p>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {peopleOptions.map((count) => {
             const price = getPriceForPeopleCount(service, count)
             const isSelected = peopleCount === count

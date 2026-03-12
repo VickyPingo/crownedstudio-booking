@@ -38,12 +38,24 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
     if (selectedService) {
       setResolvedService(selectedService)
     } else if (serviceSlug) {
-      const service = services.find(s => s.slug === serviceSlug)
+      const service = services.find((s) => s.slug === serviceSlug)
       setResolvedService(service || null)
     } else {
       setResolvedService(null)
     }
   }, [selectedService, serviceSlug, services])
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
 
   if (!isOpen || !resolvedService) return null
 
@@ -127,12 +139,7 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
           />
         )
       case 4:
-        return (
-          <PaymentStep
-            service={resolvedService}
-            formData={formData}
-          />
-        )
+        return <PaymentStep service={resolvedService} formData={formData} />
       case 5:
         return <ConfirmationStep />
       default:
@@ -141,84 +148,92 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={handleClose}
-      />
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
-      <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 flex flex-col" style={{ maxHeight: '90vh' }}>
-        <div className="sticky top-0 bg-white z-10 p-6 pb-4 border-b border-gray-200">
-          <button
-            onClick={handleClose}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      <div className="absolute inset-0 overflow-y-auto">
+        <div className="flex min-h-full items-start sm:items-center justify-center p-3 sm:p-6">
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl max-h-[92vh] flex flex-col">
+            <button
+              onClick={handleClose}
+              className="absolute right-4 top-4 z-10 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              aria-label="Close booking modal"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-          <h2 className="text-2xl font-bold mb-4">Book Service</h2>
+            <div className="border-b px-4 py-4 sm:px-6">
+              <h2 className="pr-10 text-xl font-bold sm:text-2xl">Book Service</h2>
 
-          <div className="flex items-center justify-between">
-            {STEPS.map((step, index) => (
-              <div key={step.id} className="flex items-center flex-1">
-                <div className="flex flex-col items-center flex-1">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      index === currentStep
-                        ? 'bg-black text-white'
-                        : index < currentStep
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}
-                  >
-                    {index < currentStep ? '✓' : index + 1}
-                  </div>
-                  <p className="text-xs mt-1 text-center hidden sm:block">{step.label}</p>
+              <div className="mt-4">
+                <div className="mb-2 text-sm font-medium text-gray-600">
+                  Step {currentStep + 1} of {STEPS.length}: {STEPS[currentStep].label}
                 </div>
-                {index < STEPS.length - 1 && (
-                  <div
-                    className={`h-0.5 flex-1 ${
-                      index < currentStep ? 'bg-green-500' : 'bg-gray-200'
-                    }`}
-                  />
-                )}
+
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {STEPS.map((step, index) => (
+                    <div key={step.id} className="flex min-w-fit items-center gap-2">
+                      <div
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
+                          index === currentStep
+                            ? 'bg-black text-white'
+                            : index < currentStep
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                        }`}
+                      >
+                        {index < currentStep ? '✓' : index + 1}
+                      </div>
+
+                      <span
+                        className={`hidden text-xs sm:inline ${
+                          index === currentStep ? 'font-semibold text-black' : 'text-gray-500'
+                        }`}
+                      >
+                        {step.label}
+                      </span>
+
+                      {index < STEPS.length - 1 && <div className="h-px w-6 bg-gray-300 sm:w-8" />}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+              <div className="min-h-[200px]">{renderStep()}</div>
+            </div>
+
+            <div className="border-t bg-white px-4 py-4 sm:px-6">
+              <div className="flex gap-3 sm:justify-between">
+                <button
+                  onClick={handleBack}
+                  disabled={currentStep === 0}
+                  className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
+                    currentStep === 0
+                      ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  Back
+                </button>
+
+                <button
+                  onClick={handleNext}
+                  disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
+                  className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
+                    currentStep === STEPS.length - 1 || !canProceedToNext()
+                      ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                      : 'bg-black text-white hover:bg-gray-800'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 pt-4">
-          <div className="min-h-[200px]">
-            {renderStep()}
-          </div>
-        </div>
-
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 pt-4 flex justify-between">
-          <button
-            onClick={handleBack}
-            disabled={currentStep === 0}
-            className={`px-6 py-2 rounded-lg ${
-              currentStep === 0
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-            }`}
-          >
-            Back
-          </button>
-
-          <button
-            onClick={handleNext}
-            disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
-            className={`px-6 py-2 rounded-lg ${
-              currentStep === STEPS.length - 1 || !canProceedToNext()
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-black text-white hover:bg-gray-800'
-            }`}
-          >
-            Next
-          </button>
         </div>
       </div>
     </div>
