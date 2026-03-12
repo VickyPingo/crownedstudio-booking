@@ -460,3 +460,93 @@ export function reminder24hToClientTemplate(data: BookingEmailData): string {
 </body>
 </html>`
 }
+
+export function bookingRequestToClientTemplate(data: BookingEmailData): string {
+  const upsellsList = data.upsells.length > 0 ? data.upsells.join(', ') : 'None'
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Request Received</title>
+  <style>${baseStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="logo">Crowned Studio</div>
+        <h1 class="title" style="margin-top: 16px;">Your Booking Request</h1>
+        <p class="subtitle">Thank you for choosing Crowned Studio</p>
+      </div>
+
+      <p style="font-size: 15px; color: #374151; margin-bottom: 24px;">
+        Dear ${data.clientName},<br><br>
+        Thank you for your booking request. Your appointment will be confirmed once payment is received.
+      </p>
+
+      <div class="highlight-box" style="background: #fef3c7; text-align: center; padding: 16px;">
+        <span class="badge badge-warning">Awaiting Payment</span>
+        <p style="font-size: 14px; color: #92400e; margin: 8px 0 0 0;">Please complete payment to confirm your booking.</p>
+      </div>
+
+      <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px; margin-top: 16px;">
+        <div style="font-size: 14px; color: #9ca3af; margin-bottom: 8px;">YOUR REQUESTED APPOINTMENT</div>
+        <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.serviceName}</div>
+        <div style="font-size: 16px;">${data.bookingDate} at ${data.bookingTime}</div>
+        <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.peopleCount} ${data.peopleCount === 1 ? 'person' : 'people'}</div>
+      </div>
+
+      <div class="section" style="margin-top: 24px;">
+        <div class="section-title">Booking Reference</div>
+        <div style="font-size: 18px; font-weight: 600; color: #111827; font-family: monospace;">${data.bookingReference}</div>
+      </div>
+
+      ${data.upsells.length > 0 ? `
+      <div class="section">
+        <div class="section-title">Add-ons Requested</div>
+        <p style="font-size: 14px; color: #374151; margin: 0;">${upsellsList}</p>
+      </div>
+      ` : ''}
+
+      ${data.voucherCode ? `
+      <div class="section">
+        <div class="section-title">Voucher Applied</div>
+        <div class="highlight-box" style="background: #d1fae5;">
+          <table>
+            <tr><td class="label-cell">Voucher Code</td><td class="value-cell" style="color: #065f46; font-weight: 600;">${data.voucherCode}</td></tr>
+            <tr><td class="label-cell">Voucher Discount</td><td class="value-cell" style="color: #065f46; font-weight: 600;">R${data.voucherDiscount}</td></tr>
+          </table>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <div class="section-title">Payment Summary</div>
+        <div class="highlight-box">
+          <table>
+            <tr><td class="label-cell">Deposit Required</td><td class="value-cell">R${data.depositAmount.toLocaleString()}</td></tr>
+            <tr><td class="label-cell">Balance on Arrival</td><td class="value-cell">R${data.balanceDue.toLocaleString()}</td></tr>
+            <tr><td class="label-cell">Total</td><td class="value-cell"><strong>R${data.totalPrice.toLocaleString()}</strong></td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="section-title">Contact Us</div>
+        <div class="contact-info">
+          <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
+          <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
+          <p style="margin: 4px 0;">Phone: 081 737 8878</p>
+        </div>
+        <p class="footer-text" style="margin-top: 24px;">
+          If you have any questions, please don't hesitate to contact us.
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+}

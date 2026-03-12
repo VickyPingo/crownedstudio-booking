@@ -5,12 +5,13 @@ import {
   PaymentEmailData,
   newBookingToSpaTemplate,
   bookingConfirmationToClientTemplate,
+  bookingRequestToClientTemplate,
   paymentReceivedToSpaTemplate,
   paymentConfirmationToClientTemplate,
   reminder24hToClientTemplate,
 } from './templates'
 
-type EmailType = 'new_booking_spa' | 'booking_confirmation' | 'payment_received_spa' | 'payment_confirmation' | 'reminder_24h'
+type EmailType = 'new_booking_spa' | 'booking_request' | 'booking_confirmation' | 'payment_received_spa' | 'payment_confirmation' | 'reminder_24h'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -104,6 +105,35 @@ export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boole
   return result.success
 }
 
+export async function sendBookingRequestToClient(data: BookingEmailData): Promise<boolean> {
+  const emailType: EmailType = 'booking_request'
+
+  if (!data.clientEmail) {
+    console.log('No client email provided, skipping booking request email')
+    return false
+  }
+
+  if (await hasEmailBeenSent(data.bookingId, emailType)) {
+    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    return true
+  }
+
+  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
+
+  const html = bookingRequestToClientTemplate(data)
+  const subject = 'Your Crowned Studio Booking Request'
+
+  const result = await sendEmail(data.clientEmail, subject, html)
+
+  await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
+
+  if (!result.success) {
+    console.error(`Failed to send ${emailType}:`, result.error)
+  }
+
+  return result.success
+}
+
 export async function sendBookingConfirmationToClient(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'booking_confirmation'
 
@@ -120,7 +150,7 @@ export async function sendBookingConfirmationToClient(data: BookingEmailData): P
   const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
 
   const html = bookingConfirmationToClientTemplate(data)
-  const subject = `Booking Confirmed - ${data.serviceName} on ${data.bookingDate}`
+  const subject = 'Your Crowned Studio Booking is Confirmed'
 
   const result = await sendEmail(data.clientEmail, subject, html)
 

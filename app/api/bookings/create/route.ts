@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers'
-import { sendNewBookingToSpa, sendBookingConfirmationToClient, scheduleReminder } from '@/lib/email/service'
+import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
 
 const PAYMENT_EXPIRY_MINUTES = 15
 
@@ -18,6 +18,8 @@ async function sendEmailNotifications(bookingId: string, startDateTime: Date, is
     if (isZeroPayment) {
       await sendBookingConfirmationToClient(emailData)
       await scheduleReminder(bookingId, startDateTime)
+    } else {
+      await sendBookingRequestToClient(emailData)
     }
   } catch (error) {
     console.error('Error sending booking emails:', error)
