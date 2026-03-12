@@ -48,9 +48,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       .select(`
         *,
         customer:customers(id, full_name, email, phone),
-        service:services(name, category, duration_minutes),
+        service:services(name, category, duration_minutes, service_area),
         voucher:vouchers(code, discount_type, discount_value),
-        room:rooms(id, room_name, capacity),
+        room:rooms(id, room_name, room_area, capacity),
         booking_upsells(
           upsell_id,
           quantity,
@@ -277,12 +277,31 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Room Assignment</h3>
               <div className="bg-gray-50 rounded-lg p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Required area:</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    booking.service?.service_area === 'public'
+                      ? 'bg-teal-100 text-teal-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {booking.service?.service_area || 'treatment'}
+                  </span>
+                </div>
                 {!showRoomSelect ? (
                   <div className="flex items-center justify-between">
                     <div>
                       {booking.room ? (
                         <div>
-                          <p className="font-medium text-gray-900">{booking.room.room_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900">{booking.room.room_name}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              booking.room.room_area === 'public'
+                                ? 'bg-teal-100 text-teal-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {booking.room.room_area}
+                            </span>
+                          </div>
                           <p className="text-sm text-gray-600">Capacity: {booking.room.capacity}</p>
                         </div>
                       ) : (
@@ -299,25 +318,41 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 ) : (
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      {rooms.map((room) => (
-                        <button
-                          key={room.id}
-                          onClick={() => handleRoomChange(room.id)}
-                          disabled={updatingRoom}
-                          className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                            booking.room_id === room.id
-                              ? 'border-gray-900 bg-gray-900 text-white'
-                              : 'border-gray-200 bg-white hover:border-gray-400 text-gray-900'
-                          } disabled:opacity-50`}
-                        >
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">{room.room_name}</span>
-                            <span className={`text-sm ${booking.room_id === room.id ? 'text-gray-300' : 'text-gray-500'}`}>
-                              Cap: {room.capacity}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
+                      {rooms.map((room) => {
+                        const isMatchingArea = room.room_area === (booking.service?.service_area || 'treatment')
+                        return (
+                          <button
+                            key={room.id}
+                            onClick={() => handleRoomChange(room.id)}
+                            disabled={updatingRoom}
+                            className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                              booking.room_id === room.id
+                                ? 'border-gray-900 bg-gray-900 text-white'
+                                : isMatchingArea
+                                  ? 'border-gray-200 bg-white hover:border-gray-400 text-gray-900'
+                                  : 'border-gray-200 bg-gray-100 text-gray-500'
+                            } disabled:opacity-50`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{room.room_name}</span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  booking.room_id === room.id
+                                    ? 'bg-gray-700 text-gray-300'
+                                    : room.room_area === 'public'
+                                      ? 'bg-teal-100 text-teal-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {room.room_area}
+                                </span>
+                              </div>
+                              <span className={`text-sm ${booking.room_id === room.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                                Cap: {room.capacity}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
                       <button
                         onClick={() => handleRoomChange(null)}
                         disabled={updatingRoom}

@@ -131,14 +131,14 @@ export async function POST(request: NextRequest) {
 
     const { data: service } = await supabase
       .from('services')
-      .select('room_area')
+      .select('service_area')
       .eq('slug', payload.serviceSlug)
       .maybeSingle()
 
-    const serviceRoomArea = service?.room_area || 'treatment'
+    const serviceArea = service?.service_area || 'treatment'
 
     const roomAllocation = await allocateRoom(
-      serviceRoomArea,
+      serviceArea,
       startDateTime,
       endDateTime,
       payload.peopleCount

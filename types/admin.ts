@@ -36,6 +36,7 @@ export interface BookingDetail {
     name: string
     category: string
     duration_minutes: number
+    service_area: string
   }
   voucher: {
     code: string
@@ -45,6 +46,7 @@ export interface BookingDetail {
   room: {
     id: string
     room_name: string
+    room_area: string
     capacity: number
   } | null
   booking_upsells: {
