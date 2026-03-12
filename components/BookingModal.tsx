@@ -69,6 +69,9 @@ export function BookingModal({
     clientName: '',
     clientEmail: '',
     clientPhone: '',
+    clientAllergies: '',
+    clientMassagePressure: '',
+    clientMedicalHistory: '',
     afterHoursSurcharge: 0,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
@@ -140,6 +143,9 @@ export function BookingModal({
       clientName: '',
       clientEmail: '',
       clientPhone: '',
+      clientAllergies: '',
+      clientMassagePressure: '',
+      clientMedicalHistory: '',
       afterHoursSurcharge: 0,
     })
     closeModal()
@@ -155,7 +161,8 @@ export function BookingModal({
         return (
           formData.clientName.trim() !== '' &&
           formData.clientEmail.trim() !== '' &&
-          formData.clientPhone.trim() !== ''
+          formData.clientPhone.trim() !== '' &&
+          formData.clientMassagePressure !== ''
         )
       default:
         return true
@@ -206,6 +213,9 @@ export function BookingModal({
             clientName={formData.clientName}
             clientEmail={formData.clientEmail}
             clientPhone={formData.clientPhone}
+            clientAllergies={formData.clientAllergies}
+            clientMassagePressure={formData.clientMassagePressure}
+            clientMedicalHistory={formData.clientMedicalHistory}
             onUpdateClient={(updates) => updateFormData(updates)}
           />
         )

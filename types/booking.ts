@@ -1,5 +1,7 @@
 export type PerPersonUpsells = Record<number, string[]>
 
+export type MassagePressure = 'soft' | 'medium' | 'hard'
+
 export interface BookingFormData {
   peopleCount: number
   selectedUpsells: string[]
@@ -9,6 +11,9 @@ export interface BookingFormData {
   clientName: string
   clientEmail: string
   clientPhone: string
+  clientAllergies: string
+  clientMassagePressure: MassagePressure | ''
+  clientMedicalHistory: string
   afterHoursSurcharge: number
 }
 
@@ -27,6 +32,9 @@ export interface CreateBookingPayload {
   customerName: string
   customerEmail: string
   customerPhone: string
+  customerAllergies: string
+  customerMassagePressure: MassagePressure
+  customerMedicalHistory: string
   serviceSlug: string
   selectedDate: string
   selectedTime: string

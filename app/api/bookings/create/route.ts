@@ -115,6 +115,9 @@ export async function POST(request: NextRequest) {
         total_price: totalPrice,
         deposit_due: depositDue,
         payment_expires_at: paymentExpiresAt.toISOString(),
+        allergies: payload.customerAllergies || null,
+        massage_pressure: payload.customerMassagePressure,
+        medical_history: payload.customerMedicalHistory || null,
       })
       .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at')
       .single()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData, PerPersonUpsells } from '@/types/booking'
+import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData, PerPersonUpsells, MassagePressure } from '@/types/booking'
 import { ServiceWithUpsells, Upsell } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
@@ -149,6 +149,9 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         customerName: formData.clientName,
         customerEmail: formData.clientEmail,
         customerPhone: formData.clientPhone,
+        customerAllergies: formData.clientAllergies,
+        customerMassagePressure: formData.clientMassagePressure as MassagePressure,
+        customerMedicalHistory: formData.clientMedicalHistory,
         serviceSlug: service.slug,
         selectedDate: formData.selectedDate,
         selectedTime: formData.selectedTime,
@@ -299,6 +302,29 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Name:</span> {formData.clientName}</p>
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Email:</span> {formData.clientEmail}</p>
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Phone:</span> {formData.clientPhone}</p>
+          </div>
+        </div>
+
+        <div className="p-4">
+          <h4 className="font-semibold text-gray-900 mb-2">Health Information</h4>
+          <div className="space-y-1 text-sm">
+            <p className="text-gray-800">
+              <span className="text-gray-600 font-medium">Massage Pressure:</span>{' '}
+              <span className="capitalize">{formData.clientMassagePressure}</span>
+            </p>
+            {formData.clientAllergies && (
+              <p className="text-gray-800">
+                <span className="text-gray-600 font-medium">Allergies:</span> {formData.clientAllergies}
+              </p>
+            )}
+            {formData.clientMedicalHistory && (
+              <p className="text-gray-800">
+                <span className="text-gray-600 font-medium">Medical History:</span> {formData.clientMedicalHistory}
+              </p>
+            )}
+            {!formData.clientAllergies && !formData.clientMedicalHistory && (
+              <p className="text-gray-500 italic">No allergies or medical conditions noted</p>
+            )}
           </div>
         </div>
 
