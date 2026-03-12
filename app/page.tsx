@@ -29,12 +29,12 @@ export default async function Home() {
     .eq("active", true)
 
   const servicesWithUpsells: ServiceWithUpsells[] = (services || []).map((service: Service) => {
-    const allowedUpsellSlugs = service.allowed_upsells
-      ? service.allowed_upsells.split(',').map(s => s.trim())
+    const allowedUpsellNames = service.allowed_upsells
+      ? service.allowed_upsells.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0)
       : []
 
     const serviceUpsells = (allUpsells || []).filter((upsell: Upsell) =>
-      allowedUpsellSlugs.includes(upsell.slug)
+      allowedUpsellNames.includes(upsell.name)
     )
 
     return {

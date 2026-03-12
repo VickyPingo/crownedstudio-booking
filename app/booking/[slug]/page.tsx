@@ -31,12 +31,12 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
     .eq("active", true)
 
   const servicesWithUpsells: ServiceWithUpsells[] = (services || []).map((service) => {
-    const allowedUpsellSlugs = service.allowed_upsells
-      ? service.allowed_upsells.split(',').map((s: string) => s.trim())
+    const allowedUpsellNames = service.allowed_upsells
+      ? service.allowed_upsells.split(/[,\n]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0)
       : []
 
     const serviceUpsells = (allUpsells || []).filter((upsell) =>
-      allowedUpsellSlugs.includes(upsell.slug)
+      allowedUpsellNames.includes(upsell.name)
     )
 
     return {

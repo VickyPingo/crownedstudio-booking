@@ -9,6 +9,7 @@ interface UpsellsStepProps {
 }
 
 export function UpsellsStep({ availableUpsells, selectedUpsells, onUpdateUpsells }: UpsellsStepProps) {
+  console.log('UpsellsStep - availableUpsells:', availableUpsells)
   const toggleUpsell = (upsellId: string) => {
     if (selectedUpsells.includes(upsellId)) {
       onUpdateUpsells(selectedUpsells.filter((id) => id !== upsellId))

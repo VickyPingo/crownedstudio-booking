@@ -57,6 +57,9 @@ export function BookingModal({ services }: { services: ServiceWithUpsells[] }) {
     }
   }, [isOpen])
 
+  console.log('BookingModal - resolvedService:', resolvedService)
+  console.log('BookingModal - resolvedService?.upsells:', resolvedService?.upsells)
+
   if (!isOpen || !resolvedService) return null
 
   const handleNext = () => {
