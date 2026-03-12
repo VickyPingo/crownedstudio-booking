@@ -6,6 +6,23 @@ const PAYMENT_EXPIRY_MINUTES = 15
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
 const DEPOSIT_PERCENT = 0.5
 
+async function recordVoucherUsage(
+  supabase: typeof supabaseAdmin,
+  voucherId: string,
+  bookingId: string,
+  discountApplied: number
+): Promise<void> {
+  await supabase
+    .from('voucher_usage')
+    .insert({
+      voucher_id: voucherId,
+      booking_id: bookingId,
+      discount_applied: discountApplied,
+    })
+
+  await supabase.rpc('increment_voucher_usage', { voucher_id: voucherId })
+}
+
 function createSouthAfricaDateTime(dateString: string, timeString: string): Date {
   const saTimeString = `${dateString}T${timeString}:00+02:00`
   return new Date(saTimeString)
@@ -63,11 +80,23 @@ export async function POST(request: NextRequest) {
       customerId = newCustomer.id
     }
 
-    const isRepeatCustomer = await checkRepeatCustomer(supabase, payload.customerEmail, payload.customerPhone)
+    const hasVoucher = payload.voucherId && payload.voucherCode && payload.voucherDiscount
+    let discountAmount = 0
+    let discountType: string | null = null
+
+    if (hasVoucher) {
+      discountAmount = payload.voucherDiscount || 0
+      discountType = 'voucher'
+    } else {
+      const isRepeatCustomer = await checkRepeatCustomer(supabase, payload.customerEmail, payload.customerPhone)
+      if (isRepeatCustomer) {
+        const subtotal = payload.basePrice + payload.upsellsTotal
+        discountAmount = Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
+        discountType = 'repeat_customer'
+      }
+    }
 
     const subtotal = payload.basePrice + payload.upsellsTotal
-    const discountAmount = isRepeatCustomer ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT) : 0
-    const discountType = isRepeatCustomer ? 'repeat_customer' : null
     const totalPrice = subtotal - discountAmount
     const depositDue = Math.round(totalPrice * DEPOSIT_PERCENT)
 
@@ -118,8 +147,11 @@ export async function POST(request: NextRequest) {
         allergies: payload.customerAllergies || null,
         massage_pressure: payload.customerMassagePressure,
         medical_history: payload.customerMedicalHistory || null,
+        voucher_code: payload.voucherCode || null,
+        voucher_id: payload.voucherId || null,
+        voucher_discount: payload.voucherDiscount || 0,
       })
-      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at')
+      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount')
       .single()
 
     if (bookingError) {
@@ -195,6 +227,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (hasVoucher && payload.voucherId) {
+      await recordVoucherUsage(supabase, payload.voucherId, booking.id, payload.voucherDiscount || 0)
+    }
+
     return NextResponse.json({
       success: true,
       booking: {
@@ -208,6 +244,8 @@ export async function POST(request: NextRequest) {
         startTime: booking.start_time,
         paymentExpiresAt: booking.payment_expires_at,
         createdAt: booking.created_at,
+        voucherCode: booking.voucher_code,
+        voucherDiscount: booking.voucher_discount,
       },
     })
   } catch (error) {

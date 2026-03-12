@@ -23,7 +23,7 @@ export interface BookingPricing {
   afterHoursSurcharge: number
   subtotal: number
   discountAmount: number
-  discountType: 'repeat_customer' | null
+  discountType: 'repeat_customer' | 'voucher' | null
   finalTotal: number
   depositAmount: number
 }
@@ -48,6 +48,9 @@ export interface CreateBookingPayload {
   discountType: string | null
   totalPrice: number
   depositDue: number
+  voucherCode?: string | null
+  voucherId?: string | null
+  voucherDiscount?: number
 }
 
 export interface SavedBooking {
@@ -56,11 +59,13 @@ export interface SavedBooking {
   status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'cancelled_expired'
   depositDue: number
   discountAmount: number
-  discountType: 'repeat_customer' | null
+  discountType: 'repeat_customer' | 'voucher' | null
   totalPrice: number
   startTime: string
   paymentExpiresAt?: string
   createdAt: string
+  voucherCode?: string | null
+  voucherDiscount?: number
 }
 
 export interface BusinessHoursData {

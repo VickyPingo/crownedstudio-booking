@@ -5,6 +5,8 @@ import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursDat
 import { ServiceWithUpsells, Upsell } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
+import { supabase } from '@/lib/supabase/client'
+import type { Voucher } from '@/types/voucher'
 
 const AFTER_HOURS_SURCHARGE_PP = 100
 
@@ -94,6 +96,12 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const { savedBooking, setSavedBooking } = useBookingModal()
 
+  const [voucherCode, setVoucherCode] = useState('')
+  const [voucherLoading, setVoucherLoading] = useState(false)
+  const [voucherError, setVoucherError] = useState('')
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
+  const [voucherDiscount, setVoucherDiscount] = useState(0)
+
   const servicePrice = getPriceForPeopleCount(service, formData.peopleCount)
 
   const upsellsTotal = calculateUpsellsTotal(
@@ -115,6 +123,70 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
 
   const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge
 
+  const calculateVoucherDiscount = (voucher: Voucher, amount: number): number => {
+    if (voucher.discount_type === 'fixed') {
+      return Math.min(voucher.discount_value, amount)
+    } else {
+      return Math.round((amount * voucher.discount_value) / 100)
+    }
+  }
+
+  const handleApplyVoucher = async () => {
+    if (!voucherCode.trim()) {
+      setVoucherError('Please enter a voucher code')
+      return
+    }
+
+    setVoucherLoading(true)
+    setVoucherError('')
+
+    const { data: voucher, error } = await supabase
+      .from('vouchers')
+      .select('*')
+      .eq('code', voucherCode.toUpperCase().trim())
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error || !voucher) {
+      setVoucherError('Invalid voucher code')
+      setVoucherLoading(false)
+      return
+    }
+
+    if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
+      setVoucherError('This voucher has expired')
+      setVoucherLoading(false)
+      return
+    }
+
+    if (voucher.usage_limit && voucher.usage_count >= voucher.usage_limit) {
+      setVoucherError('This voucher has reached its usage limit')
+      setVoucherLoading(false)
+      return
+    }
+
+    if (voucher.min_spend > subtotal) {
+      setVoucherError(`Minimum spend of R${voucher.min_spend} required`)
+      setVoucherLoading(false)
+      return
+    }
+
+    const discount = calculateVoucherDiscount(voucher, subtotal)
+    setAppliedVoucher(voucher)
+    setVoucherDiscount(discount)
+    setVoucherLoading(false)
+  }
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null)
+    setVoucherDiscount(0)
+    setVoucherCode('')
+    setVoucherError('')
+  }
+
+  const finalTotal = subtotal - voucherDiscount
+  const depositAmount = Math.round(finalTotal * 0.5)
+
   const pricing: BookingPricing = savedBooking
     ? {
         servicePrice,
@@ -131,10 +203,10 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         upsellsTotal,
         afterHoursSurcharge,
         subtotal,
-        discountAmount: 0,
-        discountType: null,
-        finalTotal: subtotal,
-        depositAmount: Math.round(subtotal * 0.5),
+        discountAmount: voucherDiscount,
+        discountType: appliedVoucher ? 'voucher' : null,
+        finalTotal,
+        depositAmount,
       }
 
   const handleCreateBooking = async () => {
@@ -161,10 +233,13 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
-        discountAmount: 0,
-        discountType: null,
-        totalPrice: subtotal,
-        depositDue: Math.round(subtotal * 0.5),
+        discountAmount: voucherDiscount,
+        discountType: appliedVoucher ? 'voucher' : null,
+        totalPrice: finalTotal,
+        depositDue: depositAmount,
+        voucherCode: appliedVoucher?.code || null,
+        voucherId: appliedVoucher?.id || null,
+        voucherDiscount: voucherDiscount,
       }
 
       const response = await fetch('/api/bookings/create', {
@@ -328,6 +403,57 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
           </div>
         </div>
 
+        {!savedBooking && (
+          <div className="p-4">
+            <h4 className="font-semibold text-gray-900 mb-3">Voucher Code</h4>
+            {appliedVoucher ? (
+              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div>
+                  <p className="font-medium text-green-800">
+                    {appliedVoucher.code}
+                  </p>
+                  <p className="text-sm text-green-700">
+                    {appliedVoucher.discount_type === 'fixed'
+                      ? `R${appliedVoucher.discount_value} off`
+                      : `${appliedVoucher.discount_value}% off`}
+                  </p>
+                </div>
+                <button
+                  onClick={handleRemoveVoucher}
+                  className="text-sm text-green-700 hover:text-green-900 font-medium"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={voucherCode}
+                    onChange={(e) => {
+                      setVoucherCode(e.target.value.toUpperCase())
+                      setVoucherError('')
+                    }}
+                    placeholder="Enter voucher code"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 uppercase"
+                  />
+                  <button
+                    onClick={handleApplyVoucher}
+                    disabled={voucherLoading}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {voucherLoading ? '...' : 'Apply'}
+                  </button>
+                </div>
+                {voucherError && (
+                  <p className="text-sm text-red-600">{voucherError}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="p-4 bg-gray-50">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
@@ -366,6 +492,21 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   Repeat Customer Discount (10%)
+                </span>
+                <span className="font-medium">-R{pricing.discountAmount}</span>
+              </div>
+            )}
+
+            {pricing.discountAmount > 0 && pricing.discountType === 'voucher' && (
+              <div className="flex justify-between text-sm text-green-800 bg-green-50 -mx-4 px-4 py-2">
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                  </svg>
+                  Voucher Discount
+                  {appliedVoucher && (
+                    <span className="font-mono text-xs">({appliedVoucher.code})</span>
+                  )}
                 </span>
                 <span className="font-medium">-R{pricing.discountAmount}</span>
               </div>
