@@ -240,21 +240,52 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
               </div>
             </section>
 
-            {booking.booking_upsells && booking.booking_upsells.length > 0 && (
-              <section>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Upsells</h3>
-                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                  {booking.booking_upsells.map((upsell, idx) => (
-                    <div key={idx} className="flex justify-between text-sm">
-                      <span className="text-gray-700">
-                        {upsell.upsell?.name} (Person {upsell.person_number})
-                      </span>
-                      <span className="text-gray-900 font-medium">R{upsell.price_total}</span>
-                    </div>
-                  ))}
+            <section>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Add-ons</h3>
+              {booking.booking_upsells && booking.booking_upsells.length > 0 ? (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                  {(() => {
+                    const grouped = booking.booking_upsells.reduce((acc, upsell) => {
+                      const person = upsell.person_number || 1
+                      if (!acc[person]) acc[person] = []
+                      acc[person].push(upsell)
+                      return acc
+                    }, {} as Record<number, typeof booking.booking_upsells>)
+
+                    const sortedPersons = Object.keys(grouped).map(Number).sort((a, b) => a - b)
+                    const upsellsTotal = booking.booking_upsells.reduce((sum, u) => sum + (u.price_total || 0), 0)
+
+                    return (
+                      <>
+                        {sortedPersons.map((personNum) => (
+                          <div key={personNum}>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                              Person {personNum}
+                            </p>
+                            <div className="space-y-1.5">
+                              {grouped[personNum].map((upsell, idx) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="text-gray-700">{upsell.upsell?.name}</span>
+                                  <span className="text-gray-900 font-medium">R{upsell.price_total}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <div className="border-t pt-3 flex justify-between">
+                          <span className="text-sm font-medium text-gray-700">Add-ons Total</span>
+                          <span className="font-semibold text-gray-900">R{upsellsTotal.toLocaleString()}</span>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
-              </section>
-            )}
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-500">No add-ons selected</p>
+                </div>
+              )}
+            </section>
 
             {(booking.voucher_code || booking.voucher_discount > 0) && (
               <section>
