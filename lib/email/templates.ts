@@ -148,12 +148,23 @@ export function newBookingToSpaTemplate(data: BookingEmailData): string {
         </table>
       </div>
 
+      ${data.voucherCode ? `
+      <div class="section">
+        <div class="section-title">Voucher Applied</div>
+        <div class="highlight-box" style="background: #d1fae5;">
+          <table>
+            <tr><td class="label-cell">Voucher Code</td><td class="value-cell" style="color: #065f46; font-weight: 600;">${data.voucherCode}</td></tr>
+            <tr><td class="label-cell">Voucher Discount</td><td class="value-cell" style="color: #065f46; font-weight: 600;">R${data.voucherDiscount}</td></tr>
+          </table>
+        </div>
+      </div>
+      ` : ''}
+
       <div class="section">
         <div class="section-title">Payment Details</div>
         <div class="highlight-box">
           <table>
             <tr><td class="label-cell">Status</td><td class="value-cell">${paymentBadge}</td></tr>
-            ${data.voucherCode ? `<tr><td class="label-cell">Voucher</td><td class="value-cell">${data.voucherCode} (-R${data.voucherDiscount})</td></tr>` : ''}
             <tr><td class="label-cell">Deposit</td><td class="value-cell">R${data.depositAmount.toLocaleString()}</td></tr>
             <tr><td class="label-cell">Total</td><td class="value-cell"><strong>R${data.totalPrice.toLocaleString()}</strong></td></tr>
             <tr><td class="label-cell">Balance Due</td><td class="value-cell">R${data.balanceDue.toLocaleString()}</td></tr>
