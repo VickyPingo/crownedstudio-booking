@@ -23,7 +23,7 @@ export default function BookingSuccessPage() {
             Your booking has been confirmed. You will receive a confirmation email shortly.
           </p>
           <a
-            href="/"
+            href="https://crownedstudio.co.za/"
             className="inline-block bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
           >
             Return to Home
