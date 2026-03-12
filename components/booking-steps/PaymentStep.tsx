@@ -161,32 +161,32 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold mb-2">Booking Summary</h3>
-        <p className="text-sm text-gray-600">Review your booking details before payment</p>
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">Booking Summary</h3>
+        <p className="text-sm text-gray-700">Review your booking details before payment</p>
       </div>
 
-      <div className="border rounded-lg divide-y">
+      <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
         <div className="p-4 bg-gray-50">
-          <h4 className="font-semibold mb-2">Service</h4>
+          <h4 className="font-semibold text-gray-900 mb-2">Service</h4>
           <div className="flex justify-between items-start">
             <div>
-              <p className="font-medium">{service.name}</p>
-              <p className="text-sm text-gray-600">
+              <p className="font-medium text-gray-900">{service.name}</p>
+              <p className="text-sm text-gray-700">
                 {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
               </p>
             </div>
-            <p className="font-semibold">R{pricing.servicePrice}</p>
+            <p className="font-semibold text-gray-900">R{pricing.servicePrice}</p>
           </div>
         </div>
 
         {selectedUpsellsData.length > 0 && (
           <div className="p-4">
-            <h4 className="font-semibold mb-2">Additional Services</h4>
+            <h4 className="font-semibold text-gray-900 mb-2">Additional Services</h4>
             <div className="space-y-2">
               {selectedUpsellsData.map((upsell) => (
                 <div key={upsell.id} className="flex justify-between">
-                  <p className="text-sm">{upsell.name}</p>
-                  <p className="text-sm font-medium">R{upsell.price}</p>
+                  <p className="text-sm text-gray-800">{upsell.name}</p>
+                  <p className="text-sm font-medium text-gray-900">R{upsell.price}</p>
                 </div>
               ))}
             </div>
@@ -194,8 +194,8 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         )}
 
         <div className="p-4">
-          <h4 className="font-semibold mb-2">Date & Time</h4>
-          <p className="text-sm">
+          <h4 className="font-semibold text-gray-900 mb-2">Date & Time</h4>
+          <p className="text-sm text-gray-800">
             {formData.selectedDate ? (
               <>
                 {new Date(formData.selectedDate).toLocaleDateString('en-ZA', {
@@ -218,63 +218,63 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         </div>
 
         <div className="p-4">
-          <h4 className="font-semibold mb-2">Contact Details</h4>
+          <h4 className="font-semibold text-gray-900 mb-2">Contact Details</h4>
           <div className="space-y-1 text-sm">
-            <p><span className="text-gray-600">Name:</span> {formData.clientName}</p>
-            <p><span className="text-gray-600">Email:</span> {formData.clientEmail}</p>
-            <p><span className="text-gray-600">Phone:</span> {formData.clientPhone}</p>
+            <p className="text-gray-800"><span className="text-gray-600 font-medium">Name:</span> {formData.clientName}</p>
+            <p className="text-gray-800"><span className="text-gray-600 font-medium">Email:</span> {formData.clientEmail}</p>
+            <p className="text-gray-800"><span className="text-gray-600 font-medium">Phone:</span> {formData.clientPhone}</p>
           </div>
         </div>
 
         <div className="p-4 bg-gray-50">
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Service ({formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'})</span>
-              <span>R{pricing.servicePrice}</span>
+              <span className="text-gray-800">Service ({formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'})</span>
+              <span className="text-gray-900 font-medium">R{pricing.servicePrice}</span>
             </div>
 
             {pricing.upsellsTotal > 0 && (
               <div className="flex justify-between text-sm">
-                <span>Additional Services</span>
-                <span>R{pricing.upsellsTotal}</span>
+                <span className="text-gray-800">Additional Services</span>
+                <span className="text-gray-900 font-medium">R{pricing.upsellsTotal}</span>
               </div>
             )}
 
             {pricing.afterHoursSurcharge > 0 && (
-              <div className="flex justify-between text-sm text-amber-700 bg-amber-50 -mx-4 px-4 py-2">
+              <div className="flex justify-between text-sm text-amber-800 bg-amber-50 -mx-4 px-4 py-2">
                 <span className="flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   After-hours surcharge (R{AFTER_HOURS_SURCHARGE_PP} x {formData.peopleCount})
                 </span>
-                <span>R{pricing.afterHoursSurcharge}</span>
+                <span className="font-medium">R{pricing.afterHoursSurcharge}</span>
               </div>
             )}
 
-            <div className="flex justify-between text-sm font-medium pt-2 border-t">
-              <span>Subtotal</span>
-              <span>R{pricing.subtotal}</span>
+            <div className="flex justify-between text-sm font-medium pt-2 border-t border-gray-200">
+              <span className="text-gray-800">Subtotal</span>
+              <span className="text-gray-900">R{pricing.subtotal}</span>
             </div>
 
             {pricing.discountAmount > 0 && pricing.discountType === 'repeat_customer' && (
-              <div className="flex justify-between text-sm text-green-700 bg-green-50 -mx-4 px-4 py-2">
+              <div className="flex justify-between text-sm text-green-800 bg-green-50 -mx-4 px-4 py-2">
                 <span className="flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                   Repeat Customer Discount (10%)
                 </span>
-                <span>-R{pricing.discountAmount}</span>
+                <span className="font-medium">-R{pricing.discountAmount}</span>
               </div>
             )}
 
-            <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-              <span>Total Amount</span>
-              <span>R{pricing.finalTotal}</span>
+            <div className="flex justify-between font-semibold text-lg pt-2 border-t border-gray-200">
+              <span className="text-gray-900">Total Amount</span>
+              <span className="text-gray-900">R{pricing.finalTotal}</span>
             </div>
 
-            <div className="flex justify-between text-green-700 font-semibold pt-2 border-t border-green-200 bg-green-50 -mx-4 px-4 py-2 mt-2">
+            <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
               <span>50% Deposit Required</span>
               <span>R{pricing.depositAmount}</span>
             </div>
@@ -283,7 +283,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
       </div>
 
       {savedBooking && (
-        <div className="border border-green-200 bg-green-50 rounded-lg p-4">
+        <div className="border border-green-300 bg-green-50 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-green-700 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -293,7 +293,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
               <p className="text-sm text-green-800 mb-2">
                 Your booking reference: <span className="font-mono font-semibold">{savedBooking.id.slice(0, 8).toUpperCase()}</span>
               </p>
-              <p className="text-xs text-green-700">
+              <p className="text-sm text-green-800">
                 Status: Awaiting Payment
               </p>
             </div>
@@ -319,7 +319,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         </button>
       )}
 
-      <p className="text-xs text-gray-500 text-center">
+      <p className="text-sm text-gray-700 text-center">
         {!savedBooking
           ? 'Your booking will be created and you will be redirected to payment'
           : 'You will be redirected to PayFast to complete your deposit payment'

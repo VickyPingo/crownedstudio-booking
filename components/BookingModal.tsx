@@ -257,29 +257,42 @@ export function BookingModal({
 
             <div className="border-t bg-white px-4 py-4 sm:px-6">
               <div className="flex gap-3 sm:justify-between">
-                <button
-                  onClick={handleBack}
-                  disabled={currentStep === 0}
-                  className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
-                    currentStep === 0
-                      ? 'cursor-not-allowed bg-gray-200 text-gray-400'
-                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                  }`}
-                >
-                  Back
-                </button>
+                {currentStep === 5 ? (
+                  <button
+                    onClick={handleClose}
+                    className="flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium bg-black text-white hover:bg-gray-800"
+                  >
+                    Done
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleBack}
+                      disabled={currentStep === 0}
+                      className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
+                        currentStep === 0
+                          ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                      }`}
+                    >
+                      Back
+                    </button>
 
-                <button
-                  onClick={handleNext}
-                  disabled={currentStep === STEPS.length - 1 || !canProceedToNext()}
-                  className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
-                    currentStep === STEPS.length - 1 || !canProceedToNext()
-                      ? 'cursor-not-allowed bg-gray-200 text-gray-400'
-                      : 'bg-black text-white hover:bg-gray-800'
-                  }`}
-                >
-                  Next
-                </button>
+                    {currentStep !== 4 && (
+                      <button
+                        onClick={handleNext}
+                        disabled={!canProceedToNext()}
+                        className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
+                          !canProceedToNext()
+                            ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                            : 'bg-black text-white hover:bg-gray-800'
+                        }`}
+                      >
+                        Next
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </div>
