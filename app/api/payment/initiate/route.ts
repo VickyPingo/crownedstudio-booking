@@ -75,7 +75,14 @@ export async function POST(request: NextRequest) {
     }
 
     const config = getPayfastConfig()
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+
+    if (!baseUrl) {
+      console.error('NEXT_PUBLIC_SITE_URL is not configured')
+      return NextResponse.json({ error: 'Site URL not configured' }, { status: 500 })
+    }
+
+    console.log('[Payment Initiate] Using base URL:', baseUrl)
 
     const paymentData = {
       merchant_id: config.merchantId,
