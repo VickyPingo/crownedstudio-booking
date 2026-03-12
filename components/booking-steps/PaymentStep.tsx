@@ -323,7 +323,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
               </p>
             )}
             {!formData.clientAllergies && !formData.clientMedicalHistory && (
-              <p className="text-gray-500 italic">No allergies or medical conditions noted</p>
+              <p className="text-gray-600 italic">No allergies or medical conditions noted</p>
             )}
           </div>
         </div>
@@ -407,7 +407,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         <button
           onClick={handleCreateBooking}
           disabled={isCreatingBooking}
-          className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
         >
           {isCreatingBooking ? 'Creating Booking...' : 'Continue to Payment'}
         </button>
@@ -415,7 +415,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         <button
           onClick={handlePayDeposit}
           disabled={isInitiatingPayment}
-          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
         >
           {isInitiatingPayment ? 'Redirecting to PayFast...' : `Pay Deposit (R${pricing.depositAmount})`}
         </button>

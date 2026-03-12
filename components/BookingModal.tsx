@@ -243,7 +243,7 @@ export function BookingModal({
           <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl max-h-[92vh] flex flex-col">
             <button
               onClick={handleClose}
-              className="absolute right-4 top-4 z-10 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              className="absolute right-4 top-4 z-10 rounded-full p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
               aria-label="Close booking modal"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -252,10 +252,10 @@ export function BookingModal({
             </button>
 
             <div className="border-b px-4 py-4 sm:px-6">
-              <h2 className="pr-10 text-xl font-bold sm:text-2xl">Book Service</h2>
+              <h2 className="pr-10 text-xl font-semibold text-gray-900 sm:text-2xl">Book Service</h2>
 
               <div className="mt-4">
-                <div className="mb-2 text-sm font-medium text-gray-600">
+                <div className="mb-2 text-sm font-medium text-gray-700">
                   Step {currentStep + 1} of {STEPS.length}: {STEPS[currentStep].label}
                 </div>
 
@@ -276,7 +276,7 @@ export function BookingModal({
 
                       <span
                         className={`hidden text-xs sm:inline ${
-                          index === currentStep ? 'font-semibold text-black' : 'text-gray-500'
+                          index === currentStep ? 'font-semibold text-black' : 'text-gray-600'
                         }`}
                       >
                         {step.label}
@@ -316,7 +316,7 @@ export function BookingModal({
                       disabled={currentStep === 0}
                       className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
                         currentStep === 0
-                          ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                          ? 'cursor-not-allowed bg-gray-200 text-gray-500'
                           : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                       }`}
                     >
@@ -329,7 +329,7 @@ export function BookingModal({
                         disabled={!canProceedToNext()}
                         className={`flex-1 sm:flex-none px-5 py-3 rounded-lg font-medium ${
                           !canProceedToNext()
-                            ? 'cursor-not-allowed bg-gray-200 text-gray-400'
+                            ? 'cursor-not-allowed bg-gray-200 text-gray-500'
                             : 'bg-black text-white hover:bg-gray-800'
                         }`}
                       >

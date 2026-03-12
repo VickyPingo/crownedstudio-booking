@@ -40,15 +40,15 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xl font-semibold">Service Details</h3>
+      <h3 className="text-xl font-semibold text-gray-900">Service Details</h3>
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
-        <p className="text-sm text-gray-700 mb-1">Service Name</p>
-        <p className="text-lg font-semibold">{service.name}</p>
+        <p className="text-sm text-gray-800 mb-1">Service Name</p>
+        <p className="text-lg font-semibold text-gray-900">{service.name}</p>
       </div>
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
-        <p className="text-sm text-gray-700 mb-2">Number of People</p>
+        <p className="text-sm text-gray-800 mb-2">Number of People</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {peopleOptions.map((count) => {
             const price = getPriceForPeopleCount(service, count)
@@ -94,18 +94,18 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
       </div>
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
-        <p className="text-sm text-gray-700 mb-1">Price</p>
+        <p className="text-sm text-gray-800 mb-1">Price</p>
         <p className="text-lg font-semibold text-gray-900">R{currentPrice}</p>
       </div>
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
-        <p className="text-sm text-gray-700 mb-1">Duration</p>
-        <p className="text-sm text-gray-800">{service.duration_minutes} minutes</p>
+        <p className="text-sm text-gray-800 mb-1">Duration</p>
+        <p className="text-sm text-gray-900">{service.duration_minutes} minutes</p>
       </div>
 
       {service.description && (
         <div className="rounded-lg p-4 bg-white border border-gray-200">
-          <p className="text-sm text-gray-700 mb-1">Description</p>
+          <p className="text-sm text-gray-800 mb-1">Description</p>
           <p className="text-sm text-gray-700">{service.description}</p>
         </div>
       )}

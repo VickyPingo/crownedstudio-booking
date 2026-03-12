@@ -39,11 +39,11 @@ export function DateTimeStep({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold mb-4">Select Date & Time</h3>
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">Select Date & Time</h3>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-800 mb-2">
           Preferred Date
         </label>
         <input
@@ -56,7 +56,7 @@ export function DateTimeStep({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-gray-800 mb-2">
           Preferred Time
           {isCrownedNight && (
             <span className="ml-2 text-xs text-amber-700 font-normal">
@@ -88,7 +88,7 @@ export function DateTimeStep({
           })}
         </div>
         {!isCrownedNight && businessHours.after_hours_enabled && (
-          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+          <p className="text-xs text-gray-700 mt-2 flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
             After-hours slots include R100 surcharge per person
           </p>

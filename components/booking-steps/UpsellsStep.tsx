@@ -86,7 +86,7 @@ export function UpsellsStep({
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          isSelected ? 'bg-black border-black' : 'border-gray-400'
+                          isSelected ? 'bg-black border-black' : 'border-gray-500'
                         }`}
                       >
                         {isSelected && (
@@ -139,7 +139,7 @@ export function UpsellsStep({
               }`}
             >
               <span className="block text-sm font-semibold">Person {person}</span>
-              <span className={`block text-xs mt-0.5 ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>
+              <span className={`block text-xs mt-0.5 ${isActive ? 'text-gray-200' : 'text-gray-600'}`}>
                 {getExtrasLabel(upsellCount)}
               </span>
             </button>
@@ -148,7 +148,7 @@ export function UpsellsStep({
       </div>
 
       <div className="border-t border-gray-200 pt-4">
-        <p className="text-sm font-medium text-gray-600 mb-3">
+        <p className="text-sm font-medium text-gray-700 mb-3">
           Selecting upsells for <span className="text-black font-semibold">Person {activePerson}</span>
         </p>
 
@@ -168,7 +168,7 @@ export function UpsellsStep({
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                          isSelected ? 'bg-black border-black' : 'border-gray-400'
+                          isSelected ? 'bg-black border-black' : 'border-gray-500'
                         }`}
                       >
                         {isSelected && (
