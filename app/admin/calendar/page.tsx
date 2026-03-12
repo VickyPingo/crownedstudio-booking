@@ -35,6 +35,7 @@ export default function AdminCalendarPage() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
   const [showBlockModal, setShowBlockModal] = useState(false)
   const [blockDate, setBlockDate] = useState<string | null>(null)
+  const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null)
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -125,15 +126,16 @@ export default function AdminCalendarPage() {
     setCurrentDate(new Date())
   }
 
-  const handleDeleteBlock = async (blockId: string) => {
-    const { error } = await supabase
-      .from('time_blocks')
-      .delete()
-      .eq('id', blockId)
+  const handleEditBlock = (block: TimeBlock) => {
+    setBlockDate(block.block_date)
+    setEditingBlock(block)
+    setShowBlockModal(true)
+  }
 
-    if (!error) {
-      fetchData()
-    }
+  const handleCloseBlockModal = () => {
+    setShowBlockModal(false)
+    setBlockDate(null)
+    setEditingBlock(null)
   }
 
   const today = new Date()
@@ -313,29 +315,25 @@ export default function AdminCalendarPage() {
               <div className="mb-4 space-y-2">
                 <p className="text-sm font-medium text-gray-700">Time Blocks</p>
                 {selectedDateBlocks.map((block) => (
-                  <div
+                  <button
                     key={block.id}
-                    className="flex items-center justify-between p-3 bg-gray-100 rounded-lg"
+                    onClick={() => handleEditBlock(block)}
+                    className="w-full flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors text-left"
                   >
                     <div>
                       <p className="text-sm font-medium text-gray-800">
                         {block.is_full_day
                           ? 'Full day blocked'
-                          : `${block.start_time} - ${block.end_time}`}
+                          : `${block.start_time?.slice(0, 5)} - ${block.end_time?.slice(0, 5)}`}
                       </p>
                       {block.reason && (
                         <p className="text-xs text-gray-600">{block.reason}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleDeleteBlock(block.id)}
-                      className="p-1 text-gray-500 hover:text-red-600 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
+                    <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
                 ))}
               </div>
             )}
@@ -382,10 +380,8 @@ export default function AdminCalendarPage() {
       {showBlockModal && blockDate && (
         <TimeBlockModal
           selectedDate={blockDate}
-          onClose={() => {
-            setShowBlockModal(false)
-            setBlockDate(null)
-          }}
+          existingBlock={editingBlock}
+          onClose={handleCloseBlockModal}
           onSave={fetchData}
         />
       )}

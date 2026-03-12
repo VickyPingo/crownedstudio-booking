@@ -1,24 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import type { TimeBlock } from '@/types/admin'
 
 interface TimeBlockModalProps {
   selectedDate: string
+  existingBlock?: TimeBlock | null
   onClose: () => void
   onSave: () => void
 }
 
-export function TimeBlockModal({ selectedDate, onClose, onSave }: TimeBlockModalProps) {
+export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }: TimeBlockModalProps) {
   const [isFullDay, setIsFullDay] = useState(true)
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('17:00')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
+
+  const isEditing = !!existingBlock
+
+  useEffect(() => {
+    if (existingBlock) {
+      setIsFullDay(existingBlock.is_full_day)
+      setStartTime(existingBlock.start_time?.slice(0, 5) || '09:00')
+      setEndTime(existingBlock.end_time?.slice(0, 5) || '17:00')
+      setReason(existingBlock.reason || '')
+    }
+  }, [existingBlock])
 
   const handleSave = async () => {
     setError('')
+
+    if (!isFullDay && startTime >= endTime) {
+      setError('End time must be after start time')
+      return
+    }
+
     setSaving(true)
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -32,13 +52,43 @@ export function TimeBlockModal({ selectedDate, onClose, onSave }: TimeBlockModal
       created_by: user?.id || null,
     }
 
-    const { error: insertError } = await supabase
-      .from('time_blocks')
-      .insert(blockData)
+    let queryError
 
-    if (insertError) {
-      setError(insertError.message)
+    if (isEditing && existingBlock) {
+      const { error: updateError } = await supabase
+        .from('time_blocks')
+        .update(blockData)
+        .eq('id', existingBlock.id)
+      queryError = updateError
+    } else {
+      const { error: insertError } = await supabase
+        .from('time_blocks')
+        .insert(blockData)
+      queryError = insertError
+    }
+
+    if (queryError) {
+      setError(queryError.message)
       setSaving(false)
+      return
+    }
+
+    onSave()
+    onClose()
+  }
+
+  const handleDelete = async () => {
+    if (!existingBlock) return
+
+    setDeleting(true)
+    const { error: deleteError } = await supabase
+      .from('time_blocks')
+      .delete()
+      .eq('id', existingBlock.id)
+
+    if (deleteError) {
+      setError(deleteError.message)
+      setDeleting(false)
       return
     }
 
@@ -57,7 +107,9 @@ export function TimeBlockModal({ selectedDate, onClose, onSave }: TimeBlockModal
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Block Time</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">
+          {isEditing ? 'Edit Time Block' : 'Block Time'}
+        </h2>
         <p className="text-sm text-gray-600 mb-6">{formattedDate}</p>
 
         {error && (
@@ -115,6 +167,15 @@ export function TimeBlockModal({ selectedDate, onClose, onSave }: TimeBlockModal
         </div>
 
         <div className="flex gap-3 mt-6">
+          {isEditing && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting || saving}
+              className="px-4 py-2.5 bg-white border border-red-300 text-red-700 rounded-lg font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
@@ -123,10 +184,10 @@ export function TimeBlockModal({ selectedDate, onClose, onSave }: TimeBlockModal
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || deleting}
             className="flex-1 px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
-            {saving ? 'Saving...' : 'Block Time'}
+            {saving ? 'Saving...' : isEditing ? 'Update' : 'Block Time'}
           </button>
         </div>
       </div>
