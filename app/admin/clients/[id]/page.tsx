@@ -2,6 +2,7 @@
 
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { BookingDetailDrawer } from '@/components/admin/BookingDetailDrawer'
+import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -87,6 +88,7 @@ export default function ClientProfilePage() {
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
   const [activeTab, setActiveTab] = useState<BookingTab>('all')
+  const [showManualBooking, setShowManualBooking] = useState(false)
 
   const [editMode, setEditMode] = useState(false)
   const [editData, setEditData] = useState({
@@ -429,17 +431,15 @@ export default function ClientProfilePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <a
-              href={`/booking/couples-massage?prefill_customer=${customer.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => setShowManualBooking(true)}
               className="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               New Booking
-            </a>
+            </button>
           </div>
         </div>
 
@@ -829,6 +829,17 @@ export default function ClientProfilePage() {
         onClose={() => setSelectedBookingId(null)}
         onUpdate={fetchData}
       />
+
+      {showManualBooking && (
+        <ManualBookingModal
+          onClose={() => setShowManualBooking(false)}
+          onSuccess={() => {
+            setShowManualBooking(false)
+            fetchData()
+          }}
+          prefillCustomerId={customer.id}
+        />
+      )}
     </AdminLayout>
   )
 }
