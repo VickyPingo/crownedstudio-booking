@@ -1,3 +1,12 @@
+export interface UpsellItem {
+  name: string
+  price: number
+}
+
+export interface GroupedUpsells {
+  [personNumber: number]: UpsellItem[]
+}
+
 export interface BookingEmailData {
   bookingId: string
   bookingReference: string
@@ -9,6 +18,7 @@ export interface BookingEmailData {
   bookingTime: string
   peopleCount: number
   upsells: string[]
+  groupedUpsells: GroupedUpsells
   allergies: string | null
   massagePressure: string | null
   medicalHistory: string | null
@@ -63,8 +73,27 @@ const baseStyles = `
   .value-cell { color: #111827; font-size: 14px; font-weight: 500; }
 `
 
+function formatGroupedUpsells(groupedUpsells: GroupedUpsells): string {
+  const personNumbers = Object.keys(groupedUpsells).map(Number).sort((a, b) => a - b)
+  if (personNumbers.length === 0) {
+    return 'None'
+  }
+
+  let html = ''
+  for (const personNum of personNumbers) {
+    const upsells = groupedUpsells[personNum]
+    html += `<div style="margin-bottom: 12px;"><strong style="color: #374151;">Person ${personNum}</strong><ul style="margin: 4px 0 0 0; padding-left: 20px;">`
+    for (const upsell of upsells) {
+      html += `<li style="color: #111827;">${upsell.name} (R${upsell.price})</li>`
+    }
+    html += '</ul></div>'
+  }
+  return html
+}
+
 export function newBookingToSpaTemplate(data: BookingEmailData): string {
-  const upsellsList = data.upsells.length > 0 ? data.upsells.join(', ') : 'None'
+  const hasUpsells = Object.keys(data.groupedUpsells).length > 0
+  const upsellsContent = hasUpsells ? formatGroupedUpsells(data.groupedUpsells) : 'None'
   const paymentBadge = data.paymentStatus === 'confirmed'
     ? '<span class="badge badge-success">Paid</span>'
     : data.paymentStatus === 'pending_payment'
@@ -106,7 +135,7 @@ export function newBookingToSpaTemplate(data: BookingEmailData): string {
           <tr><td class="label-cell">Date</td><td class="value-cell">${data.bookingDate}</td></tr>
           <tr><td class="label-cell">Time</td><td class="value-cell">${data.bookingTime}</td></tr>
           <tr><td class="label-cell">People</td><td class="value-cell">${data.peopleCount}</td></tr>
-          <tr><td class="label-cell">Add-ons</td><td class="value-cell">${upsellsList}</td></tr>
+          <tr><td class="label-cell" style="vertical-align: top;">Add-ons</td><td class="value-cell">${upsellsContent}</td></tr>
         </table>
       </div>
 

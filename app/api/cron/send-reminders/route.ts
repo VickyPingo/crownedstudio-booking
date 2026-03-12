@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendReminder24hToClient } from '@/lib/email/service'
-import { BookingEmailData } from '@/lib/email/templates'
+import { BookingEmailData, GroupedUpsells } from '@/lib/email/templates'
 
 const CRON_SECRET = process.env.CRON_SECRET
 
@@ -57,8 +57,11 @@ export async function GET(request: NextRequest) {
             name
           ),
           booking_upsells (
+            person_number,
+            price_total,
             upsell:upsells (
-              name
+              name,
+              price
             )
           )
         )
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
         voucher_discount: number | null
         customer: { full_name: string; email: string | null; phone: string | null } | null
         service: { name: string } | null
-        booking_upsells: { upsell: { name: string } | null }[]
+        booking_upsells: { person_number: number | null; price_total: number | null; upsell: { name: string; price: number } | null }[]
       } | null
       const booking = bookingData
 
@@ -124,6 +127,19 @@ export async function GET(request: NextRequest) {
         ?.map((bu) => bu.upsell?.name)
         .filter((name): name is string => !!name) || []
 
+      const groupedUpsells: GroupedUpsells = {}
+      for (const bu of booking.booking_upsells || []) {
+        if (!bu.upsell?.name) continue
+        const personNum = bu.person_number ?? 1
+        if (!groupedUpsells[personNum]) {
+          groupedUpsells[personNum] = []
+        }
+        groupedUpsells[personNum].push({
+          name: bu.upsell.name,
+          price: bu.price_total ?? bu.upsell.price ?? 0,
+        })
+      }
+
       const emailData: BookingEmailData = {
         bookingId: booking.id,
         bookingReference: booking.id.slice(0, 8).toUpperCase(),
@@ -143,6 +159,7 @@ export async function GET(request: NextRequest) {
         }),
         peopleCount: booking.people_count,
         upsells: upsellNames,
+        groupedUpsells,
         allergies: booking.allergies,
         massagePressure: booking.massage_pressure,
         medicalHistory: null,

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { BookingEmailData, PaymentEmailData } from './templates'
+import { BookingEmailData, PaymentEmailData, GroupedUpsells } from './templates'
 
 function getSupabaseAdmin() {
   return createClient(
@@ -33,8 +33,10 @@ interface BookingWithRelations {
   } | null
   booking_upsells: {
     person_number: number | null
+    price_total: number | null
     upsell: {
       name: string
+      price: number
     } | null
   }[]
 }
@@ -69,8 +71,10 @@ export async function fetchBookingForEmail(bookingId: string): Promise<BookingWi
       ),
       booking_upsells (
         person_number,
+        price_total,
         upsell:upsells (
-          name
+          name,
+          price
         )
       )
     `)
@@ -94,6 +98,19 @@ export function buildBookingEmailData(booking: BookingWithRelations): BookingEma
     ?.map((bu) => bu.upsell?.name)
     .filter((name): name is string => !!name) || []
 
+  const groupedUpsells: GroupedUpsells = {}
+  for (const bu of booking.booking_upsells || []) {
+    if (!bu.upsell?.name) continue
+    const personNum = bu.person_number ?? 1
+    if (!groupedUpsells[personNum]) {
+      groupedUpsells[personNum] = []
+    }
+    groupedUpsells[personNum].push({
+      name: bu.upsell.name,
+      price: bu.price_total ?? bu.upsell.price ?? 0,
+    })
+  }
+
   return {
     bookingId: booking.id,
     bookingReference: booking.id.slice(0, 8).toUpperCase(),
@@ -113,6 +130,7 @@ export function buildBookingEmailData(booking: BookingWithRelations): BookingEma
     }),
     peopleCount: booking.people_count,
     upsells: upsellNames,
+    groupedUpsells,
     allergies: booking.allergies,
     massagePressure: booking.massage_pressure,
     medicalHistory: booking.medical_history,
