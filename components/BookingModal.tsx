@@ -63,6 +63,7 @@ export function BookingModal({
   const [formData, setFormData] = useState<BookingFormData>({
     peopleCount: 1,
     selectedUpsells: [],
+    selectedUpsellsByPerson: { 1: [] },
     selectedDate: '',
     selectedTime: '',
     clientName: '',
@@ -133,6 +134,7 @@ export function BookingModal({
     setFormData({
       peopleCount: 1,
       selectedUpsells: [],
+      selectedUpsellsByPerson: { 1: [] },
       selectedDate: '',
       selectedTime: '',
       clientName: '',
@@ -174,8 +176,15 @@ export function BookingModal({
         return (
           <UpsellsStep
             availableUpsells={resolvedService.upsells}
-            selectedUpsells={formData.selectedUpsells}
-            onUpdateUpsells={(upsells) => updateFormData({ selectedUpsells: upsells })}
+            peopleCount={formData.peopleCount}
+            selectedUpsellsByPerson={formData.selectedUpsellsByPerson}
+            onUpdateUpsellsByPerson={(upsellsByPerson) => {
+              const allUpsells = Object.values(upsellsByPerson).flat()
+              updateFormData({
+                selectedUpsellsByPerson: upsellsByPerson,
+                selectedUpsells: [...new Set(allUpsells)],
+              })
+            }}
           />
         )
       case 2:

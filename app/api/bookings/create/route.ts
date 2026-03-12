@@ -127,7 +127,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (payload.selectedUpsellIds.length > 0) {
+    const hasPerPersonUpsells = payload.selectedUpsellsByPerson &&
+      Object.values(payload.selectedUpsellsByPerson).some(arr => arr.length > 0)
+
+    if (hasPerPersonUpsells) {
+      const allUpsellIds = [...new Set(Object.values(payload.selectedUpsellsByPerson).flat())]
+
+      if (allUpsellIds.length > 0) {
+        const { data: upsells } = await supabase
+          .from('upsells')
+          .select('id, slug, price, duration_added_minutes')
+          .in('slug', allUpsellIds)
+
+        if (upsells && upsells.length > 0) {
+          const upsellMap = new Map(upsells.map(u => [u.slug, u]))
+          const bookingUpsells: Array<{
+            booking_id: string
+            upsell_id: string
+            quantity: number
+            price_total: number
+            duration_added_minutes: number
+            person_number: number
+          }> = []
+
+          for (const [personKey, personUpsellIds] of Object.entries(payload.selectedUpsellsByPerson)) {
+            const personNumber = parseInt(personKey, 10)
+            for (const upsellSlug of personUpsellIds) {
+              const upsell = upsellMap.get(upsellSlug)
+              if (upsell) {
+                bookingUpsells.push({
+                  booking_id: booking.id,
+                  upsell_id: upsell.id,
+                  quantity: 1,
+                  price_total: upsell.price,
+                  duration_added_minutes: upsell.duration_added_minutes,
+                  person_number: personNumber,
+                })
+              }
+            }
+          }
+
+          if (bookingUpsells.length > 0) {
+            await supabase.from('booking_upsells').insert(bookingUpsells)
+          }
+        }
+      }
+    } else if (payload.selectedUpsellIds.length > 0) {
       const { data: upsells } = await supabase
         .from('upsells')
         .select('id, slug, price, duration_added_minutes')
@@ -140,6 +185,7 @@ export async function POST(request: NextRequest) {
           quantity: 1,
           price_total: upsell.price,
           duration_added_minutes: upsell.duration_added_minutes,
+          person_number: 1,
         }))
 
         await supabase.from('booking_upsells').insert(bookingUpsells)

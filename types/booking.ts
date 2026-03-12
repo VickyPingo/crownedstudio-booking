@@ -1,6 +1,9 @@
+export type PerPersonUpsells = Record<number, string[]>
+
 export interface BookingFormData {
   peopleCount: number
   selectedUpsells: string[]
+  selectedUpsellsByPerson: PerPersonUpsells
   selectedDate: string
   selectedTime: string
   clientName: string
@@ -30,6 +33,7 @@ export interface CreateBookingPayload {
   durationMinutes: number
   peopleCount: number
   selectedUpsellIds: string[]
+  selectedUpsellsByPerson: PerPersonUpsells
   basePrice: number
   upsellsTotal: number
   discountAmount: number

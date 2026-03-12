@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData } from '@/types/booking'
-import { ServiceWithUpsells } from '@/types/service'
+import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData, PerPersonUpsells } from '@/types/booking'
+import { ServiceWithUpsells, Upsell } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
 
@@ -27,6 +27,62 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
   }
 }
 
+function calculateUpsellsTotal(
+  selectedUpsellsByPerson: PerPersonUpsells,
+  peopleCount: number,
+  upsells: Upsell[]
+): number {
+  let total = 0
+  const upsellMap = new Map(upsells.map((u) => [u.id, u]))
+
+  for (let person = 1; person <= peopleCount; person++) {
+    const personUpsells = selectedUpsellsByPerson[person] || []
+    for (const upsellId of personUpsells) {
+      const upsell = upsellMap.get(upsellId)
+      if (upsell) {
+        total += upsell.price
+      }
+    }
+  }
+
+  return total
+}
+
+interface PersonUpsellSummary {
+  person: number
+  upsells: Upsell[]
+  total: number
+}
+
+function getPerPersonUpsellSummary(
+  selectedUpsellsByPerson: PerPersonUpsells,
+  peopleCount: number,
+  upsells: Upsell[]
+): PersonUpsellSummary[] {
+  const upsellMap = new Map(upsells.map((u) => [u.id, u]))
+  const summaries: PersonUpsellSummary[] = []
+
+  for (let person = 1; person <= peopleCount; person++) {
+    const personUpsellIds = selectedUpsellsByPerson[person] || []
+    const personUpsells: Upsell[] = []
+    let total = 0
+
+    for (const upsellId of personUpsellIds) {
+      const upsell = upsellMap.get(upsellId)
+      if (upsell) {
+        personUpsells.push(upsell)
+        total += upsell.price
+      }
+    }
+
+    if (personUpsells.length > 0) {
+      summaries.push({ person, upsells: personUpsells, total })
+    }
+  }
+
+  return summaries
+}
+
 interface PaymentStepProps {
   service: ServiceWithUpsells
   formData: BookingFormData
@@ -40,11 +96,17 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
 
   const servicePrice = getPriceForPeopleCount(service, formData.peopleCount)
 
-  const selectedUpsellsData = service.upsells.filter((upsell) =>
-    formData.selectedUpsells.includes(upsell.id)
+  const upsellsTotal = calculateUpsellsTotal(
+    formData.selectedUpsellsByPerson,
+    formData.peopleCount,
+    service.upsells
   )
 
-  const upsellsTotal = selectedUpsellsData.reduce((sum, upsell) => sum + upsell.price, 0)
+  const perPersonSummaries = getPerPersonUpsellSummary(
+    formData.selectedUpsellsByPerson,
+    formData.peopleCount,
+    service.upsells
+  )
 
   const isAfterHours = formData.selectedTime
     ? isAfterHoursSlot(formData.selectedTime, service.slug, businessHours)
@@ -93,6 +155,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         durationMinutes: service.duration_minutes,
         peopleCount: formData.peopleCount,
         selectedUpsellIds: formData.selectedUpsells,
+        selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
         discountAmount: 0,
@@ -179,14 +242,27 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
           </div>
         </div>
 
-        {selectedUpsellsData.length > 0 && (
+        {perPersonSummaries.length > 0 && (
           <div className="p-4">
-            <h4 className="font-semibold text-gray-900 mb-2">Additional Services</h4>
-            <div className="space-y-2">
-              {selectedUpsellsData.map((upsell) => (
-                <div key={upsell.id} className="flex justify-between">
-                  <p className="text-sm text-gray-800">{upsell.name}</p>
-                  <p className="text-sm font-medium text-gray-900">R{upsell.price}</p>
+            <h4 className="font-semibold text-gray-900 mb-3">Additional Services</h4>
+            <div className="space-y-4">
+              {perPersonSummaries.map((summary) => (
+                <div key={summary.person} className="border-l-2 border-gray-200 pl-3">
+                  <p className="text-sm font-medium text-gray-600 mb-2">
+                    Person {summary.person}
+                  </p>
+                  <div className="space-y-1">
+                    {summary.upsells.map((upsell) => (
+                      <div key={upsell.id} className="flex justify-between">
+                        <p className="text-sm text-gray-800">{upsell.name}</p>
+                        <p className="text-sm font-medium text-gray-900">R{upsell.price}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-2 pt-2 border-t border-gray-100">
+                    <p className="text-sm font-medium text-gray-700">Person {summary.person} subtotal</p>
+                    <p className="text-sm font-semibold text-gray-900">R{summary.total}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -235,7 +311,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
 
             {pricing.upsellsTotal > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-gray-800">Additional Services</span>
+                <span className="text-gray-800">Additional Services ({perPersonSummaries.length} {perPersonSummaries.length === 1 ? 'person' : 'people'})</span>
                 <span className="text-gray-900 font-medium">R{pricing.upsellsTotal}</span>
               </div>
             )}
