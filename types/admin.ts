@@ -21,6 +21,9 @@ export interface BookingDetail {
   allergies: string | null
   massage_pressure: string
   medical_history: string | null
+  voucher_code: string | null
+  voucher_discount: number
+  voucher_id: string | null
   created_at: string
   customer: {
     id: string
@@ -33,6 +36,11 @@ export interface BookingDetail {
     category: string
     duration_minutes: number
   }
+  voucher: {
+    code: string
+    discount_type: string
+    discount_value: number
+  } | null
   booking_upsells: {
     upsell_id: string
     quantity: number

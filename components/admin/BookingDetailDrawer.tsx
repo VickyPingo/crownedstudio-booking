@@ -27,6 +27,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const [showReschedule, setShowReschedule] = useState(false)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
+  const [markingBalancePaid, setMarkingBalancePaid] = useState(false)
 
   useEffect(() => {
     if (bookingId) {
@@ -44,6 +45,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         *,
         customer:customers(id, full_name, email, phone),
         service:services(name, category, duration_minutes),
+        voucher:vouchers(code, discount_type, discount_value),
         booking_upsells(
           upsell_id,
           quantity,
@@ -123,6 +125,31 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       fetchBooking()
       onUpdate()
     }
+  }
+
+  const handleMarkBalancePaid = async () => {
+    if (!booking) return
+
+    const payment = getPaymentSummary()
+    if (payment.balanceDue <= 0) return
+
+    setMarkingBalancePaid(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { error } = await supabase
+      .from('bookings')
+      .update({
+        balance_paid: (booking.balance_paid || 0) + payment.balanceDue,
+        balance_paid_at: new Date().toISOString(),
+        balance_paid_by: user?.id || null,
+      })
+      .eq('id', booking.id)
+
+    if (!error) {
+      fetchBooking()
+      onUpdate()
+    }
+    setMarkingBalancePaid(false)
   }
 
   const getPaymentSummary = () => {
@@ -225,6 +252,22 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                       <span className="text-gray-900 font-medium">R{upsell.price_total}</span>
                     </div>
                   ))}
+                </div>
+              </section>
+            )}
+
+            {(booking.voucher_code || booking.voucher_discount > 0) && (
+              <section>
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Voucher</h3>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">Code</span>
+                    <span className="text-gray-900 font-medium font-mono">{booking.voucher_code || '-'}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">Discount Applied</span>
+                    <span className="text-green-700 font-medium">-R{(booking.voucher_discount || 0).toLocaleString()}</span>
+                  </div>
                 </div>
               </section>
             )}
@@ -386,6 +429,24 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     </div>
                   </div>
                 )}
+
+                {payment.balanceDue > 0 && (
+                  <button
+                    onClick={handleMarkBalancePaid}
+                    disabled={markingBalancePaid}
+                    className="w-full px-4 py-2.5 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors disabled:opacity-50"
+                  >
+                    {markingBalancePaid ? 'Processing...' : `Mark Balance Paid (R${payment.balanceDue.toLocaleString()})`}
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleStatusChange('no_show')}
+                  disabled={booking.status === 'no_show'}
+                  className="w-full px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  Mark as No-show
+                </button>
 
                 <button
                   onClick={() => handleStatusChange('cancelled')}

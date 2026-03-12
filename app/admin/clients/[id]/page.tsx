@@ -31,6 +31,13 @@ interface CustomerBooking {
   }[]
 }
 
+interface ClientNote {
+  id: string
+  note: string
+  created_at: string
+  booking_id: string | null
+}
+
 export default function ClientProfilePage() {
   const params = useParams()
   const router = useRouter()
@@ -38,9 +45,12 @@ export default function ClientProfilePage() {
 
   const [customer, setCustomer] = useState<CustomerProfile | null>(null)
   const [bookings, setBookings] = useState<CustomerBooking[]>([])
+  const [clientNotes, setClientNotes] = useState<ClientNote[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
 
   const [editMode, setEditMode] = useState(false)
   const [editData, setEditData] = useState({
@@ -53,7 +63,7 @@ export default function ClientProfilePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
 
-    const [customerRes, bookingsRes] = await Promise.all([
+    const [customerRes, bookingsRes, notesRes] = await Promise.all([
       supabase
         .from('customers')
         .select('*')
@@ -79,6 +89,11 @@ export default function ClientProfilePage() {
         `)
         .eq('customer_id', customerId)
         .order('start_time', { ascending: false }),
+      supabase
+        .from('client_notes')
+        .select('id, note, created_at, booking_id')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false }),
     ])
 
     if (customerRes.data) {
@@ -93,6 +108,10 @@ export default function ClientProfilePage() {
 
     if (bookingsRes.data) {
       setBookings(bookingsRes.data as unknown as CustomerBooking[])
+    }
+
+    if (notesRes.data) {
+      setClientNotes(notesRes.data)
     }
 
     setLoading(false)
@@ -123,6 +142,27 @@ export default function ClientProfilePage() {
       fetchData()
     }
     setSaving(false)
+  }
+
+  const handleAddNote = async () => {
+    if (!customer || !newNote.trim()) return
+
+    setAddingNote(true)
+    const { data: { user } } = await supabase.auth.getUser()
+
+    const { error } = await supabase
+      .from('client_notes')
+      .insert({
+        customer_id: customer.id,
+        note: newNote.trim(),
+        created_by: user?.id || null,
+      })
+
+    if (!error) {
+      setNewNote('')
+      fetchData()
+    }
+    setAddingNote(false)
   }
 
   const getTotalSpent = () => {
@@ -168,6 +208,30 @@ export default function ClientProfilePage() {
     return Array.from(upsellMap.values())
   }
 
+  const getServicesUsed = () => {
+    const serviceMap = new Map<string, { name: string; count: number; total: number }>()
+    bookings.forEach(booking => {
+      if (!booking.service?.name) return
+      const serviceName = booking.service.name
+      const paid = booking.payment_transactions
+        ?.filter(p => p.status === 'complete')
+        .reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+
+      const existing = serviceMap.get(serviceName)
+      if (existing) {
+        existing.count += 1
+        existing.total += paid
+      } else {
+        serviceMap.set(serviceName, {
+          name: serviceName,
+          count: 1,
+          total: paid,
+        })
+      }
+    })
+    return Array.from(serviceMap.values()).sort((a, b) => b.count - a.count)
+  }
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       pending_payment: 'bg-amber-100 text-amber-800',
@@ -211,6 +275,7 @@ export default function ClientProfilePage() {
   const upcoming = getUpcomingBooking()
   const lastVisit = getLastVisit()
   const allUpsells = getAllUpsells()
+  const servicesUsed = getServicesUsed()
 
   return (
     <AdminLayout>
@@ -426,6 +491,23 @@ export default function ClientProfilePage() {
               </div>
             </div>
 
+            {servicesUsed.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Services Used</h2>
+                <div className="space-y-3">
+                  {servicesUsed.map((service, idx) => (
+                    <div key={idx} className="flex justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{service.name}</p>
+                        <p className="text-xs text-gray-600">{service.count} booking{service.count !== 1 ? 's' : ''}</p>
+                      </div>
+                      <p className="text-sm font-medium text-gray-900">R{service.total.toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {allUpsells.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Upsell History</h2>
@@ -442,6 +524,42 @@ export default function ClientProfilePage() {
                 </div>
               </div>
             )}
+
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Staff Notes</h2>
+              <div className="space-y-3">
+                {clientNotes.length > 0 ? (
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {clientNotes.map((note) => (
+                      <div key={note.id} className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-sm text-gray-900">{note.note}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(note.created_at).toLocaleString('en-ZA')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No notes yet</p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    placeholder="Add a note..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500"
+                  />
+                  <button
+                    onClick={handleAddNote}
+                    disabled={addingNote || !newNote.trim()}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
