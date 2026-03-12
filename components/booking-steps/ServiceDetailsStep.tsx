@@ -95,18 +95,18 @@ export function ServiceDetailsStep({ service, peopleCount, onUpdatePeopleCount }
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
         <p className="text-sm text-gray-700 mb-1">Price</p>
-        <p className="text-lg font-semibold">{currentPrice}</p>
+        <p className="text-lg font-semibold text-gray-900">R{currentPrice}</p>
       </div>
 
       <div className="rounded-lg p-4 bg-white border border-gray-200">
         <p className="text-sm text-gray-700 mb-1">Duration</p>
-        <p className="text-sm">{service.duration_minutes} minutes</p>
+        <p className="text-sm text-gray-800">{service.duration_minutes} minutes</p>
       </div>
 
       {service.description && (
         <div className="rounded-lg p-4 bg-white border border-gray-200">
           <p className="text-sm text-gray-700 mb-1">Description</p>
-          <p className="text-sm">{service.description}</p>
+          <p className="text-sm text-gray-700">{service.description}</p>
         </div>
       )}
     </div>
