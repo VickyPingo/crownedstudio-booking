@@ -47,6 +47,12 @@ export function UpsellsStep({
     return getPersonUpsells(person).length
   }
 
+  const getExtrasLabel = (count: number): string => {
+    if (count === 0) return 'No extras'
+    if (count === 1) return '1 extra'
+    return `${count} extras`
+  }
+
   if (availableUpsells.length === 0) {
     return (
       <div className="space-y-4">
@@ -126,22 +132,16 @@ export function UpsellsStep({
             <button
               key={person}
               onClick={() => setActivePerson(person)}
-              className={`relative flex-shrink-0 px-4 py-3 rounded-lg font-medium transition-all ${
+              className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium transition-all text-left ${
                 isActive
                   ? 'bg-black text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <span className="block text-sm">Person {person}</span>
-              {upsellCount > 0 && (
-                <span
-                  className={`absolute -top-2 -right-2 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center ${
-                    isActive ? 'bg-white text-black' : 'bg-black text-white'
-                  }`}
-                >
-                  {upsellCount}
-                </span>
-              )}
+              <span className="block text-sm font-semibold">Person {person}</span>
+              <span className={`block text-xs mt-0.5 ${isActive ? 'text-gray-300' : 'text-gray-500'}`}>
+                {getExtrasLabel(upsellCount)}
+              </span>
             </button>
           )
         })}
