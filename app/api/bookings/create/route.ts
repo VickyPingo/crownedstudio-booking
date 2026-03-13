@@ -201,13 +201,17 @@ export async function POST(request: NextRequest) {
       const allUpsellIds = [...new Set(Object.values(payload.selectedUpsellsByPerson).flat())]
 
       if (allUpsellIds.length > 0) {
-        const { data: upsells } = await supabase
+        const { data: upsells, error: upsellsError } = await supabase
           .from('upsells')
           .select('id, slug, price, duration_added_minutes')
-          .in('slug', allUpsellIds)
+          .in('id', allUpsellIds)
+
+        if (upsellsError) {
+          console.error('Upsells query error:', upsellsError)
+        }
 
         if (upsells && upsells.length > 0) {
-          const upsellMap = new Map(upsells.map(u => [u.slug, u]))
+          const upsellMap = new Map(upsells.map(u => [u.id, u]))
           const bookingUpsells: Array<{
             booking_id: string
             upsell_id: string
@@ -219,8 +223,8 @@ export async function POST(request: NextRequest) {
 
           for (const [personKey, personUpsellIds] of Object.entries(payload.selectedUpsellsByPerson)) {
             const personNumber = parseInt(personKey, 10)
-            for (const upsellSlug of personUpsellIds) {
-              const upsell = upsellMap.get(upsellSlug)
+            for (const upsellId of personUpsellIds) {
+              const upsell = upsellMap.get(upsellId)
               if (upsell) {
                 bookingUpsells.push({
                   booking_id: booking.id,
@@ -235,15 +239,22 @@ export async function POST(request: NextRequest) {
           }
 
           if (bookingUpsells.length > 0) {
-            await supabase.from('booking_upsells').insert(bookingUpsells)
+            const { error: insertError } = await supabase.from('booking_upsells').insert(bookingUpsells)
+            if (insertError) {
+              console.error('booking_upsells insert error:', insertError)
+            }
           }
         }
       }
     } else if (payload.selectedUpsellIds.length > 0) {
-      const { data: upsells } = await supabase
+      const { data: upsells, error: upsellsError } = await supabase
         .from('upsells')
         .select('id, slug, price, duration_added_minutes')
-        .in('slug', payload.selectedUpsellIds)
+        .in('id', payload.selectedUpsellIds)
+
+      if (upsellsError) {
+        console.error('Upsells query error (legacy):', upsellsError)
+      }
 
       if (upsells && upsells.length > 0) {
         const bookingUpsells = upsells.map((upsell) => ({
@@ -255,7 +266,10 @@ export async function POST(request: NextRequest) {
           person_number: 1,
         }))
 
-        await supabase.from('booking_upsells').insert(bookingUpsells)
+        const { error: insertError } = await supabase.from('booking_upsells').insert(bookingUpsells)
+        if (insertError) {
+          console.error('booking_upsells insert error (legacy):', insertError)
+        }
       }
     }
 

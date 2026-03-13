@@ -13,11 +13,15 @@ interface Booking {
   status: string
   start_time: string
   people_count: number
+  room_id: string | null
   customer: {
     full_name: string
   } | null
   service: {
     name: string
+  } | null
+  room: {
+    room_name: string
   } | null
   payment_transactions: {
     status: string
@@ -56,8 +60,10 @@ export default function AdminCalendarPage() {
           status,
           start_time,
           people_count,
+          room_id,
           customer:customers(full_name),
           service:services(name),
+          room:rooms(room_name),
           payment_transactions(status)
         `)
         .gte('start_time', `${startOfMonth}T00:00:00`)
@@ -386,6 +392,9 @@ export default function AdminCalendarPage() {
                           minute: '2-digit',
                         })}
                       </p>
+                      {booking.room && (
+                        <p className="text-xs text-gray-500 mt-0.5">{booking.room.room_name}</p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>

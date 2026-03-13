@@ -12,12 +12,17 @@ interface Booking {
   start_time: string
   total_price: number
   deposit_due: number
+  room_id: string | null
   customer: {
     full_name: string
     email: string | null
   } | null
   service: {
     name: string
+  } | null
+  room: {
+    room_name: string
+    room_area: string
   } | null
   payment_transactions: {
     status: string
@@ -54,8 +59,10 @@ export default function AdminBookingsPage() {
         start_time,
         total_price,
         deposit_due,
+        room_id,
         customer:customers(full_name, email),
         service:services(name),
+        room:rooms(room_name, room_area),
         payment_transactions(status, amount)
       `)
       .order('start_time', { ascending: false })
@@ -180,6 +187,9 @@ export default function AdminBookingsPage() {
                       Service
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Room
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Date & Time
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -211,6 +221,13 @@ export default function AdminBookingsPage() {
                         <td className="px-6 py-4">
                           <p className="text-gray-900">{booking.service?.name}</p>
                           <p className="text-sm text-gray-600">{booking.people_count} person(s)</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          {booking.room ? (
+                            <span className="text-gray-900">{booking.room.room_name}</span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Unassigned</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-gray-900">
