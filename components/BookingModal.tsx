@@ -115,6 +115,7 @@ export function BookingModal({
 
   console.log('BookingModal - resolvedService:', resolvedService)
   console.log('BookingModal - resolvedService?.upsells:', resolvedService?.upsells)
+  console.log('BookingModal - allowed_upsells raw:', resolvedService?.allowed_upsells)
 
   if (!isOpen || !resolvedService) return null
 

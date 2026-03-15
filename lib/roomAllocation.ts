@@ -42,6 +42,14 @@ export async function allocateRoom(
 ): Promise<RoomAllocationResult> {
   const supabase = supabaseAdmin
 
+  console.log('[RoomAllocation] Starting allocation:', {
+    serviceRoomArea,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString(),
+    peopleCount,
+    excludeBookingId,
+  })
+
   const { data: rooms, error: roomsError } = await supabase
     .from('rooms')
     .select('*')
@@ -51,12 +59,14 @@ export async function allocateRoom(
     .order('priority', { ascending: true })
 
   if (roomsError) {
-    console.error('Room query error:', roomsError)
+    console.error('[RoomAllocation] Room query error:', roomsError)
     return { room_id: null, room_name: null, error: `Room query failed: ${roomsError.message}` }
   }
 
+  console.log('[RoomAllocation] Found rooms:', rooms?.map(r => ({ id: r.id, name: r.room_name, area: r.room_area, capacity: r.capacity })))
+
   if (!rooms || rooms.length === 0) {
-    console.error('No rooms found for:', { serviceRoomArea, peopleCount })
+    console.error('[RoomAllocation] No rooms found for:', { serviceRoomArea, peopleCount })
     return { room_id: null, room_name: null, error: `No rooms available for area "${serviceRoomArea}" with capacity >= ${peopleCount}` }
   }
 
@@ -97,11 +107,15 @@ export async function allocateRoom(
       return doTimesOverlap(startTime, endTime, bookingStart, bookingEnd)
     })
 
+    console.log(`[RoomAllocation] Room ${room.room_name}: ${roomBookings.length} bookings, hasConflict=${hasConflict}`)
+
     if (!hasConflict) {
+      console.log(`[RoomAllocation] Allocated room: ${room.room_name} (${room.id})`)
       return { room_id: room.id, room_name: room.room_name }
     }
   }
 
+  console.error('[RoomAllocation] All rooms occupied for this time slot')
   return { room_id: null, room_name: null, error: 'All rooms are occupied for this time' }
 }
 

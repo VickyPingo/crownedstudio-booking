@@ -12,6 +12,31 @@ interface DashboardStats {
   monthlyRevenue: number
 }
 
+interface Room {
+  id: string
+  room_name: string
+  room_area: string
+  capacity: number
+  priority: number
+  active: boolean
+}
+
+interface RoomBooking {
+  id: string
+  room_id: string | null
+  start_time: string
+  end_time: string
+  status: string
+  customer: { full_name: string } | null
+  service: { name: string } | null
+}
+
+interface RoomStatus {
+  room: Room
+  currentBooking: RoomBooking | null
+  nextBooking: RoomBooking | null
+}
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     todayBookings: 0,
@@ -21,6 +46,9 @@ export default function AdminDashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [showManualBooking, setShowManualBooking] = useState(false)
+  const [roomStatuses, setRoomStatuses] = useState<RoomStatus[]>([])
+  const [unassignedBookings, setUnassignedBookings] = useState<RoomBooking[]>([])
+  const [roomsLoading, setRoomsLoading] = useState(true)
 
   const fetchStats = useCallback(async () => {
     try {
@@ -65,9 +93,71 @@ export default function AdminDashboardPage() {
     }
   }, [])
 
+  const fetchRoomStatuses = useCallback(async () => {
+    setRoomsLoading(true)
+    try {
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
+      const { data: rooms } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('active', true)
+        .order('priority', { ascending: true })
+
+      const { data: todayBookings } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          room_id,
+          start_time,
+          end_time,
+          status,
+          customer:customers(full_name),
+          service:services(name)
+        `)
+        .gte('start_time', todayStart)
+        .lt('start_time', todayEnd)
+        .in('status', ['confirmed', 'pending_payment', 'completed'])
+        .order('start_time', { ascending: true })
+
+      const bookings = (todayBookings || []) as unknown as RoomBooking[]
+      const unassigned = bookings.filter(b => !b.room_id)
+      setUnassignedBookings(unassigned)
+
+      const statuses: RoomStatus[] = (rooms || []).map((room: Room) => {
+        const roomBookings = bookings.filter(b => b.room_id === room.id)
+
+        let currentBooking: RoomBooking | null = null
+        let nextBooking: RoomBooking | null = null
+
+        for (const booking of roomBookings) {
+          const start = new Date(booking.start_time)
+          const end = new Date(booking.end_time)
+
+          if (now >= start && now < end) {
+            currentBooking = booking
+          } else if (start > now && !nextBooking) {
+            nextBooking = booking
+          }
+        }
+
+        return { room, currentBooking, nextBooking }
+      })
+
+      setRoomStatuses(statuses)
+    } catch (error) {
+      console.error('Error fetching room statuses:', error)
+    } finally {
+      setRoomsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchStats()
-  }, [fetchStats])
+    fetchRoomStatuses()
+  }, [fetchStats, fetchRoomStatuses])
 
   return (
     <AdminLayout>
@@ -125,6 +215,90 @@ export default function AdminDashboardPage() {
             />
           </div>
         )}
+
+        <div className="bg-white rounded-xl p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Room Overview</h2>
+            <a href="/admin/rooms" className="text-sm text-gray-600 hover:text-gray-900">View Calendar</a>
+          </div>
+
+          {roomsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-gray-50 rounded-lg p-4 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-20 mb-3" />
+                  <div className="h-3 bg-gray-200 rounded w-full mb-2" />
+                  <div className="h-3 bg-gray-200 rounded w-2/3" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              {unassignedBookings.length > 0 && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm font-medium text-amber-800">
+                    {unassignedBookings.length} unassigned booking{unassignedBookings.length !== 1 ? 's' : ''} today
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {unassignedBookings.slice(0, 3).map((booking) => (
+                      <span key={booking.id} className="text-xs bg-white border border-amber-300 px-2 py-1 rounded">
+                        {booking.customer?.full_name} - {new Date(booking.start_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    ))}
+                    {unassignedBookings.length > 3 && (
+                      <span className="text-xs text-amber-700">+{unassignedBookings.length - 3} more</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {roomStatuses.map(({ room, currentBooking, nextBooking }) => (
+                  <div
+                    key={room.id}
+                    className={`rounded-lg p-4 border ${
+                      currentBooking
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-gray-900">{room.room_name}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        room.room_area === 'public'
+                          ? 'bg-teal-100 text-teal-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {room.room_area}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">Capacity: {room.capacity}</p>
+
+                    {currentBooking ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-blue-800">In Session</p>
+                        <p className="text-sm text-gray-900 truncate">{currentBooking.customer?.full_name}</p>
+                        <p className="text-xs text-gray-600">
+                          Until {new Date(currentBooking.end_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    ) : nextBooking ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-gray-600">Next</p>
+                        <p className="text-sm text-gray-900 truncate">{nextBooking.customer?.full_name}</p>
+                        <p className="text-xs text-gray-600">
+                          {new Date(nextBooking.start_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-green-700">Available</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl p-6 shadow-sm">
