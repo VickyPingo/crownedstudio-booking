@@ -83,9 +83,10 @@ async function updateEmailLog(
 
 export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'new_booking_spa'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -94,12 +95,15 @@ export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boole
   const html = newBookingToSpaTemplate(data)
   const subject = `New Booking: ${data.clientName} - ${data.serviceName} on ${data.bookingDate}`
 
+  console.log(`[Email] Sending ${emailType} to ${SPA_EMAIL}`)
   const result = await sendEmail(SPA_EMAIL, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success
@@ -107,14 +111,15 @@ export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boole
 
 export async function sendBookingRequestToClient(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'booking_request'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (!data.clientEmail) {
-    console.log('No client email provided, skipping booking request email')
+    console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping ${emailType}`)
     return false
   }
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -123,12 +128,15 @@ export async function sendBookingRequestToClient(data: BookingEmailData): Promis
   const html = bookingRequestToClientTemplate(data)
   const subject = 'Your Crowned Studio Booking Request'
 
+  console.log(`[Email] Sending ${emailType} to ${data.clientEmail}`)
   const result = await sendEmail(data.clientEmail, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success
@@ -136,14 +144,15 @@ export async function sendBookingRequestToClient(data: BookingEmailData): Promis
 
 export async function sendBookingConfirmationToClient(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'booking_confirmation'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (!data.clientEmail) {
-    console.log('No client email provided, skipping booking confirmation')
+    console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping ${emailType}`)
     return false
   }
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -152,12 +161,15 @@ export async function sendBookingConfirmationToClient(data: BookingEmailData): P
   const html = bookingConfirmationToClientTemplate(data)
   const subject = 'Your Crowned Studio Booking is Confirmed'
 
+  console.log(`[Email] Sending ${emailType} to ${data.clientEmail}`)
   const result = await sendEmail(data.clientEmail, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success
@@ -165,9 +177,10 @@ export async function sendBookingConfirmationToClient(data: BookingEmailData): P
 
 export async function sendPaymentReceivedToSpa(data: PaymentEmailData): Promise<boolean> {
   const emailType: EmailType = 'payment_received_spa'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -176,12 +189,15 @@ export async function sendPaymentReceivedToSpa(data: PaymentEmailData): Promise<
   const html = paymentReceivedToSpaTemplate(data)
   const subject = `Payment Received: R${data.amountPaid} from ${data.clientName}`
 
+  console.log(`[Email] Sending ${emailType} to ${SPA_EMAIL}`)
   const result = await sendEmail(SPA_EMAIL, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success
@@ -189,14 +205,15 @@ export async function sendPaymentReceivedToSpa(data: PaymentEmailData): Promise<
 
 export async function sendPaymentConfirmationToClient(data: PaymentEmailData): Promise<boolean> {
   const emailType: EmailType = 'payment_confirmation'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (!data.clientEmail) {
-    console.log('No client email provided, skipping payment confirmation')
+    console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping ${emailType}`)
     return false
   }
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -205,12 +222,15 @@ export async function sendPaymentConfirmationToClient(data: PaymentEmailData): P
   const html = paymentConfirmationToClientTemplate(data)
   const subject = `Payment Confirmed - R${data.amountPaid} Received`
 
+  console.log(`[Email] Sending ${emailType} to ${data.clientEmail}`)
   const result = await sendEmail(data.clientEmail, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success
@@ -218,14 +238,15 @@ export async function sendPaymentConfirmationToClient(data: PaymentEmailData): P
 
 export async function sendReminder24hToClient(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'reminder_24h'
+  console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
 
   if (!data.clientEmail) {
-    console.log('No client email provided, skipping reminder')
+    console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping ${emailType}`)
     return false
   }
 
   if (await hasEmailBeenSent(data.bookingId, emailType)) {
-    console.log(`Email ${emailType} already sent for booking ${data.bookingId}`)
+    console.log(`[Email] ${emailType} already sent for booking ${data.bookingId}, skipping`)
     return true
   }
 
@@ -234,12 +255,15 @@ export async function sendReminder24hToClient(data: BookingEmailData): Promise<b
   const html = reminder24hToClientTemplate(data)
   const subject = `Reminder: Your appointment tomorrow at ${data.bookingTime}`
 
+  console.log(`[Email] Sending ${emailType} to ${data.clientEmail}`)
   const result = await sendEmail(data.clientEmail, subject, html)
 
   await updateEmailLog(logId, result.success ? 'sent' : 'failed', result.id, result.error)
 
-  if (!result.success) {
-    console.error(`Failed to send ${emailType}:`, result.error)
+  if (result.success) {
+    console.log(`[Email] ${emailType} sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] ${emailType} FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success

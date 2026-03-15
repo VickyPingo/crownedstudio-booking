@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
       await recordVoucherUsage(supabase, payload.voucherId, booking.id, payload.voucherDiscount || 0)
     }
 
-    sendEmailNotifications(booking.id, startDateTime, isZeroPayment)
+    await sendEmailNotifications(booking.id, startDateTime, isZeroPayment)
 
     return NextResponse.json({
       success: true,
