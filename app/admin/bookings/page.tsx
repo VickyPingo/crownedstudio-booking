@@ -223,11 +223,16 @@ export default function AdminBookingsPage() {
                           <p className="text-sm text-gray-600">{booking.people_count} person(s)</p>
                         </td>
                         <td className="px-6 py-4">
-                          {booking.room ? (
-                            <span className="text-gray-900">{booking.room.room_name}</span>
-                          ) : (
-                            <span className="text-gray-400 text-sm">Unassigned</span>
-                          )}
+                          <div>
+                            {booking.room ? (
+                              <span className="text-gray-900">{booking.room.room_name}</span>
+                            ) : (
+                              <span className="text-gray-400 text-sm">Unassigned</span>
+                            )}
+                            <p className="text-xs font-mono text-yellow-700 bg-yellow-50 px-1 mt-1">
+                              DEBUG: room_id={JSON.stringify(booking.room_id)} | room_name={JSON.stringify(booking.room?.room_name)}
+                            </p>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-gray-900">

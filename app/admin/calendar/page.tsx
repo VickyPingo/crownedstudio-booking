@@ -395,6 +395,9 @@ export default function AdminCalendarPage() {
                       {booking.room && (
                         <p className="text-xs text-gray-500 mt-0.5">{booking.room.room_name}</p>
                       )}
+                      <p className="text-xs font-mono text-yellow-700 bg-yellow-50 px-1 mt-1">
+                        DEBUG: room_name={JSON.stringify(booking.room?.room_name)}
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>

@@ -231,6 +231,16 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
           <div className="p-6 text-center text-gray-600">Booking not found</div>
         ) : (
           <div className="p-6 space-y-6">
+            <section className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-4">
+              <h3 className="text-xs font-bold text-yellow-800 uppercase mb-2">DEBUG: Raw Data</h3>
+              <div className="text-xs font-mono text-yellow-900 space-y-1">
+                <p>room_id: {JSON.stringify(booking.room_id)}</p>
+                <p>room?.room_name: {JSON.stringify(booking.room?.room_name)}</p>
+                <p>booking_upsells length: {booking.booking_upsells?.length ?? 'undefined'}</p>
+                <p>booking_upsells: {JSON.stringify(booking.booking_upsells?.slice(0, 2))}</p>
+              </div>
+            </section>
+
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Client</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
