@@ -1,3 +1,17 @@
+import type { Metadata } from "next"
+
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+
+  const serviceName = params.slug
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, l => l.toUpperCase())
+
+  return {
+    title: `Book ${serviceName} | Crowned Studio`,
+    description: `Book your ${serviceName} at Crowned Studio.`,
+  }
+}
+
 import { supabaseAdmin } from "@/lib/supabase/server"
 import { ServiceWithUpsells, ServicePricingOption } from "@/types/service"
 import { BusinessHoursData, ServiceTimeWindowData } from "@/types/booking"
