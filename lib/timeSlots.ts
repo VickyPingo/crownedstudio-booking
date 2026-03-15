@@ -29,7 +29,7 @@ export interface TimeSlotConfig {
 }
 
 export const BOOKING_BUFFER_MINUTES = 10
-const SLOT_INTERVAL_MINUTES = 30
+export const SLOT_INTERVAL_MINUTES = 10
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 
 function timeToMinutes(time: string): number {
