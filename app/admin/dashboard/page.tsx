@@ -219,7 +219,7 @@ export default function AdminDashboardPage() {
         <div className="bg-white rounded-xl p-6 shadow-sm border-2 border-teal-500">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-xs font-bold text-teal-600 mb-1">ROOM OVERVIEW TEST</p>
+              <p className="text-xs font-bold text-teal-600 mb-1">ROOM OVERVIEW</p>
               <h2 className="text-lg font-semibold text-gray-900">Room Overview</h2>
             </div>
             <a href="/admin/rooms" className="text-sm text-gray-600 hover:text-gray-900">View Calendar</a>
