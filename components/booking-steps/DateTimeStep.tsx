@@ -1,9 +1,8 @@
 'use client'
 
-import { useMemo, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
-import { generateTimeSlots, isAfterHoursSlot, isDateFullyBlocked, TimeBlock } from '@/lib/timeSlots'
-import { supabase } from '@/lib/supabase/client'
+import { isAfterHoursSlot } from '@/lib/timeSlots'
 
 interface DateTimeStepProps {
   selectedDate: string
@@ -12,6 +11,7 @@ interface DateTimeStepProps {
   onUpdateTime: (time: string) => void
   serviceSlug: string
   serviceDurationMinutes: number
+  peopleCount: number
   businessHours: BusinessHoursData
   serviceTimeWindow?: ServiceTimeWindowData | null
 }
@@ -23,49 +23,72 @@ export function DateTimeStep({
   onUpdateTime,
   serviceSlug,
   serviceDurationMinutes,
+  peopleCount,
   businessHours,
   serviceTimeWindow,
 }: DateTimeStepProps) {
-  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
-  const [loadingBlocks, setLoadingBlocks] = useState(false)
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [isFullyBlocked, setIsFullyBlocked] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!selectedDate) {
-      setTimeBlocks([])
+      setAvailableSlots([])
+      setIsFullyBlocked(false)
+      setError(null)
       return
     }
 
-    const fetchTimeBlocks = async () => {
-      setLoadingBlocks(true)
-      const { data, error } = await supabase
-        .from('time_blocks')
-        .select('id, block_date, start_time, end_time, is_full_day, reason')
-        .eq('block_date', selectedDate)
+    const fetchAvailability = async () => {
+      setLoading(true)
+      setError(null)
+      setAvailableSlots([])
 
-      if (!error && data) {
-        setTimeBlocks(data)
+      try {
+        const response = await fetch('/api/availability/slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: selectedDate,
+            serviceSlug,
+            serviceDurationMinutes,
+            peopleCount,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch availability')
+        }
+
+        const data = await response.json()
+        setAvailableSlots(data.availableSlots || [])
+        setIsFullyBlocked(data.isFullyBlocked || false)
+      } catch (err) {
+        console.error('Error fetching availability:', err)
+        setError('Unable to check availability. Please try again.')
+      } finally {
+        setLoading(false)
       }
-      setLoadingBlocks(false)
     }
 
-    fetchTimeBlocks()
-  }, [selectedDate])
+    fetchAvailability()
+  }, [selectedDate, serviceSlug, serviceDurationMinutes, peopleCount])
 
-  const isFullyBlocked = useMemo(() => {
-    return isDateFullyBlocked(timeBlocks)
-  }, [timeBlocks])
-
-  const timeSlots = useMemo(() => {
-    return generateTimeSlots({
-      serviceSlug,
-      serviceDurationMinutes,
-      businessHours,
-      serviceTimeWindow,
-      timeBlocks,
-    })
-  }, [serviceSlug, serviceDurationMinutes, businessHours, serviceTimeWindow, timeBlocks])
+  useEffect(() => {
+    if (selectedTime && availableSlots.length > 0 && !availableSlots.includes(selectedTime)) {
+      onUpdateTime('')
+    }
+  }, [availableSlots, selectedTime, onUpdateTime])
 
   const isCrownedNight = serviceSlug === 'crowned-night-a' || serviceSlug === 'crowned-night-b'
+
+  const handleDateChange = (newDate: string) => {
+    if (newDate !== selectedDate) {
+      onUpdateTime('')
+    }
+    onUpdateDate(newDate)
+  }
 
   return (
     <div className="space-y-6">
@@ -80,7 +103,7 @@ export function DateTimeStep({
         <input
           type="date"
           value={selectedDate}
-          onChange={(e) => onUpdateDate(e.target.value)}
+          onChange={(e) => handleDateChange(e.target.value)}
           min={new Date().toISOString().split('T')[0]}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
         />
@@ -89,28 +112,46 @@ export function DateTimeStep({
       <div>
         <label className="block text-sm font-medium text-gray-800 mb-2">
           Preferred Time
-          {isCrownedNight && (
+          {isCrownedNight && serviceTimeWindow && (
             <span className="ml-2 text-xs text-amber-700 font-normal">
-              (Evening service: {serviceTimeWindow?.start_time?.slice(0, 5)} - {serviceTimeWindow?.end_time?.slice(0, 5)})
+              (Evening service: {serviceTimeWindow.start_time?.slice(0, 5)} - {serviceTimeWindow.end_time?.slice(0, 5)})
             </span>
           )}
         </label>
-        {loadingBlocks ? (
-          <div className="py-8 text-center text-gray-500">Checking availability...</div>
+
+        {!selectedDate ? (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+            <p className="text-gray-600">Please select a date first to see available times</p>
+          </div>
+        ) : loading ? (
+          <div className="py-8 text-center text-gray-500">
+            <div className="inline-block w-5 h-5 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin mr-2" />
+            Checking availability...
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+            <p className="text-red-700">{error}</p>
+            <button
+              onClick={() => handleDateChange(selectedDate)}
+              className="mt-2 text-sm text-red-600 underline hover:no-underline"
+            >
+              Try again
+            </button>
+          </div>
         ) : isFullyBlocked ? (
           <div className="bg-gray-100 border border-gray-200 rounded-lg p-6 text-center">
             <p className="text-gray-700 font-medium">This date is unavailable</p>
             <p className="text-sm text-gray-500 mt-1">Please select another date</p>
           </div>
-        ) : timeSlots.length === 0 ? (
+        ) : availableSlots.length === 0 ? (
           <div className="bg-gray-100 border border-gray-200 rounded-lg p-6 text-center">
             <p className="text-gray-700 font-medium">No available time slots</p>
-            <p className="text-sm text-gray-500 mt-1">Please select another date</p>
+            <p className="text-sm text-gray-500 mt-1">All rooms are fully booked. Please select another date.</p>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-4 gap-2">
-              {timeSlots.map((time) => {
+              {availableSlots.map((time) => {
                 const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
                 return (
                   <button

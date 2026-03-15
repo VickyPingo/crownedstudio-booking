@@ -235,6 +235,7 @@ export function BookingModal({
             onUpdateTime={(time) => updateFormData({ selectedTime: time })}
             serviceSlug={resolvedService.slug}
             serviceDurationMinutes={resolvedService.duration_minutes}
+            peopleCount={formData.peopleCount}
             businessHours={businessHours}
             serviceTimeWindow={serviceTimeWindow}
           />
