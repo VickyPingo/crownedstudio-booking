@@ -7,27 +7,20 @@ import { supabase } from '@/lib/supabase/client'
 
 interface Booking {
   id: string
+  customer_id: string | null
+  service_slug: string | null
   people_count: number
   status: string
   start_time: string
   total_price: number
   deposit_due: number
   room_id: string | null
-  customer: {
-    full_name: string
-    email: string | null
-  } | null
-  service: {
-    name: string
-  } | null
-  room: {
-    room_name: string
-    room_area: string
-  } | null
-  payment_transactions: {
-    status: string
-    amount: number
-  }[]
+  customer_name?: string
+  customer_email?: string
+  service_name?: string
+  room_name?: string
+  room_area?: string
+  total_paid: number
 }
 
 type FilterStatus = 'all' | 'pending_payment' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
@@ -44,39 +37,103 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<FilterStatus>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
   const fetchBookings = useCallback(async () => {
     setLoading(true)
-    let query = supabase
-      .from('bookings')
-      .select(`
-        id,
-        people_count,
-        status,
-        start_time,
-        total_price,
-        deposit_due,
-        room_id,
-        customer:customers(full_name, email),
-        service:services(name),
-        room:rooms(room_name, room_area),
-        payment_transactions(status, amount)
-      `)
-      .order('start_time', { ascending: false })
+    setError(null)
 
-    if (filter !== 'all') {
-      query = query.eq('status', filter)
+    try {
+      let query = supabase
+        .from('bookings')
+        .select(`
+          id,
+          customer_id,
+          service_slug,
+          people_count,
+          status,
+          start_time,
+          total_price,
+          deposit_due,
+          room_id
+        `)
+        .order('start_time', { ascending: false })
+
+      if (filter !== 'all') {
+        query = query.eq('status', filter)
+      }
+
+      const { data: bookingsData, error: bookingsError } = await query
+
+      if (bookingsError) {
+        console.error('Bookings query failed:', bookingsError)
+        setError(`Failed to load bookings: ${bookingsError.message}`)
+        setLoading(false)
+        return
+      }
+
+      if (!bookingsData || bookingsData.length === 0) {
+        setBookings([])
+        setLoading(false)
+        return
+      }
+
+      const customerIds = [...new Set(bookingsData.filter(b => b.customer_id).map(b => b.customer_id))]
+      const serviceSlugs = [...new Set(bookingsData.filter(b => b.service_slug).map(b => b.service_slug))]
+      const roomIds = [...new Set(bookingsData.filter(b => b.room_id).map(b => b.room_id))]
+      const bookingIds = bookingsData.map(b => b.id)
+
+      const [customersRes, servicesRes, roomsRes, paymentsRes] = await Promise.all([
+        customerIds.length > 0
+          ? supabase.from('customers').select('id, full_name, email').in('id', customerIds)
+          : { data: [], error: null },
+        serviceSlugs.length > 0
+          ? supabase.from('services').select('slug, name').in('slug', serviceSlugs)
+          : { data: [], error: null },
+        roomIds.length > 0
+          ? supabase.from('rooms').select('id, room_name, room_area').in('id', roomIds)
+          : { data: [], error: null },
+        supabase.from('payment_transactions').select('booking_id, status, amount').in('booking_id', bookingIds),
+      ])
+
+      const customerMap = new Map((customersRes.data || []).map(c => [c.id, c]))
+      const serviceMap = new Map((servicesRes.data || []).map(s => [s.slug, s]))
+      const roomMap = new Map((roomsRes.data || []).map(r => [r.id, r]))
+
+      const paymentsByBooking = new Map<string, number>()
+      for (const payment of (paymentsRes.data || [])) {
+        if (payment.status === 'complete') {
+          const current = paymentsByBooking.get(payment.booking_id) || 0
+          paymentsByBooking.set(payment.booking_id, current + (payment.amount || 0))
+        }
+      }
+
+      const enrichedBookings: Booking[] = bookingsData.map(b => {
+        const customer = b.customer_id ? customerMap.get(b.customer_id) : null
+        const service = b.service_slug ? serviceMap.get(b.service_slug) : null
+        const room = b.room_id ? roomMap.get(b.room_id) : null
+
+        return {
+          ...b,
+          customer_name: customer?.full_name || undefined,
+          customer_email: customer?.email || undefined,
+          service_name: service?.name || undefined,
+          room_name: room?.room_name || undefined,
+          room_area: room?.room_area || undefined,
+          total_paid: paymentsByBooking.get(b.id) || 0,
+        }
+      })
+
+      setBookings(enrichedBookings)
+    } catch (err) {
+      console.error('Unexpected error fetching bookings:', err)
+      setError('An unexpected error occurred while loading bookings.')
+    } finally {
+      setLoading(false)
     }
-
-    const { data, error } = await query
-
-    if (!error && data) {
-      setBookings(data as unknown as Booking[])
-    }
-    setLoading(false)
   }, [filter])
 
   useEffect(() => {
@@ -87,9 +144,9 @@ export default function AdminBookingsPage() {
     if (!searchQuery) return true
     const query = searchQuery.toLowerCase()
     return (
-      booking.customer?.full_name?.toLowerCase().includes(query) ||
-      booking.customer?.email?.toLowerCase().includes(query) ||
-      booking.service?.name?.toLowerCase().includes(query)
+      booking.customer_name?.toLowerCase().includes(query) ||
+      booking.customer_email?.toLowerCase().includes(query) ||
+      booking.service_name?.toLowerCase().includes(query)
     )
   })
 
@@ -107,12 +164,9 @@ export default function AdminBookingsPage() {
   }
 
   const getPaymentStatus = (booking: Booking) => {
-    const completedPayments = booking.payment_transactions?.filter(p => p.status === 'complete') || []
-    const totalPaid = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-
-    if (totalPaid >= booking.total_price) {
+    if (booking.total_paid >= booking.total_price) {
       return { label: 'Paid', style: 'bg-green-100 text-green-800' }
-    } else if (totalPaid > 0) {
+    } else if (booking.total_paid > 0) {
       return { label: 'Deposit', style: 'bg-blue-100 text-blue-800' }
     }
     return { label: 'Pending', style: 'bg-amber-100 text-amber-800' }
@@ -173,6 +227,16 @@ export default function AdminBookingsPage() {
 
           {loading ? (
             <div className="p-8 text-center text-gray-600">Loading bookings...</div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <p className="text-red-600 font-medium">{error}</p>
+              <button
+                onClick={fetchBookings}
+                className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+              >
+                Retry
+              </button>
+            </div>
           ) : filteredBookings.length === 0 ? (
             <div className="p-8 text-center text-gray-600">No bookings found.</div>
           ) : (
@@ -214,25 +278,20 @@ export default function AdminBookingsPage() {
                       >
                         <td className="px-6 py-4">
                           <div>
-                            <p className="font-medium text-gray-900">{booking.customer?.full_name}</p>
-                            <p className="text-sm text-gray-600">{booking.customer?.email}</p>
+                            <p className="font-medium text-gray-900">{booking.customer_name || 'Unknown'}</p>
+                            <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <p className="text-gray-900">{booking.service?.name}</p>
+                          <p className="text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
                           <p className="text-sm text-gray-600">{booking.people_count} person(s)</p>
                         </td>
                         <td className="px-6 py-4">
-                          <div>
-                            {booking.room ? (
-                              <span className="text-gray-900">{booking.room.room_name}</span>
-                            ) : (
-                              <span className="text-gray-400 text-sm">Unassigned</span>
-                            )}
-                            <p className="text-xs font-mono text-yellow-700 bg-yellow-50 px-1 mt-1">
-                              DEBUG: room_id={JSON.stringify(booking.room_id)} | room_name={JSON.stringify(booking.room?.room_name)}
-                            </p>
-                          </div>
+                          {booking.room_name ? (
+                            <span className="text-gray-900">{booking.room_name}</span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">Unassigned</span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-gray-900">
