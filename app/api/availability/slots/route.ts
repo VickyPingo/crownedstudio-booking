@@ -26,11 +26,6 @@ interface Room {
   priority: number
 }
 
-function timeToMinutes(time: string): number {
-  const [hours, minutes] = time.split(':').map(Number)
-  return hours * 60 + minutes
-}
-
 function checkSlotAvailableInRoom(
   slotStartMs: number,
   slotEndMs: number,
@@ -39,7 +34,9 @@ function checkSlotAvailableInRoom(
 ): boolean {
   for (const booking of roomBookings) {
     const bookingStart = new Date(booking.start_time).getTime()
-    const bookingEndWithBuffer = new Date(booking.end_time).getTime() + bufferMs
+    const bookingEnd = new Date(booking.end_time).getTime()
+    const bookingEndWithBuffer = bookingEnd + bufferMs
+
     if (slotStartMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
       return false
     }
@@ -77,6 +74,8 @@ export async function POST(request: NextRequest) {
     if (!rooms || rooms.length === 0) {
       return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
     }
+
+    const preferredRoom = rooms[0]
 
     const dayStart = new Date(`${date}T00:00:00+02:00`)
     const dayEnd = new Date(`${date}T23:59:59+02:00`)
@@ -129,44 +128,25 @@ export async function POST(request: NextRequest) {
 
     const allPossibleSlots = generateTimeSlots(config)
     const bufferMs = CLEANUP_BUFFER_MINUTES * 60000
-    const bookingsByRoom = new Map<string, RoomBooking[]>()
 
-    for (const room of rooms) {
-      bookingsByRoom.set(room.id, [])
-    }
-
-    for (const booking of existingBookings || []) {
-      const roomBookings = bookingsByRoom.get(booking.room_id)
-      if (roomBookings) {
-        roomBookings.push(booking)
-      }
-    }
+    const preferredRoomBookings = (existingBookings || []).filter(
+      (b) => b.room_id === preferredRoom.id
+    )
 
     const availableSlots: string[] = []
 
     for (const slot of allPossibleSlots) {
-      const slotMinutes = timeToMinutes(slot)
       const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
       const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
 
-      let slotAvailable = false
+      const isAvailableInPreferredRoom = checkSlotAvailableInRoom(
+        slotStartMs,
+        slotEndMs,
+        preferredRoomBookings,
+        bufferMs
+      )
 
-      for (const room of rooms) {
-        const roomBookings = bookingsByRoom.get(room.id) || []
-        const isAvailableInThisRoom = checkSlotAvailableInRoom(
-          slotStartMs,
-          slotEndMs,
-          roomBookings,
-          bufferMs
-        )
-
-        if (isAvailableInThisRoom) {
-          slotAvailable = true
-          break
-        }
-      }
-
-      if (slotAvailable) {
+      if (isAvailableInPreferredRoom) {
         availableSlots.push(slot)
       }
     }
