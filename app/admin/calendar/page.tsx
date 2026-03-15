@@ -10,22 +10,15 @@ import type { TimeBlock } from '@/types/admin'
 
 interface Booking {
   id: string
+  customer_id: string | null
+  service_slug: string | null
   status: string
   start_time: string
   people_count: number
   room_id: string | null
-  customer: {
-    full_name: string
-  } | null
-  service: {
-    name: string
-  } | null
-  room: {
-    room_name: string
-  } | null
-  payment_transactions: {
-    status: string
-  }[]
+  customer_name?: string
+  service_name?: string
+  room_name?: string
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -36,6 +29,7 @@ export default function AdminCalendarPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
   const [showBlockModal, setShowBlockModal] = useState(false)
@@ -49,41 +43,77 @@ export default function AdminCalendarPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
-    const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0]
+    setError(null)
 
-    const [bookingsRes, blocksRes] = await Promise.all([
-      supabase
+    try {
+      const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
+      const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0]
+
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select(`
-          id,
-          status,
-          start_time,
-          people_count,
-          room_id,
-          customer:customers(full_name),
-          service:services(name),
-          room:rooms(room_name),
-          payment_transactions(status)
-        `)
+        .select('id, customer_id, service_slug, status, start_time, people_count, room_id')
         .gte('start_time', `${startOfMonth}T00:00:00`)
         .lte('start_time', `${endOfMonth}T23:59:59`)
-        .order('start_time'),
-      supabase
+        .order('start_time')
+
+      if (bookingsError) {
+        console.error('Calendar bookings query failed:', bookingsError)
+        setError(`Failed to load bookings: ${bookingsError.message}`)
+        setLoading(false)
+        return
+      }
+
+      const { data: blocksData, error: blocksError } = await supabase
         .from('time_blocks')
         .select('*')
         .gte('block_date', startOfMonth)
         .lte('block_date', endOfMonth)
-        .order('block_date'),
-    ])
+        .order('block_date')
 
-    if (!bookingsRes.error && bookingsRes.data) {
-      setBookings(bookingsRes.data as unknown as Booking[])
+      if (blocksError) {
+        console.error('Time blocks query failed:', blocksError)
+      }
+
+      if (bookingsData && bookingsData.length > 0) {
+        const customerIds = [...new Set(bookingsData.filter(b => b.customer_id).map(b => b.customer_id))]
+        const serviceSlugs = [...new Set(bookingsData.filter(b => b.service_slug).map(b => b.service_slug))]
+        const roomIds = [...new Set(bookingsData.filter(b => b.room_id).map(b => b.room_id))]
+
+        const [customersRes, servicesRes, roomsRes] = await Promise.all([
+          customerIds.length > 0
+            ? supabase.from('customers').select('id, full_name').in('id', customerIds)
+            : { data: [], error: null },
+          serviceSlugs.length > 0
+            ? supabase.from('services').select('slug, name').in('slug', serviceSlugs)
+            : { data: [], error: null },
+          roomIds.length > 0
+            ? supabase.from('rooms').select('id, room_name').in('id', roomIds)
+            : { data: [], error: null },
+        ])
+
+        const customerMap = new Map((customersRes.data || []).map(c => [c.id, c.full_name]))
+        const serviceMap = new Map((servicesRes.data || []).map(s => [s.slug, s.name]))
+        const roomMap = new Map((roomsRes.data || []).map(r => [r.id, r.room_name]))
+
+        const enrichedBookings: Booking[] = bookingsData.map(b => ({
+          ...b,
+          customer_name: b.customer_id ? customerMap.get(b.customer_id) : undefined,
+          service_name: b.service_slug ? serviceMap.get(b.service_slug) : undefined,
+          room_name: b.room_id ? roomMap.get(b.room_id) : undefined,
+        }))
+
+        setBookings(enrichedBookings)
+      } else {
+        setBookings([])
+      }
+
+      setTimeBlocks(blocksData || [])
+    } catch (err) {
+      console.error('Unexpected error fetching calendar data:', err)
+      setError('An unexpected error occurred while loading calendar data.')
+    } finally {
+      setLoading(false)
     }
-    if (!blocksRes.error && blocksRes.data) {
-      setTimeBlocks(blocksRes.data)
-    }
-    setLoading(false)
   }, [year, month])
 
   useEffect(() => {
@@ -239,6 +269,16 @@ export default function AdminCalendarPage() {
 
           {loading ? (
             <div className="p-8 text-center text-gray-600">Loading calendar...</div>
+          ) : error ? (
+            <div className="p-8 text-center">
+              <p className="text-red-600 font-medium">{error}</p>
+              <button
+                onClick={fetchData}
+                className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <div className="p-4">
               <div className="grid grid-cols-7 gap-1 mb-2">
@@ -384,20 +424,17 @@ export default function AdminCalendarPage() {
                     className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
                   >
                     <div>
-                      <p className="font-medium text-gray-900">{booking.service?.name}</p>
+                      <p className="font-medium text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
                       <p className="text-sm text-gray-600">
-                        {booking.customer?.full_name} at{' '}
+                        {booking.customer_name || 'Unknown'} at{' '}
                         {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
                           hour: '2-digit',
                           minute: '2-digit',
                         })}
                       </p>
-                      {booking.room && (
-                        <p className="text-xs text-gray-500 mt-0.5">{booking.room.room_name}</p>
+                      {booking.room_name && (
+                        <p className="text-xs text-gray-500 mt-0.5">{booking.room_name}</p>
                       )}
-                      <p className="text-xs font-mono text-yellow-700 bg-yellow-50 px-1 mt-1">
-                        DEBUG: room_name={JSON.stringify(booking.room?.room_name)}
-                      </p>
                     </div>
                     <div className="flex gap-2">
                       <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>

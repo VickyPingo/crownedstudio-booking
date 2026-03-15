@@ -2,12 +2,46 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import type { BookingDetail, BookingStatus, Room } from '@/types/admin'
+import type { BookingStatus, Room } from '@/types/admin'
 
 interface BookingDetailDrawerProps {
   bookingId: string | null
   onClose: () => void
   onUpdate: () => void
+}
+
+interface BookingData {
+  id: string
+  customer_id: string | null
+  service_slug: string | null
+  voucher_id: string | null
+  room_id: string | null
+  people_count: number
+  status: string
+  start_time: string
+  end_time: string
+  total_price: number
+  deposit_due: number
+  balance_paid: number
+  voucher_code: string | null
+  voucher_discount: number
+  allergies: string | null
+  massage_pressure: string | null
+  medical_history: string | null
+  customer?: { id: string; full_name: string; email: string | null; phone: string | null } | null
+  service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
+  voucher?: { code: string; discount_type: string; discount_value: number } | null
+  room?: { id: string; room_name: string; room_area: string; capacity: number } | null
+  booking_upsells: Array<{
+    upsell_id: string
+    quantity: number
+    price_total: number
+    person_number: number | null
+    upsell_name?: string
+    upsell_slug?: string
+  }>
+  booking_notes: Array<{ id: string; note: string; created_at: string; created_by: string | null }>
+  payment_transactions: Array<{ id: string; status: string; amount: number; created_at: string }>
 }
 
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
@@ -19,8 +53,9 @@ const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] =
 ]
 
 export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDetailDrawerProps) {
-  const [booking, setBooking] = useState<BookingDetail | null>(null)
+  const [booking, setBooking] = useState<BookingData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [newNote, setNewNote] = useState('')
   const [addingNote, setAddingNote] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -43,31 +78,76 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     if (!bookingId) return
 
     setLoading(true)
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        customer:customers(id, full_name, email, phone),
-        service:services(name, category, duration_minutes, service_area),
-        voucher:vouchers(code, discount_type, discount_value),
-        room:rooms(id, room_name, room_area, capacity),
-        booking_upsells(
-          upsell_id,
-          quantity,
-          price_total,
-          person_number,
-          upsell:upsells(name, slug)
-        ),
-        booking_notes(id, note, created_at, created_by),
-        payment_transactions(id, status, amount, created_at)
-      `)
-      .eq('id', bookingId)
-      .maybeSingle()
+    setError(null)
 
-    if (!error && data) {
-      setBooking(data as unknown as BookingDetail)
+    try {
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .maybeSingle()
+
+      if (bookingError) {
+        console.error('Booking query failed:', bookingError)
+        setError(`Failed to load booking: ${bookingError.message}`)
+        setLoading(false)
+        return
+      }
+
+      if (!bookingData) {
+        setError('Booking not found')
+        setLoading(false)
+        return
+      }
+
+      const [customerRes, serviceRes, voucherRes, roomRes, upsellsRes, notesRes, paymentsRes] = await Promise.all([
+        bookingData.customer_id
+          ? supabase.from('customers').select('id, full_name, email, phone').eq('id', bookingData.customer_id).maybeSingle()
+          : { data: null, error: null },
+        bookingData.service_slug
+          ? supabase.from('services').select('name, category, duration_minutes, service_area').eq('slug', bookingData.service_slug).maybeSingle()
+          : { data: null, error: null },
+        bookingData.voucher_id
+          ? supabase.from('vouchers').select('code, discount_type, discount_value').eq('id', bookingData.voucher_id).maybeSingle()
+          : { data: null, error: null },
+        bookingData.room_id
+          ? supabase.from('rooms').select('id, room_name, room_area, capacity').eq('id', bookingData.room_id).maybeSingle()
+          : { data: null, error: null },
+        supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number').eq('booking_id', bookingId),
+        supabase.from('booking_notes').select('id, note, created_at, created_by').eq('booking_id', bookingId).order('created_at', { ascending: false }),
+        supabase.from('payment_transactions').select('id, status, amount, created_at').eq('booking_id', bookingId).order('created_at', { ascending: false }),
+      ])
+
+      let upsellsWithNames = upsellsRes.data || []
+      if (upsellsRes.data && upsellsRes.data.length > 0) {
+        const upsellIds = [...new Set(upsellsRes.data.map(u => u.upsell_id))]
+        const { data: upsellData } = await supabase.from('upsells').select('id, name, slug').in('id', upsellIds)
+        const upsellMap = new Map((upsellData || []).map(u => [u.id, u]))
+        upsellsWithNames = upsellsRes.data.map(u => ({
+          ...u,
+          upsell_name: upsellMap.get(u.upsell_id)?.name,
+          upsell_slug: upsellMap.get(u.upsell_id)?.slug,
+        }))
+      }
+
+      const enrichedBooking: BookingData = {
+        ...bookingData,
+        customer: customerRes.data || undefined,
+        service: serviceRes.data || undefined,
+        voucher: voucherRes.data || undefined,
+        room: roomRes.data || undefined,
+        booking_upsells: upsellsWithNames,
+        booking_notes: notesRes.data || [],
+        payment_transactions: paymentsRes.data || [],
+      }
+
+      setBooking(enrichedBooking)
+    } catch (err) {
+      console.error('Unexpected error fetching booking:', err)
+      setError('An unexpected error occurred')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const fetchRooms = async () => {
@@ -227,20 +307,20 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
         {loading ? (
           <div className="p-6 text-center text-gray-600">Loading...</div>
+        ) : error ? (
+          <div className="p-6 text-center">
+            <p className="text-red-600 font-medium">{error}</p>
+            <button
+              onClick={fetchBooking}
+              className="mt-4 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+            >
+              Retry
+            </button>
+          </div>
         ) : !booking ? (
           <div className="p-6 text-center text-gray-600">Booking not found</div>
         ) : (
           <div className="p-6 space-y-6">
-            <section className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-4">
-              <h3 className="text-xs font-bold text-yellow-800 uppercase mb-2">DEBUG: Raw Data</h3>
-              <div className="text-xs font-mono text-yellow-900 space-y-1">
-                <p>room_id: {JSON.stringify(booking.room_id)}</p>
-                <p>room?.room_name: {JSON.stringify(booking.room?.room_name)}</p>
-                <p>booking_upsells length: {booking.booking_upsells?.length ?? 'undefined'}</p>
-                <p>booking_upsells: {JSON.stringify(booking.booking_upsells?.slice(0, 2))}</p>
-              </div>
-            </section>
-
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Client</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -411,7 +491,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                             <div className="space-y-1.5">
                               {grouped[personNum].map((upsell, idx) => (
                                 <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-gray-700">{upsell.upsell?.name}</span>
+                                  <span className="text-gray-700">{upsell.upsell_name || 'Unknown add-on'}</span>
                                   <span className="text-gray-900 font-medium">R{upsell.price_total}</span>
                                 </div>
                               ))}
