@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase/server"
-import { ServiceWithUpsells } from "@/types/service"
+import { ServiceWithUpsells, ServicePricingOption } from "@/types/service"
 import { BusinessHoursData, ServiceTimeWindowData } from "@/types/booking"
 import { BookingPageClient } from "./BookingPageClient"
 
@@ -30,6 +30,27 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
     .from("upsells")
     .select("id, slug, name, price, quantity_rule, duration_added_minutes")
     .eq("active", true)
+
+  const { data: pricingOptionsData } = await supabaseAdmin
+    .from("service_pricing_options")
+    .select("*")
+    .eq("active", true)
+    .order("is_default", { ascending: false })
+
+  const pricingOptionsBySlug: Record<string, ServicePricingOption[]> = {}
+  if (pricingOptionsData) {
+    for (const option of pricingOptionsData) {
+      if (!pricingOptionsBySlug[option.service_slug]) {
+        pricingOptionsBySlug[option.service_slug] = []
+      }
+      pricingOptionsBySlug[option.service_slug].push({
+        ...option,
+        price1: parseFloat(option.price1),
+        price2: parseFloat(option.price2),
+        price3: parseFloat(option.price3),
+      })
+    }
+  }
 
   const { data: businessHoursRow } = await supabaseAdmin
     .from("business_hours")
@@ -66,7 +87,8 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
 
     return {
       ...service,
-      upsells: serviceUpsells
+      upsells: serviceUpsells,
+      pricingOptions: pricingOptionsBySlug[service.slug] || undefined,
     } as ServiceWithUpsells
   })
 

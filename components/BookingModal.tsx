@@ -9,7 +9,7 @@ import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
 import { PaymentStep } from './booking-steps/PaymentStep'
 import { ConfirmationStep } from './booking-steps/ConfirmationStep'
 import { BookingFormData, BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
-import { ServiceWithUpsells } from '@/types/service'
+import { ServiceWithUpsells, ServicePricingOption } from '@/types/service'
 import { calculateAfterHoursSurcharge } from '@/lib/timeSlots'
 
 const STEPS = [
@@ -38,6 +38,26 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
     default:
       return null
   }
+}
+
+function getPricingOptionPrice(option: ServicePricingOption, peopleCount: number): number {
+  switch (peopleCount) {
+    case 1:
+      return option.price1
+    case 2:
+      return option.price2 > 0 ? option.price2 : option.price1
+    case 3:
+      return option.price3 > 0 ? option.price3 : option.price1
+    default:
+      return option.price1
+  }
+}
+
+function getDisplayPrice(service: ServiceWithUpsells, peopleCount: number, pricingOption: ServicePricingOption | null | undefined): number {
+  if (pricingOption) {
+    return getPricingOptionPrice(pricingOption, peopleCount)
+  }
+  return getPriceForPeopleCount(service, peopleCount) ?? service.price_1_person
 }
 
 const DEFAULT_BUSINESS_HOURS: BusinessHoursData = {
@@ -73,17 +93,29 @@ export function BookingModal({
     clientMassagePressure: '',
     clientMedicalHistory: '',
     afterHoursSurcharge: 0,
+    selectedPricingOption: null,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
+  const getDefaultPricingOption = (service: ServiceWithUpsells): ServicePricingOption | null => {
+    if (!service.pricingOptions || service.pricingOptions.length === 0) return null
+    return service.pricingOptions.find(opt => opt.is_default) || service.pricingOptions[0]
+  }
+
   useEffect(() => {
+    let newService: ServiceWithUpsells | null = null
     if (selectedService) {
-      setResolvedService(selectedService)
+      newService = selectedService
     } else if (serviceSlug) {
-      const service = services.find((s) => s.slug === serviceSlug)
-      setResolvedService(service || null)
-    } else {
-      setResolvedService(null)
+      newService = services.find((s) => s.slug === serviceSlug) || null
+    }
+    setResolvedService(newService)
+
+    if (newService) {
+      const defaultOption = getDefaultPricingOption(newService)
+      if (defaultOption && !formData.selectedPricingOption) {
+        setFormData((prev) => ({ ...prev, selectedPricingOption: defaultOption }))
+      }
     }
   }, [selectedService, serviceSlug, services])
 
@@ -144,6 +176,7 @@ export function BookingModal({
       clientMassagePressure: '',
       clientMedicalHistory: '',
       afterHoursSurcharge: 0,
+      selectedPricingOption: null,
     })
     closeModal()
   }
@@ -174,6 +207,8 @@ export function BookingModal({
             service={resolvedService}
             peopleCount={formData.peopleCount}
             onUpdatePeopleCount={(count) => updateFormData({ peopleCount: count })}
+            selectedPricingOption={formData.selectedPricingOption}
+            onUpdatePricingOption={(option) => updateFormData({ selectedPricingOption: option })}
           />
         )
       case 1:
@@ -290,8 +325,13 @@ export function BookingModal({
               <div className="mb-4 rounded-lg bg-white p-4 shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900">{resolvedService.name}</h3>
                 <p className="mt-1 text-sm text-gray-700">
-                  {resolvedService.duration_minutes} minutes • R{getPriceForPeopleCount(resolvedService, formData.peopleCount) ?? resolvedService.price_1_person} for {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
+                  {resolvedService.duration_minutes} minutes • R{getDisplayPrice(resolvedService, formData.peopleCount, formData.selectedPricingOption)} for {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
                 </p>
+                {formData.selectedPricingOption && formData.selectedPricingOption.sessions_included > 1 && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {formData.selectedPricingOption.sessions_included} sessions - {formData.selectedPricingOption.option_name}
+                  </p>
+                )}
               </div>
 
               <div className="min-h-[200px]">{renderStep()}</div>

@@ -16,6 +16,7 @@ export interface Service {
 
 export interface ServiceWithUpsells extends Service {
   upsells: Upsell[]
+  pricingOptions?: ServicePricingOption[]
 }
 
 export interface Upsell {
@@ -25,4 +26,18 @@ export interface Upsell {
   price: number
   quantity_rule: 'per_person' | 'per_booking'
   duration_added_minutes: number
+}
+
+export interface ServicePricingOption {
+  id: string
+  service_slug: string
+  option_name: string
+  option_slug: string
+  sessions_included: number
+  validity_days: number
+  price1: number
+  price2: number
+  price3: number
+  is_default: boolean
+  active: boolean
 }

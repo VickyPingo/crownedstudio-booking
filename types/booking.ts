@@ -1,3 +1,5 @@
+import { ServicePricingOption } from './service'
+
 export type PerPersonUpsells = Record<number, string[]>
 
 export type MassagePressure = 'soft' | 'medium' | 'hard'
@@ -15,6 +17,7 @@ export interface BookingFormData {
   clientMassagePressure: MassagePressure | ''
   clientMedicalHistory: string
   afterHoursSurcharge: number
+  selectedPricingOption?: ServicePricingOption | null
 }
 
 export interface BookingPricing {
@@ -52,6 +55,8 @@ export interface CreateBookingPayload {
   voucherId?: string | null
   voucherDiscount?: number
   isZeroPayment?: boolean
+  pricingOptionId?: string | null
+  pricingOptionName?: string | null
 }
 
 export interface SavedBooking {

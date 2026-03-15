@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData, PerPersonUpsells, MassagePressure } from '@/types/booking'
-import { ServiceWithUpsells, Upsell } from '@/types/service'
+import { ServiceWithUpsells, Upsell, ServicePricingOption } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
 import { supabase } from '@/lib/supabase/client'
@@ -27,6 +27,26 @@ function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): num
     default:
       return service.price_1_person
   }
+}
+
+function getPricingOptionPrice(option: ServicePricingOption, peopleCount: number): number {
+  switch (peopleCount) {
+    case 1:
+      return option.price1
+    case 2:
+      return option.price2 > 0 ? option.price2 : option.price1
+    case 3:
+      return option.price3 > 0 ? option.price3 : option.price1
+    default:
+      return option.price1
+  }
+}
+
+function getServicePrice(service: ServiceWithUpsells, peopleCount: number, pricingOption: ServicePricingOption | null | undefined): number {
+  if (pricingOption) {
+    return getPricingOptionPrice(pricingOption, peopleCount)
+  }
+  return getPriceForPeopleCount(service, peopleCount)
 }
 
 function calculateUpsellsTotal(
@@ -102,7 +122,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
   const [voucherDiscount, setVoucherDiscount] = useState(0)
 
-  const servicePrice = getPriceForPeopleCount(service, formData.peopleCount)
+  const servicePrice = getServicePrice(service, formData.peopleCount, formData.selectedPricingOption)
 
   const upsellsTotal = calculateUpsellsTotal(
     formData.selectedUpsellsByPerson,
@@ -245,6 +265,8 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         voucherId: appliedVoucher?.id || null,
         voucherDiscount: cappedVoucherDiscount,
         isZeroPayment,
+        pricingOptionId: formData.selectedPricingOption?.id || null,
+        pricingOptionName: formData.selectedPricingOption?.option_name || null,
       }
 
       const response = await fetch('/api/bookings/create', {
@@ -317,6 +339,14 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
           <div className="flex justify-between items-start">
             <div>
               <p className="font-medium text-gray-900">{service.name}</p>
+              {formData.selectedPricingOption && (
+                <p className="text-sm text-gray-600">
+                  {formData.selectedPricingOption.option_name}
+                  {formData.selectedPricingOption.sessions_included > 1 && (
+                    <span className="ml-1">({formData.selectedPricingOption.sessions_included} sessions)</span>
+                  )}
+                </p>
+              )}
               <p className="text-sm text-gray-700">
                 {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
               </p>
