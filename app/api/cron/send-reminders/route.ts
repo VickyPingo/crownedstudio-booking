@@ -12,16 +12,38 @@ function getSupabaseAdmin() {
   )
 }
 
-export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
+function isAuthorized(request: NextRequest): boolean {
+  if (!CRON_SECRET || CRON_SECRET === 'your_cron_secret_here') {
+    console.error('CRON_SECRET is not configured')
+    return false
+  }
+
   const vercelCronHeader = request.headers.get('x-vercel-cron')
+  if (vercelCronHeader === '1') {
+    return true
+  }
 
-  const isVercelCron = vercelCronHeader === '1'
-  const isAuthorizedManual = authHeader === `Bearer ${CRON_SECRET}`
+  const authHeader = request.headers.get('authorization')
+  if (authHeader === `Bearer ${CRON_SECRET}`) {
+    return true
+  }
 
-  if (!isVercelCron && !isAuthorizedManual) {
+  const url = new URL(request.url)
+  const keyParam = url.searchParams.get('key')
+  if (keyParam === CRON_SECRET) {
+    return true
+  }
+
+  return false
+}
+
+export async function GET(request: NextRequest) {
+  if (!isAuthorized(request)) {
+    console.warn('Cron send-reminders: Unauthorized access attempt')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  console.log('Cron send-reminders: Starting execution')
 
   const supabase = getSupabaseAdmin()
 
@@ -72,13 +94,16 @@ export async function GET(request: NextRequest) {
       .limit(50)
 
     if (fetchError) {
-      console.error('Error fetching reminders:', fetchError)
+      console.error('Cron send-reminders: Error fetching reminders:', fetchError)
       return NextResponse.json({ error: 'Failed to fetch reminders' }, { status: 500 })
     }
 
     if (!pendingReminders || pendingReminders.length === 0) {
+      console.log('Cron send-reminders: No reminders due at this time')
       return NextResponse.json({ message: 'No reminders to send', count: 0 })
     }
+
+    console.log(`Cron send-reminders: Found ${pendingReminders.length} reminders to process`)
 
     const results: { id: string; success: boolean; error?: string }[] = []
 
@@ -197,6 +222,8 @@ export async function GET(request: NextRequest) {
     const sent = results.filter((r) => r.success).length
     const failed = results.filter((r) => !r.success).length
 
+    console.log(`Cron send-reminders: Completed. Sent: ${sent}, Failed: ${failed}`)
+
     return NextResponse.json({
       message: 'Reminders processed',
       total: results.length,
@@ -205,7 +232,7 @@ export async function GET(request: NextRequest) {
       results,
     })
   } catch (error) {
-    console.error('Cron job error:', error)
+    console.error('Cron send-reminders: Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

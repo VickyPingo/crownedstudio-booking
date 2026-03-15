@@ -10,23 +10,31 @@ import {
 } from '@/lib/email/service'
 
 async function sendPaymentEmails(bookingId: string, amountPaid: number, paymentReference: string) {
+  console.log(`Payment ${paymentReference}: Starting email notifications for booking ${bookingId}`)
+
   try {
     const bookingData = await fetchBookingForEmail(bookingId)
-    if (!bookingData) return
+    if (!bookingData) {
+      console.error(`Payment ${paymentReference}: Failed to fetch booking data for emails`)
+      return
+    }
 
     const bookingEmailData = buildBookingEmailData(bookingData)
     const paymentEmailData = buildPaymentEmailData(bookingData, amountPaid, paymentReference)
 
-    await Promise.all([
+    const [spaResult, clientPaymentResult, clientConfirmResult] = await Promise.all([
       sendPaymentReceivedToSpa(paymentEmailData),
       sendPaymentConfirmationToClient(paymentEmailData),
       sendBookingConfirmationToClient(bookingEmailData),
     ])
 
+    console.log(`Payment ${paymentReference}: Email results - spa=${spaResult}, clientPayment=${clientPaymentResult}, clientConfirm=${clientConfirmResult}`)
+
     const appointmentTime = new Date(bookingData.start_time)
     await scheduleReminder(bookingId, appointmentTime)
+    console.log(`Payment ${paymentReference}: Reminder scheduled`)
   } catch (error) {
-    console.error('Error sending payment emails:', error)
+    console.error(`Payment ${paymentReference}: Error sending emails:`, error)
   }
 }
 

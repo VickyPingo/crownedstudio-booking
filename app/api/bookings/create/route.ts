@@ -8,22 +8,31 @@ import { allocateRoom } from '@/lib/roomAllocation'
 const PAYMENT_EXPIRY_MINUTES = 15
 
 async function sendEmailNotifications(bookingId: string, startDateTime: Date, isZeroPayment: boolean) {
+  console.log(`Booking ${bookingId}: Starting email notifications, isZeroPayment=${isZeroPayment}`)
+
   try {
     const bookingData = await fetchBookingForEmail(bookingId)
-    if (!bookingData) return
+    if (!bookingData) {
+      console.error(`Booking ${bookingId}: Failed to fetch booking data for emails`)
+      return
+    }
 
     const emailData = buildBookingEmailData(bookingData)
 
-    await sendNewBookingToSpa(emailData)
+    const spaResult = await sendNewBookingToSpa(emailData)
+    console.log(`Booking ${bookingId}: Spa notification sent=${spaResult}`)
 
     if (isZeroPayment) {
-      await sendBookingConfirmationToClient(emailData)
+      const clientResult = await sendBookingConfirmationToClient(emailData)
+      console.log(`Booking ${bookingId}: Confirmation to client sent=${clientResult}`)
       await scheduleReminder(bookingId, startDateTime)
+      console.log(`Booking ${bookingId}: Reminder scheduled`)
     } else {
-      await sendBookingRequestToClient(emailData)
+      const clientResult = await sendBookingRequestToClient(emailData)
+      console.log(`Booking ${bookingId}: Request to client sent=${clientResult}`)
     }
   } catch (error) {
-    console.error('Error sending booking emails:', error)
+    console.error(`Booking ${bookingId}: Error sending emails:`, error)
   }
 }
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
