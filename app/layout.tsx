@@ -1,8 +1,3 @@
-export const metadata: Metadata = {
-  title: "Crowned Studio Booking",
-  description: "Book your spa experience at Crowned Studio",
-};
-
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
