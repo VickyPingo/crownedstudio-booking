@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BookingFormData, CreateBookingPayload, BookingPricing, BusinessHoursData, PerPersonUpsells, MassagePressure } from '@/types/booking'
 import { ServiceWithUpsells, Upsell, ServicePricingOption } from '@/types/service'
 import { useBookingModal } from '@/hooks/useBookingModal'
@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 import type { Voucher } from '@/types/voucher'
 
 const AFTER_HOURS_SURCHARGE_PP = 100
+const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
 
 function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number {
   switch (count) {
@@ -122,6 +123,9 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
   const [voucherDiscount, setVoucherDiscount] = useState(0)
 
+  const [isRepeatCustomer, setIsRepeatCustomer] = useState(false)
+  const [repeatCheckDone, setRepeatCheckDone] = useState(false)
+
   const servicePrice = getServicePrice(service, formData.peopleCount, formData.selectedPricingOption)
 
   const upsellsTotal = calculateUpsellsTotal(
@@ -136,12 +140,57 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
     service.upsells
   )
 
+  const checkRepeatCustomer = useCallback(async () => {
+    if (!formData.clientEmail && !formData.clientPhone) {
+      setIsRepeatCustomer(false)
+      setRepeatCheckDone(true)
+      return
+    }
+
+    console.log('[RepeatDiscount] Checking repeat customer status for:', formData.clientEmail, formData.clientPhone)
+
+    const { data: confirmedBookings, error } = await supabase
+      .from('bookings')
+      .select('id, customers!inner(email, phone)')
+      .eq('status', 'confirmed')
+      .or(`email.eq.${formData.clientEmail},phone.eq.${formData.clientPhone}`, { referencedTable: 'customers' })
+      .limit(1)
+
+    if (error) {
+      console.error('[RepeatDiscount] Error checking repeat customer:', error)
+      setIsRepeatCustomer(false)
+      setRepeatCheckDone(true)
+      return
+    }
+
+    const isRepeat = confirmedBookings !== null && confirmedBookings.length > 0
+    console.log('[RepeatDiscount] Is repeat customer:', isRepeat, 'Found bookings:', confirmedBookings?.length || 0)
+    setIsRepeatCustomer(isRepeat)
+    setRepeatCheckDone(true)
+  }, [formData.clientEmail, formData.clientPhone])
+
+  useEffect(() => {
+    checkRepeatCustomer()
+  }, [checkRepeatCustomer])
+
   const isAfterHours = formData.selectedTime
     ? isAfterHoursSlot(formData.selectedTime, service.slug, businessHours)
     : false
   const afterHoursSurcharge = isAfterHours ? AFTER_HOURS_SURCHARGE_PP * formData.peopleCount : 0
 
   const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge
+
+  const repeatCustomerDiscount = isRepeatCustomer && !appliedVoucher
+    ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
+    : 0
+
+  console.log('[RepeatDiscount] Calculation:', {
+    isRepeatCustomer,
+    repeatCheckDone,
+    hasVoucher: !!appliedVoucher,
+    subtotal,
+    repeatCustomerDiscount,
+  })
 
   const calculateVoucherDiscount = (voucher: Voucher, amount: number): number => {
     let discount: number
@@ -207,9 +256,22 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
   }
 
   const cappedVoucherDiscount = Math.min(voucherDiscount, subtotal)
-  const finalTotal = Math.max(0, subtotal - cappedVoucherDiscount)
+  const activeDiscount = appliedVoucher ? cappedVoucherDiscount : repeatCustomerDiscount
+  const activeDiscountType: 'voucher' | 'repeat_customer' | null = appliedVoucher
+    ? 'voucher'
+    : isRepeatCustomer
+    ? 'repeat_customer'
+    : null
+  const finalTotal = Math.max(0, subtotal - activeDiscount)
   const depositAmount = Math.max(0, Math.round(finalTotal * 0.5))
   const isZeroPayment = finalTotal === 0 || depositAmount === 0
+
+  console.log('[RepeatDiscount] Final pricing:', {
+    activeDiscount,
+    activeDiscountType,
+    finalTotal,
+    depositAmount,
+  })
 
   const pricing: BookingPricing = savedBooking
     ? {
@@ -227,8 +289,8 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         upsellsTotal,
         afterHoursSurcharge,
         subtotal,
-        discountAmount: cappedVoucherDiscount,
-        discountType: appliedVoucher ? 'voucher' : null,
+        discountAmount: activeDiscount,
+        discountType: activeDiscountType,
         finalTotal,
         depositAmount,
       }
@@ -257,8 +319,8 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
-        discountAmount: cappedVoucherDiscount,
-        discountType: appliedVoucher ? 'voucher' : null,
+        discountAmount: activeDiscount,
+        discountType: activeDiscountType,
         totalPrice: finalTotal,
         depositDue: depositAmount,
         voucherCode: appliedVoucher?.code || null,
@@ -268,6 +330,13 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         pricingOptionId: formData.selectedPricingOption?.id || null,
         pricingOptionName: formData.selectedPricingOption?.option_name || null,
       }
+
+      console.log('[RepeatDiscount] Creating booking with payload:', {
+        isRepeatCustomer,
+        discountAmount: payload.discountAmount,
+        discountType: payload.discountType,
+        totalPrice: payload.totalPrice,
+      })
 
       const response = await fetch('/api/bookings/create', {
         method: 'POST',
