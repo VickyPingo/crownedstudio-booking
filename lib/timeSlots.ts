@@ -54,7 +54,7 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
     const windowStart = timeToMinutes(serviceTimeWindow.start_time)
     const windowEnd = timeToMinutes(serviceTimeWindow.end_time)
 
-    for (let time = windowStart; time + totalDuration <= windowEnd; time += SLOT_INTERVAL_MINUTES) {
+    for (let time = windowStart; time + serviceDurationMinutes <= windowEnd; time += SLOT_INTERVAL_MINUTES) {
       slots.push(minutesToTime(time))
     }
   } else {

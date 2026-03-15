@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { PerPersonUpsells, MassagePressure } from '@/types/booking'
-import { generateTimeSlots, isAfterHoursSlot, TimeSlotConfig, TimeBlock } from '@/lib/timeSlots'
+import { generateTimeSlots, isAfterHoursSlot, TimeSlotConfig, TimeBlock, ServiceTimeWindow } from '@/lib/timeSlots'
 
 interface Service {
   id: string
@@ -74,6 +74,7 @@ export function ManualBookingModal({
   const [businessHours, setBusinessHours] = useState<Record<number, BusinessHours>>({})
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
   const [existingBookings, setExistingBookings] = useState<{ start_time: string; end_time: string }[]>([])
+  const [serviceTimeWindows, setServiceTimeWindows] = useState<Record<string, ServiceTimeWindow>>({})
 
   const [customerSearch, setCustomerSearch] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
@@ -115,11 +116,12 @@ export function ManualBookingModal({
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true)
-      const [servicesRes, upsellsRes, customersRes, hoursRes] = await Promise.all([
+      const [servicesRes, upsellsRes, customersRes, hoursRes, timeWindowsRes] = await Promise.all([
         supabase.from('services').select('*').eq('active', true).order('name'),
         supabase.from('upsells').select('*').eq('active', true).order('name'),
         supabase.from('customers').select('*').order('full_name'),
         supabase.from('business_hours').select('*'),
+        supabase.from('service_time_windows').select('service_slug, start_time, end_time'),
       ])
 
       if (servicesRes.data) setServices(servicesRes.data as Service[])
@@ -137,6 +139,18 @@ export function ManualBookingModal({
           }
         })
         setBusinessHours(hoursMap)
+      }
+
+      if (timeWindowsRes.data) {
+        const windowsMap: Record<string, ServiceTimeWindow> = {}
+        timeWindowsRes.data.forEach((tw: { service_slug: string; start_time: string; end_time: string }) => {
+          windowsMap[tw.service_slug] = {
+            service_slug: tw.service_slug,
+            start_time: tw.start_time,
+            end_time: tw.end_time,
+          }
+        })
+        setServiceTimeWindows(windowsMap)
       }
 
       if (prefillCustomerId) {
@@ -211,10 +225,13 @@ export function ManualBookingModal({
         return total + (upsell?.duration_added_minutes || 0)
       }, 0)
 
+    const serviceTimeWindow = serviceTimeWindows[selectedService.slug] || null
+
     const config: TimeSlotConfig = {
       serviceSlug: selectedService.slug,
       serviceDurationMinutes: selectedService.duration_minutes + upsellDuration,
       businessHours: hours,
+      serviceTimeWindow,
       timeBlocks,
     }
 
@@ -236,7 +253,7 @@ export function ManualBookingModal({
 
       return true
     })
-  }, [selectedDate, selectedService, businessHours, timeBlocks, existingBookings, selectedUpsellsByPerson, upsells])
+  }, [selectedDate, selectedService, businessHours, timeBlocks, existingBookings, selectedUpsellsByPerson, upsells, serviceTimeWindows])
 
   const getServicePrice = useCallback(
     (service: Service, count: number): number => {
