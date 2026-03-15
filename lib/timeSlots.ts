@@ -28,7 +28,7 @@ export interface TimeSlotConfig {
   timeBlocks?: TimeBlock[]
 }
 
-const BOOKING_BUFFER_MINUTES = 10
+export const BOOKING_BUFFER_MINUTES = 10
 const SLOT_INTERVAL_MINUTES = 30
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { PerPersonUpsells, MassagePressure } from '@/types/booking'
-import { generateTimeSlots, isAfterHoursSlot, TimeSlotConfig, TimeBlock, ServiceTimeWindow } from '@/lib/timeSlots'
+import { generateTimeSlots, isAfterHoursSlot, TimeSlotConfig, TimeBlock, ServiceTimeWindow, BOOKING_BUFFER_MINUTES } from '@/lib/timeSlots'
 
 interface Service {
   id: string
@@ -237,16 +237,17 @@ export function ManualBookingModal({
 
     const slots = generateTimeSlots(config)
 
-    const totalDuration = selectedService.duration_minutes + upsellDuration + 10
+    const bufferMs = BOOKING_BUFFER_MINUTES * 60000
+    const totalDuration = selectedService.duration_minutes + upsellDuration
     return slots.filter((slot) => {
       const slotStart = new Date(`${selectedDate}T${slot}:00+02:00`)
       const slotEnd = new Date(slotStart.getTime() + totalDuration * 60000)
 
       for (const booking of existingBookings) {
         const bookingStart = new Date(booking.start_time)
-        const bookingEnd = new Date(booking.end_time)
+        const bookingEndWithBuffer = new Date(new Date(booking.end_time).getTime() + bufferMs)
 
-        if (slotStart < bookingEnd && slotEnd > bookingStart) {
+        if (slotStart < bookingEndWithBuffer && slotEnd > bookingStart) {
           return false
         }
       }

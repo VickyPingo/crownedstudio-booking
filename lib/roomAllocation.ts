@@ -24,13 +24,16 @@ export interface RoomAllocationResult {
   error?: string
 }
 
-function doTimesOverlap(
-  start1: Date,
-  end1: Date,
-  start2: Date,
-  end2: Date
+export const CLEANUP_BUFFER_MINUTES = 10
+
+function doTimesOverlapWithBuffer(
+  newStart: Date,
+  newEnd: Date,
+  existingStart: Date,
+  existingEnd: Date
 ): boolean {
-  return start1 < end2 && end1 > start2
+  const existingEndWithBuffer = new Date(existingEnd.getTime() + CLEANUP_BUFFER_MINUTES * 60000)
+  return newStart < existingEndWithBuffer && newEnd > existingStart
 }
 
 export async function allocateRoom(
@@ -104,7 +107,7 @@ export async function allocateRoom(
     const hasConflict = roomBookings.some(booking => {
       const bookingStart = new Date(booking.start_time)
       const bookingEnd = new Date(booking.end_time)
-      return doTimesOverlap(startTime, endTime, bookingStart, bookingEnd)
+      return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)
     })
 
     console.log(`[RoomAllocation] Room ${room.room_name}: ${roomBookings.length} bookings, hasConflict=${hasConflict}`)
@@ -181,19 +184,34 @@ export async function checkRoomAvailability(
 ): Promise<boolean> {
   const supabase = supabaseAdmin
 
+  const dayStart = new Date(startTime)
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(startTime)
+  dayEnd.setHours(23, 59, 59, 999)
+
   let query = supabase
     .from('bookings')
-    .select('id')
+    .select('id, start_time, end_time')
     .eq('room_id', roomId)
     .in('status', ['confirmed', 'pending_payment'])
-    .lt('start_time', endTime.toISOString())
-    .gt('end_time', startTime.toISOString())
+    .gte('start_time', dayStart.toISOString())
+    .lte('start_time', dayEnd.toISOString())
 
   if (excludeBookingId) {
     query = query.neq('id', excludeBookingId)
   }
 
-  const { data: conflicts } = await query
+  const { data: bookings } = await query
 
-  return !conflicts || conflicts.length === 0
+  if (!bookings || bookings.length === 0) {
+    return true
+  }
+
+  const hasConflict = bookings.some(booking => {
+    const bookingStart = new Date(booking.start_time)
+    const bookingEnd = new Date(booking.end_time)
+    return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)
+  })
+
+  return !hasConflict
 }
