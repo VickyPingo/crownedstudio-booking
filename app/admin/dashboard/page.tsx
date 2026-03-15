@@ -216,9 +216,12 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-xl p-6 shadow-sm">
+        <div className="bg-white rounded-xl p-6 shadow-sm border-2 border-teal-500">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Room Overview</h2>
+            <div>
+              <p className="text-xs font-bold text-teal-600 mb-1">ROOM OVERVIEW TEST</p>
+              <h2 className="text-lg font-semibold text-gray-900">Room Overview</h2>
+            </div>
             <a href="/admin/rooms" className="text-sm text-gray-600 hover:text-gray-900">View Calendar</a>
           </div>
 
@@ -232,6 +235,8 @@ export default function AdminDashboardPage() {
                 </div>
               ))}
             </div>
+          ) : roomStatuses.length === 0 ? (
+            <p className="text-gray-600 text-sm">No active rooms found. Add rooms in the Rooms section.</p>
           ) : (
             <>
               {unassignedBookings.length > 0 && (

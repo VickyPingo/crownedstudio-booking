@@ -113,10 +113,6 @@ export function BookingModal({
     }
   }, [formData.selectedTime, formData.peopleCount, resolvedService, businessHours, formData.afterHoursSurcharge])
 
-  console.log('BookingModal - resolvedService:', resolvedService)
-  console.log('BookingModal - resolvedService?.upsells:', resolvedService?.upsells)
-  console.log('BookingModal - allowed_upsells raw:', resolvedService?.allowed_upsells)
-
   if (!isOpen || !resolvedService) return null
 
   const serviceTimeWindow = serviceTimeWindows[resolvedService.slug] || null

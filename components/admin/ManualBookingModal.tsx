@@ -191,8 +191,8 @@ export function ManualBookingModal({
 
   const availableUpsells = useMemo(() => {
     if (!selectedService?.allowed_upsells) return []
-    const allowed = selectedService.allowed_upsells.split(',').map((s) => s.trim())
-    return upsells.filter((u) => allowed.includes(u.slug))
+    const allowed = selectedService.allowed_upsells.split(/[,\n]/).map((s) => s.trim()).filter((s) => s.length > 0)
+    return upsells.filter((u) => allowed.includes(u.name))
   }, [selectedService, upsells])
 
   const availableTimeSlots = useMemo(() => {

@@ -53,16 +53,11 @@ export function UpsellsStep({
     return `${count} extras`
   }
 
-  console.log('UpsellsStep - availableUpsells:', availableUpsells)
-
   if (availableUpsells.length === 0) {
     return (
       <div className="space-y-4">
         <h3 className="text-xl font-semibold text-gray-900">Enhance Your Service</h3>
         <p className="text-sm text-gray-700">No additional services available for this service</p>
-        <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-xs font-mono text-yellow-800">
-          DEBUG: availableUpsells received = {JSON.stringify(availableUpsells || 'undefined')}
-        </div>
       </div>
     )
   }
