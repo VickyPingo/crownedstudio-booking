@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
           massage_pressure,
           voucher_code,
           voucher_discount,
+          pricing_option_name,
           customer:customers (
             full_name,
             email,
@@ -120,6 +121,7 @@ export async function GET(request: NextRequest) {
         massage_pressure: string | null
         voucher_code: string | null
         voucher_discount: number | null
+        pricing_option_name: string | null
         customer: { full_name: string; email: string | null; phone: string | null } | null
         service: { name: string } | null
         booking_upsells: { person_number: number | null; price_total: number | null; upsell: { name: string; price: number } | null }[]
@@ -172,6 +174,7 @@ export async function GET(request: NextRequest) {
         clientEmail: booking.customer.email,
         clientPhone: booking.customer.phone || '',
         serviceName: booking.service?.name || 'Service',
+        pricingOptionName: booking.pricing_option_name || null,
         bookingDate: startTime.toLocaleDateString('en-ZA', {
           weekday: 'long',
           day: 'numeric',

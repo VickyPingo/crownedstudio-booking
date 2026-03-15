@@ -23,6 +23,7 @@ interface BookingWithRelations {
   voucher_code: string | null
   voucher_discount: number | null
   is_manual_booking: boolean
+  pricing_option_name: string | null
   customer: {
     full_name: string
     email: string | null
@@ -61,6 +62,7 @@ export async function fetchBookingForEmail(bookingId: string): Promise<BookingWi
       voucher_code,
       voucher_discount,
       is_manual_booking,
+      pricing_option_name,
       customer:customers (
         full_name,
         email,
@@ -118,6 +120,7 @@ export function buildBookingEmailData(booking: BookingWithRelations): BookingEma
     clientEmail: booking.customer?.email || '',
     clientPhone: booking.customer?.phone || '',
     serviceName: booking.service?.name || 'Service',
+    pricingOptionName: booking.pricing_option_name || null,
     bookingDate: startTime.toLocaleDateString('en-ZA', {
       weekday: 'long',
       day: 'numeric',
@@ -159,6 +162,7 @@ export function buildPaymentEmailData(
     clientName: booking.customer?.full_name || 'Guest',
     clientEmail: booking.customer?.email || '',
     serviceName: booking.service?.name || 'Service',
+    pricingOptionName: booking.pricing_option_name || null,
     bookingDate: startTime.toLocaleDateString('en-ZA', {
       weekday: 'long',
       day: 'numeric',

@@ -28,6 +28,7 @@ interface BookingData {
   allergies: string | null
   massage_pressure: string | null
   medical_history: string | null
+  pricing_option_name: string | null
   customer?: { id: string; full_name: string; email: string | null; phone: string | null } | null
   service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
   voucher?: { code: string; discount_type: string; discount_value: number } | null
@@ -334,6 +335,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Service</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <p className="font-medium text-gray-900">{booking.service?.name}</p>
+                {booking.pricing_option_name && (
+                  <p className="text-sm text-blue-700 font-medium">{booking.pricing_option_name}</p>
+                )}
                 <p className="text-sm text-gray-600">{booking.service?.category}</p>
                 <p className="text-sm text-gray-600">{booking.people_count} person(s) - {booking.service?.duration_minutes} min</p>
               </div>

@@ -15,6 +15,7 @@ interface Booking {
   total_price: number
   deposit_due: number
   room_id: string | null
+  pricing_option_name: string | null
   customer_name?: string
   customer_email?: string
   service_name?: string
@@ -58,7 +59,8 @@ export default function AdminBookingsPage() {
           start_time,
           total_price,
           deposit_due,
-          room_id
+          room_id,
+          pricing_option_name
         `)
         .order('start_time', { ascending: false })
 
@@ -284,7 +286,10 @@ export default function AdminBookingsPage() {
                         </td>
                         <td className="px-6 py-4">
                           <p className="text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
-                          <p className="text-sm text-gray-600">{booking.people_count} person(s)</p>
+                          {booking.pricing_option_name && (
+                            <p className="text-sm text-gray-600">{booking.pricing_option_name}</p>
+                          )}
+                          <p className="text-sm text-gray-500">{booking.people_count} person(s)</p>
                         </td>
                         <td className="px-6 py-4">
                           {booking.room_name ? (

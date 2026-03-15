@@ -14,6 +14,7 @@ export interface BookingEmailData {
   clientEmail: string
   clientPhone: string
   serviceName: string
+  pricingOptionName: string | null
   bookingDate: string
   bookingTime: string
   peopleCount: number
@@ -37,6 +38,7 @@ export interface PaymentEmailData {
   clientName: string
   clientEmail: string
   serviceName: string
+  pricingOptionName: string | null
   bookingDate: string
   bookingTime: string
   amountPaid: number
@@ -131,7 +133,7 @@ export function newBookingToSpaTemplate(data: BookingEmailData): string {
       <div class="section">
         <div class="section-title">Booking Details</div>
         <table>
-          <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}</td></tr>
+          <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}${data.pricingOptionName ? ` <span style="color: #3b82f6;">(${data.pricingOptionName})</span>` : ''}</td></tr>
           <tr><td class="label-cell">Date</td><td class="value-cell">${data.bookingDate}</td></tr>
           <tr><td class="label-cell">Time</td><td class="value-cell">${data.bookingTime}</td></tr>
           <tr><td class="label-cell">People</td><td class="value-cell">${data.peopleCount}</td></tr>
@@ -210,6 +212,7 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
       <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px;">
         <div style="font-size: 14px; color: #9ca3af; margin-bottom: 8px;">YOUR APPOINTMENT</div>
         <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.serviceName}</div>
+        ${data.pricingOptionName ? `<div style="font-size: 14px; color: #60a5fa; margin-bottom: 4px;">${data.pricingOptionName}</div>` : ''}
         <div style="font-size: 16px;">${data.bookingDate} at ${data.bookingTime}</div>
         <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.peopleCount} ${data.peopleCount === 1 ? 'person' : 'people'}</div>
       </div>
@@ -292,7 +295,7 @@ export function paymentReceivedToSpaTemplate(data: PaymentEmailData): string {
       <div class="section">
         <div class="section-title">Booking Details</div>
         <table>
-          <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}</td></tr>
+          <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}${data.pricingOptionName ? ` <span style="color: #3b82f6;">(${data.pricingOptionName})</span>` : ''}</td></tr>
           <tr><td class="label-cell">Date & Time</td><td class="value-cell">${data.bookingDate} at ${data.bookingTime}</td></tr>
           <tr><td class="label-cell">Total Price</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
           <tr><td class="label-cell">Balance Due</td><td class="value-cell">R${data.balanceDue.toLocaleString()}</td></tr>
@@ -346,7 +349,7 @@ export function paymentConfirmationToClientTemplate(data: PaymentEmailData): str
         <div class="section-title">Your Appointment</div>
         <div class="highlight-box">
           <table>
-            <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}</td></tr>
+            <tr><td class="label-cell">Service</td><td class="value-cell">${data.serviceName}${data.pricingOptionName ? ` <span style="color: #3b82f6;">(${data.pricingOptionName})</span>` : ''}</td></tr>
             <tr><td class="label-cell">Date & Time</td><td class="value-cell">${data.bookingDate} at ${data.bookingTime}</td></tr>
             <tr><td class="label-cell">Booking Ref</td><td class="value-cell">${data.bookingReference}</td></tr>
           </table>
@@ -411,6 +414,7 @@ export function reminder24hToClientTemplate(data: BookingEmailData): string {
       <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px;">
         <div style="font-size: 14px; color: #9ca3af; margin-bottom: 8px;">YOUR APPOINTMENT</div>
         <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.serviceName}</div>
+        ${data.pricingOptionName ? `<div style="font-size: 14px; color: #60a5fa; margin-bottom: 4px;">${data.pricingOptionName}</div>` : ''}
         <div style="font-size: 18px;">${data.bookingDate}</div>
         <div style="font-size: 24px; font-weight: 700; margin-top: 8px;">${data.bookingTime}</div>
         <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.peopleCount} ${data.peopleCount === 1 ? 'person' : 'people'}</div>
@@ -495,6 +499,7 @@ export function bookingRequestToClientTemplate(data: BookingEmailData): string {
       <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px; margin-top: 16px;">
         <div style="font-size: 14px; color: #9ca3af; margin-bottom: 8px;">YOUR REQUESTED APPOINTMENT</div>
         <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.serviceName}</div>
+        ${data.pricingOptionName ? `<div style="font-size: 14px; color: #60a5fa; margin-bottom: 4px;">${data.pricingOptionName}</div>` : ''}
         <div style="font-size: 16px;">${data.bookingDate} at ${data.bookingTime}</div>
         <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.peopleCount} ${data.peopleCount === 1 ? 'person' : 'people'}</div>
       </div>

@@ -191,8 +191,9 @@ export async function POST(request: NextRequest) {
         voucher_id: payload.voucherId || null,
         voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),
         room_id: roomAllocation.room_id,
+        pricing_option_name: payload.pricingOptionName || null,
       })
-      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount, room_id')
+      .select('id, customer_id, status, deposit_due, discount_amount, discount_type, total_price, start_time, payment_expires_at, created_at, voucher_code, voucher_discount, room_id, pricing_option_name')
       .single()
 
     if (bookingError) {
