@@ -16,6 +16,8 @@ interface DateTimeStepProps {
   serviceTimeWindow?: ServiceTimeWindowData | null
 }
 
+const INITIAL_SLOTS_TO_SHOW = 4
+
 export function DateTimeStep({
   selectedDate,
   selectedTime,
@@ -31,6 +33,7 @@ export function DateTimeStep({
   const [isFullyBlocked, setIsFullyBlocked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAllSlots, setShowAllSlots] = useState(false)
 
   useEffect(() => {
     if (!selectedDate) {
@@ -86,8 +89,46 @@ export function DateTimeStep({
   const handleDateChange = (newDate: string) => {
     if (newDate !== selectedDate) {
       onUpdateTime('')
+      setShowAllSlots(false)
     }
     onUpdateDate(newDate)
+  }
+
+  const recommendedSlot = availableSlots[0] || null
+  const nextSlots = availableSlots.slice(1, INITIAL_SLOTS_TO_SHOW)
+  const remainingSlots = availableSlots.slice(INITIAL_SLOTS_TO_SHOW)
+  const hasMoreSlots = remainingSlots.length > 0
+
+  const renderTimeSlot = (time: string, isRecommended = false) => {
+    const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
+    const isSelected = selectedTime === time
+
+    return (
+      <button
+        key={time}
+        onClick={() => onUpdateTime(time)}
+        className={`py-3 px-4 rounded-lg border transition-all relative ${
+          isSelected
+            ? 'bg-black text-white border-black'
+            : isRecommended
+            ? 'bg-green-50 text-gray-900 border-green-300 hover:border-green-400'
+            : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+        }`}
+      >
+        <span className="font-medium">{time}</span>
+        {isRecommended && !isSelected && (
+          <span className="ml-2 text-xs text-green-700">Recommended</span>
+        )}
+        {isAfterHours && (
+          <span
+            className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
+              isSelected ? 'bg-amber-300' : 'bg-amber-500'
+            }`}
+            title="After-hours slot (+R100/person)"
+          />
+        )}
+      </button>
+    )
   }
 
   return (
@@ -149,37 +190,43 @@ export function DateTimeStep({
             <p className="text-sm text-gray-500 mt-1">All rooms are fully booked. Please select another date.</p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-4 gap-2">
-              {availableSlots.map((time) => {
-                const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
-                return (
+          <div className="space-y-3">
+            {recommendedSlot && (
+              <div>
+                {renderTimeSlot(recommendedSlot, true)}
+              </div>
+            )}
+
+            {nextSlots.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {nextSlots.map((time) => renderTimeSlot(time))}
+              </div>
+            )}
+
+            {hasMoreSlots && (
+              <>
+                {showAllSlots ? (
+                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-200">
+                    {remainingSlots.map((time) => renderTimeSlot(time))}
+                  </div>
+                ) : (
                   <button
-                    key={time}
-                    onClick={() => onUpdateTime(time)}
-                    className={`py-2 px-4 rounded-lg border transition-all relative ${
-                      selectedTime === time
-                        ? 'bg-black text-white border-black'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                    }`}
+                    onClick={() => setShowAllSlots(true)}
+                    className="w-full py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    {time}
-                    {isAfterHours && (
-                      <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                        selectedTime === time ? 'bg-amber-300' : 'bg-amber-500'
-                      }`} title="After-hours slot (+R100/person)" />
-                    )}
+                    Show {remainingSlots.length} more times
                   </button>
-                )
-              })}
-            </div>
+                )}
+              </>
+            )}
+
             {!isCrownedNight && businessHours.after_hours_enabled && (
               <p className="text-xs text-gray-700 mt-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
                 After-hours slots include R100 surcharge per person
               </p>
             )}
-          </>
+          </div>
         )}
       </div>
 
