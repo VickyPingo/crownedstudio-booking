@@ -17,13 +17,24 @@ export async function POST(request: NextRequest) {
       itnData[key] = value.toString()
     })
 
+    console.log('Event ITN received:', {
+      m_payment_id: itnData.m_payment_id,
+      pf_payment_id: itnData.pf_payment_id,
+      payment_status: itnData.payment_status,
+      amount_gross: itnData.amount_gross,
+    })
+
     const config = getPayfastConfig()
 
     const dataToVerify: Record<string, string> = { ...itnData }
     const receivedSignature = dataToVerify.signature
     delete dataToVerify.signature
 
-    const isValid = verifyPayfastSignature(dataToVerify, receivedSignature, config.passphrase)
+    const isValid = verifyPayfastSignature(
+      dataToVerify,
+      receivedSignature,
+      config.passphrase
+    )
 
     if (!isValid) {
       console.error('Invalid Payfast signature for event payment')
@@ -41,7 +52,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (transactionError || !transaction) {
-      console.error('Transaction not found:', merchantTransactionId)
+      console.error('Transaction not found:', {
+        merchantTransactionId,
+        transactionError,
+      })
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
@@ -50,8 +64,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid transaction type' }, { status: 400 })
     }
 
-    const receivedAmount = parseFloat(itnData.amount_gross)
-    const expectedAmount = transaction.amount
+    const receivedAmount = parseFloat(itnData.amount_gross || '0')
+    const expectedAmount = Number(transaction.amount || 0)
 
     if (Math.abs(receivedAmount - expectedAmount) > 0.01) {
       console.error('Amount mismatch for event payment:', {
@@ -67,7 +81,7 @@ export async function POST(request: NextRequest) {
           payment_status: paymentStatus,
           amount_gross: receivedAmount,
           amount_fee: parseFloat(itnData.amount_fee || '0'),
-          amount_net: parseFloat(itnData.amount_net),
+          amount_net: parseFloat(itnData.amount_net || '0'),
           merchant_id: itnData.merchant_id,
           signature: receivedSignature,
           raw_itn_data: {
@@ -82,15 +96,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (transaction.status === 'complete') {
+      console.log('Event ITN already processed:', merchantTransactionId)
       return NextResponse.json({ success: true, message: 'Already processed' })
     }
 
     const updateData: Record<string, unknown> = {
       payment_id: payfastPaymentId,
       payment_status: paymentStatus,
-      amount_gross: parseFloat(itnData.amount_gross),
+      amount_gross: receivedAmount,
       amount_fee: parseFloat(itnData.amount_fee || '0'),
-      amount_net: parseFloat(itnData.amount_net),
+      amount_net: parseFloat(itnData.amount_net || '0'),
       merchant_id: itnData.merchant_id,
       signature: receivedSignature,
       raw_itn_data: itnData,
@@ -100,7 +115,21 @@ export async function POST(request: NextRequest) {
     if (paymentStatus === 'COMPLETE') {
       updateData.status = 'complete'
 
-      await supabase
+      const { error: paymentUpdateError } = await supabase
+        .from('payment_transactions')
+        .update(updateData)
+        .eq('id', transaction.id)
+        .neq('status', 'complete')
+
+      if (paymentUpdateError) {
+        console.error('Failed to update event payment transaction:', paymentUpdateError)
+        return NextResponse.json(
+          { error: 'Failed to update payment transaction' },
+          { status: 500 }
+        )
+      }
+
+      const { error: bookingUpdateError } = await supabase
         .from('event_bookings')
         .update({
           payment_status: 'paid',
@@ -110,7 +139,15 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', transaction.event_booking_id)
 
-      const { data: bookingData } = await supabase
+      if (bookingUpdateError) {
+        console.error('Failed to update event booking:', bookingUpdateError)
+        return NextResponse.json(
+          { error: 'Failed to update event booking' },
+          { status: 500 }
+        )
+      }
+
+      const { data: bookingData, error: bookingFetchError } = await supabase
         .from('event_bookings')
         .select(`
           id,
@@ -130,8 +167,16 @@ export async function POST(request: NextRequest) {
         .eq('id', transaction.event_booking_id)
         .maybeSingle()
 
+      if (bookingFetchError) {
+        console.error('Failed to fetch event booking after payment:', bookingFetchError)
+      }
+
       if (bookingData && bookingData.events) {
-        const event = bookingData.events as unknown as { title: string; event_date: string }
+        const event = bookingData.events as unknown as {
+          title: string
+          event_date: string
+        }
+
         const eventDate = new Date(event.event_date)
         const formattedDate = eventDate.toLocaleDateString('en-ZA', {
           weekday: 'long',
@@ -151,25 +196,49 @@ export async function POST(request: NextRequest) {
           voucherCode: bookingData.voucher_code,
           voucherDiscount: bookingData.voucher_discount || 0,
           totalAmount: bookingData.total_amount,
-          paymentReference: bookingData.payment_reference,
+          paymentReference: bookingData.payment_reference || payfastPaymentId,
         }
 
-        await Promise.all([
-          sendEventBookingConfirmationToClient(emailData),
-          sendEventBookingNotificationToSpa(emailData),
-        ])
+        try {
+          console.log('Sending event emails for booking:', bookingData.id)
+          console.log('Event customer email:', bookingData.booker_email)
+
+          const [clientEmailSent, spaEmailSent] = await Promise.all([
+            sendEventBookingConfirmationToClient(emailData),
+            sendEventBookingNotificationToSpa(emailData),
+          ])
+
+          console.log('Event client email sent:', clientEmailSent)
+          console.log('Event spa email sent:', spaEmailSent)
+        } catch (emailError) {
+          console.error('Event email sending failed:', emailError)
+        }
+      } else {
+        console.warn('No booking data found for event email sending:', transaction.event_booking_id)
       }
-    } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
+
+      return NextResponse.json({ success: true })
+    }
+
+    if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
     } else {
       updateData.status = 'pending'
     }
 
-    await supabase
+    const { error: nonCompleteUpdateError } = await supabase
       .from('payment_transactions')
       .update(updateData)
       .eq('id', transaction.id)
       .neq('status', 'complete')
+
+    if (nonCompleteUpdateError) {
+      console.error('Failed to update non-complete event transaction:', nonCompleteUpdateError)
+      return NextResponse.json(
+        { error: 'Failed to update payment transaction' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {
