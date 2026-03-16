@@ -75,7 +75,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
     }
 
-    const preferredRoom = rooms[0]
+    const preferredRooms = rooms.filter(r => r.priority <= 2)
+    if (preferredRooms.length === 0) {
+      preferredRooms.push(rooms[0])
+    }
 
     const dayStart = new Date(`${date}T00:00:00+02:00`)
     const dayEnd = new Date(`${date}T23:59:59+02:00`)
@@ -129,9 +132,15 @@ export async function POST(request: NextRequest) {
     const allPossibleSlots = generateTimeSlots(config)
     const bufferMs = CLEANUP_BUFFER_MINUTES * 60000
 
+    const preferredRoomIds = new Set(preferredRooms.map(r => r.id))
     const preferredRoomBookings = (existingBookings || []).filter(
-      (b) => b.room_id === preferredRoom.id
+      (b) => preferredRoomIds.has(b.room_id)
     )
+
+    const bookingsByRoom = new Map<string, RoomBooking[]>()
+    for (const room of preferredRooms) {
+      bookingsByRoom.set(room.id, preferredRoomBookings.filter(b => b.room_id === room.id))
+    }
 
     const availableSlots: string[] = []
 
@@ -139,14 +148,16 @@ export async function POST(request: NextRequest) {
       const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
       const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
 
-      const isAvailableInPreferredRoom = checkSlotAvailableInRoom(
-        slotStartMs,
-        slotEndMs,
-        preferredRoomBookings,
-        bufferMs
-      )
+      let isAvailableInAnyPreferredRoom = false
+      for (const room of preferredRooms) {
+        const roomBookings = bookingsByRoom.get(room.id) || []
+        if (checkSlotAvailableInRoom(slotStartMs, slotEndMs, roomBookings, bufferMs)) {
+          isAvailableInAnyPreferredRoom = true
+          break
+        }
+      }
 
-      if (isAvailableInPreferredRoom) {
+      if (isAvailableInAnyPreferredRoom) {
         availableSlots.push(slot)
       }
     }
