@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (!config.merchantId || !config.merchantKey) {
       return NextResponse.json({ error: 'Payment gateway not configured' }, { status: 500 })
     }
-
+console.log("EVENT PAYFAST BASE URL:", baseUrl)
     const paymentData = {
       merchant_id: config.merchantId,
       merchant_key: config.merchantKey,
