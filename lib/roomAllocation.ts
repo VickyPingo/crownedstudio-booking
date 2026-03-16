@@ -80,7 +80,7 @@ export async function allocateRoom(
 
   let bookingsQuery = supabase
     .from('bookings')
-    .select('id, start_time, end_time, room_id, status, people_count')
+    .select('id, start_time, end_time, room_id, status, people_count, payment_expires_at')
     .in('status', ['confirmed', 'pending_payment'])
     .gte('start_time', dayStart.toISOString())
     .lte('start_time', dayEnd.toISOString())
@@ -96,7 +96,7 @@ export async function allocateRoom(
   const activeBookings = (existingBookings || []).filter(booking => {
     if (booking.status === 'confirmed') return true
     if (booking.status === 'pending_payment') {
-      return true
+      return !booking.payment_expires_at || booking.payment_expires_at > now
     }
     return false
   })
@@ -191,7 +191,7 @@ export async function checkRoomAvailability(
 
   let query = supabase
     .from('bookings')
-    .select('id, start_time, end_time')
+    .select('id, start_time, end_time, status, payment_expires_at')
     .eq('room_id', roomId)
     .in('status', ['confirmed', 'pending_payment'])
     .gte('start_time', dayStart.toISOString())
@@ -207,7 +207,16 @@ export async function checkRoomAvailability(
     return true
   }
 
-  const hasConflict = bookings.some(booking => {
+  const now = new Date().toISOString()
+  const activeBookings = bookings.filter(booking => {
+    if (booking.status === 'confirmed') return true
+    if (booking.status === 'pending_payment') {
+      return !booking.payment_expires_at || booking.payment_expires_at > now
+    }
+    return false
+  })
+
+  const hasConflict = activeBookings.some(booking => {
     const bookingStart = new Date(booking.start_time)
     const bookingEnd = new Date(booking.end_time)
     return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)

@@ -83,13 +83,22 @@ export async function POST(request: NextRequest) {
     const dayStart = new Date(`${date}T00:00:00+02:00`)
     const dayEnd = new Date(`${date}T23:59:59+02:00`)
 
+    const now = new Date().toISOString()
     const { data: existingBookings } = await supabase
       .from('bookings')
-      .select('id, start_time, end_time, room_id, status')
+      .select('id, start_time, end_time, room_id, status, payment_expires_at')
       .in('status', ['confirmed', 'pending_payment'])
       .gte('start_time', dayStart.toISOString())
       .lte('start_time', dayEnd.toISOString())
       .not('room_id', 'is', null)
+
+    const activeBookings = (existingBookings || []).filter(booking => {
+      if (booking.status === 'confirmed') return true
+      if (booking.status === 'pending_payment') {
+        return !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+      return false
+    })
 
     const { data: timeBlocksData } = await supabase
       .from('time_blocks')
@@ -133,7 +142,7 @@ export async function POST(request: NextRequest) {
     const bufferMs = CLEANUP_BUFFER_MINUTES * 60000
 
     const preferredRoomIds = new Set(preferredRooms.map(r => r.id))
-    const preferredRoomBookings = (existingBookings || []).filter(
+    const preferredRoomBookings = activeBookings.filter(
       (b) => preferredRoomIds.has(b.room_id)
     )
 

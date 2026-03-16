@@ -5,7 +5,7 @@ import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers
 import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
 import { allocateRoom } from '@/lib/roomAllocation'
 
-const PAYMENT_EXPIRY_MINUTES = 15
+const PAYMENT_EXPIRY_MINUTES = 20
 
 async function sendEmailNotifications(bookingId: string, startDateTime: Date, isZeroPayment: boolean) {
   console.log(`Booking ${bookingId}: Starting email notifications, isZeroPayment=${isZeroPayment}`)

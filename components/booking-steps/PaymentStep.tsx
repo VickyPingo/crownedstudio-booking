@@ -622,9 +622,14 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
             </div>
 
             {pricing.depositAmount > 0 ? (
-              <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
-                <span>50% Deposit Required</span>
-                <span>R{pricing.depositAmount}</span>
+              <div className="pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
+                <div className="flex justify-between text-green-800 font-semibold">
+                  <span>50% Deposit Required</span>
+                  <span>R{pricing.depositAmount}</span>
+                </div>
+                <p className="text-xs text-green-700 mt-1">
+                  This booking will be held for 20 minutes. If payment is not completed within that time, it will be automatically cancelled.
+                </p>
               </div>
             ) : (
               <div className="flex justify-between text-green-800 font-semibold pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
