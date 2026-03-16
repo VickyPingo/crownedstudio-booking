@@ -10,6 +10,7 @@ interface DashboardStats {
   pendingPayments: number
   totalClients: number
   monthlyRevenue: number
+  voucherSavings: number
 }
 
 interface Room {
@@ -43,6 +44,7 @@ export default function AdminDashboardPage() {
     pendingPayments: 0,
     totalClients: 0,
     monthlyRevenue: 0,
+    voucherSavings: 0,
   })
   const [loading, setLoading] = useState(true)
   const [showManualBooking, setShowManualBooking] = useState(false)
@@ -57,7 +59,7 @@ export default function AdminDashboardPage() {
       const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString()
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
 
-      const [bookingsToday, pendingPayments, clients, monthlyPayments] = await Promise.all([
+      const [bookingsToday, pendingPayments, clients, monthlyPayments, spaVouchers, eventVouchers] = await Promise.all([
         supabase
           .from('bookings')
           .select('id', { count: 'exact' })
@@ -76,15 +78,26 @@ export default function AdminDashboardPage() {
           .select('amount')
           .eq('status', 'complete')
           .gte('created_at', startOfMonth),
+        supabase
+          .from('bookings')
+          .select('voucher_discount')
+          .gt('voucher_discount', 0),
+        supabase
+          .from('event_bookings')
+          .select('voucher_discount')
+          .gt('voucher_discount', 0),
       ])
 
       const totalRevenue = monthlyPayments.data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
+      const spaVoucherTotal = spaVouchers.data?.reduce((sum, b) => sum + (Number(b.voucher_discount) || 0), 0) || 0
+      const eventVoucherTotal = eventVouchers.data?.reduce((sum, b) => sum + (b.voucher_discount || 0), 0) || 0
 
       setStats({
         todayBookings: bookingsToday.count || 0,
         pendingPayments: pendingPayments.count || 0,
         totalClients: clients.count || 0,
         monthlyRevenue: totalRevenue,
+        voucherSavings: spaVoucherTotal + eventVoucherTotal,
       })
     } catch (error) {
       console.error('Error fetching dashboard stats:', error)
@@ -179,8 +192,8 @@ export default function AdminDashboardPage() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            {[...Array(5)].map((_, i) => (
               <div key={i} className="bg-white rounded-xl p-6 shadow-sm animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-24 mb-4" />
                 <div className="h-8 bg-gray-200 rounded w-16" />
@@ -188,7 +201,7 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
             <StatCard
               title="Today's Bookings"
               value={stats.todayBookings.toString()}
@@ -212,6 +225,12 @@ export default function AdminDashboardPage() {
               value={`R${stats.monthlyRevenue.toLocaleString()}`}
               icon="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
               color="bg-emerald-50 text-emerald-700"
+            />
+            <StatCard
+              title="Voucher Savings"
+              value={`R${stats.voucherSavings.toLocaleString()}`}
+              icon="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
+              color="bg-purple-50 text-purple-700"
             />
           </div>
         )}
