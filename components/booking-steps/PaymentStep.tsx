@@ -108,7 +108,8 @@ function getPerPersonUpsellSummary(
 
 function isWeekendOrHoliday(dateString: string, publicHolidayDates: string[]): boolean {
   if (!dateString) return false
-  const date = new Date(dateString)
+  const [year, month, day] = dateString.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
   const dayOfWeek = date.getDay()
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   const isHoliday = publicHolidayDates.includes(dateString)
@@ -188,7 +189,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
     : false
   const afterHoursSurcharge = isAfterHours ? AFTER_HOURS_SURCHARGE_PP * formData.peopleCount : 0
 
-  const weekendSurchargePP = service.weekend_surcharge_pp || 0
+  const weekendSurchargePP = Number(service.weekend_surcharge_pp) || 0
   const isWeekendOrHolidayDate = isWeekendOrHoliday(formData.selectedDate, publicHolidayDates)
   const weekendSurcharge = isWeekendOrHolidayDate && weekendSurchargePP > 0
     ? weekendSurchargePP * formData.peopleCount

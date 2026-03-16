@@ -76,7 +76,8 @@ async function checkRepeatCustomer(
 }
 
 function isWeekend(dateString: string): boolean {
-  const date = new Date(dateString)
+  const [year, month, day] = dateString.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
   const dayOfWeek = date.getDay()
   return dayOfWeek === 0 || dayOfWeek === 6
 }
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const serviceArea = service?.service_area || 'treatment'
-    const weekendSurchargePP = service?.weekend_surcharge_pp || 0
+    const weekendSurchargePP = Number(service?.weekend_surcharge_pp) || 0
 
     let weekendSurchargeAmount = 0
     if (weekendSurchargePP > 0) {
