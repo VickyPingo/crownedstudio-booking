@@ -30,6 +30,7 @@ export interface TimeSlotConfig {
 
 export const BOOKING_BUFFER_MINUTES = 10
 export const SLOT_INTERVAL_MINUTES = 10
+export const AFTER_HOURS_START_TIME = '16:30'
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 
 function timeToMinutes(time: string): number {
@@ -45,7 +46,6 @@ function minutesToTime(minutes: number): string {
 
 export function generateTimeSlots(config: TimeSlotConfig): string[] {
   const { serviceSlug, serviceDurationMinutes, businessHours, serviceTimeWindow, timeBlocks } = config
-  const totalDuration = serviceDurationMinutes + BOOKING_BUFFER_MINUTES
   const slots: string[] = []
 
   const isCrownedNight = CROWNED_NIGHT_SERVICES.includes(serviceSlug)
@@ -64,12 +64,12 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
       ? timeToMinutes(businessHours.after_hours_end_time)
       : closeTime
 
-    for (let time = openTime; time + totalDuration <= closeTime; time += SLOT_INTERVAL_MINUTES) {
+    for (let time = openTime; time + serviceDurationMinutes <= closeTime; time += SLOT_INTERVAL_MINUTES) {
       slots.push(minutesToTime(time))
     }
 
     if (businessHours.after_hours_enabled && businessHours.after_hours_end_time) {
-      for (let time = closeTime; time + totalDuration <= afterHoursEnd; time += SLOT_INTERVAL_MINUTES) {
+      for (let time = closeTime; time + serviceDurationMinutes <= afterHoursEnd; time += SLOT_INTERVAL_MINUTES) {
         if (!slots.includes(minutesToTime(time))) {
           slots.push(minutesToTime(time))
         }
@@ -78,7 +78,7 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
   }
 
   if (timeBlocks && timeBlocks.length > 0) {
-    return filterBlockedSlots(slots, timeBlocks, totalDuration)
+    return filterBlockedSlots(slots, timeBlocks, serviceDurationMinutes)
   }
 
   return slots
@@ -120,16 +120,16 @@ export function isDateFullyBlocked(timeBlocks: TimeBlock[]): boolean {
 export function isAfterHoursSlot(
   time: string,
   serviceSlug: string,
-  businessHours: BusinessHours
+  _businessHours: BusinessHours
 ): boolean {
   if (CROWNED_NIGHT_SERVICES.includes(serviceSlug)) {
     return false
   }
 
   const slotMinutes = timeToMinutes(time)
-  const closeMinutes = timeToMinutes(businessHours.close_time)
+  const afterHoursThreshold = timeToMinutes(AFTER_HOURS_START_TIME)
 
-  return slotMinutes >= closeMinutes
+  return slotMinutes >= afterHoursThreshold
 }
 
 export function calculateAfterHoursSurcharge(
