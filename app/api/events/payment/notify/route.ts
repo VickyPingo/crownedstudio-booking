@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getPayfastConfig, verifyPayfastSignature } from '@/lib/payfast'
+import {
+  sendEventBookingConfirmationToClient,
+  sendEventBookingNotificationToSpa,
+} from '@/lib/email/service'
+import { EventBookingEmailData } from '@/lib/email/templates'
 
 export async function POST(request: NextRequest) {
   try {
@@ -104,6 +109,56 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', transaction.event_booking_id)
+
+      const { data: bookingData } = await supabase
+        .from('event_bookings')
+        .select(`
+          id,
+          booker_name,
+          booker_email,
+          booker_phone,
+          quantity,
+          voucher_code,
+          voucher_discount,
+          total_amount,
+          payment_reference,
+          events (
+            title,
+            event_date
+          )
+        `)
+        .eq('id', transaction.event_booking_id)
+        .maybeSingle()
+
+      if (bookingData && bookingData.events) {
+        const event = bookingData.events as unknown as { title: string; event_date: string }
+        const eventDate = new Date(event.event_date)
+        const formattedDate = eventDate.toLocaleDateString('en-ZA', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+
+        const emailData: EventBookingEmailData = {
+          eventBookingId: bookingData.id,
+          eventTitle: event.title,
+          eventDate: formattedDate,
+          quantity: bookingData.quantity,
+          customerName: bookingData.booker_name,
+          customerEmail: bookingData.booker_email,
+          customerPhone: bookingData.booker_phone || '',
+          voucherCode: bookingData.voucher_code,
+          voucherDiscount: bookingData.voucher_discount || 0,
+          totalAmount: bookingData.total_amount,
+          paymentReference: bookingData.payment_reference,
+        }
+
+        await Promise.all([
+          sendEventBookingConfirmationToClient(emailData),
+          sendEventBookingNotificationToSpa(emailData),
+        ])
+      }
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
     } else {

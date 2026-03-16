@@ -3,12 +3,15 @@ import { sendEmail, SPA_EMAIL } from './resend'
 import {
   BookingEmailData,
   PaymentEmailData,
+  EventBookingEmailData,
   newBookingToSpaTemplate,
   bookingConfirmationToClientTemplate,
   bookingRequestToClientTemplate,
   paymentReceivedToSpaTemplate,
   paymentConfirmationToClientTemplate,
   reminder24hToClientTemplate,
+  eventBookingConfirmationToClientTemplate,
+  eventBookingNotificationToSpaTemplate,
 } from './templates'
 
 type EmailType = 'new_booking_spa' | 'booking_request' | 'booking_confirmation' | 'payment_received_spa' | 'payment_confirmation' | 'reminder_24h'
@@ -313,4 +316,45 @@ export async function cancelReminder(bookingId: string): Promise<void> {
     .update({ status: 'cancelled' })
     .eq('booking_id', bookingId)
     .eq('status', 'pending')
+}
+
+export async function sendEventBookingConfirmationToClient(data: EventBookingEmailData): Promise<boolean> {
+  console.log(`[Email] Starting event booking confirmation for client ${data.customerEmail}`)
+
+  if (!data.customerEmail) {
+    console.log(`[Email] No customer email provided for event booking ${data.eventBookingId}, skipping`)
+    return false
+  }
+
+  const html = eventBookingConfirmationToClientTemplate(data)
+  const subject = `Your Event Booking is Confirmed - ${data.eventTitle}`
+
+  console.log(`[Email] Sending event booking confirmation to ${data.customerEmail}`)
+  const result = await sendEmail(data.customerEmail, subject, html)
+
+  if (result.success) {
+    console.log(`[Email] Event booking confirmation sent successfully to ${data.customerEmail}`)
+  } else {
+    console.error(`[Email] Event booking confirmation FAILED for ${data.customerEmail}:`, result.error)
+  }
+
+  return result.success
+}
+
+export async function sendEventBookingNotificationToSpa(data: EventBookingEmailData): Promise<boolean> {
+  console.log(`[Email] Starting event booking notification to spa for booking ${data.eventBookingId}`)
+
+  const html = eventBookingNotificationToSpaTemplate(data)
+  const subject = `New Event Booking: ${data.customerName} - ${data.eventTitle} (${data.quantity} tickets)`
+
+  console.log(`[Email] Sending event booking notification to ${SPA_EMAIL}`)
+  const result = await sendEmail(SPA_EMAIL, subject, html)
+
+  if (result.success) {
+    console.log(`[Email] Event booking notification sent successfully to spa`)
+  } else {
+    console.error(`[Email] Event booking notification FAILED:`, result.error)
+  }
+
+  return result.success
 }

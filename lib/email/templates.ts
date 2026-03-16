@@ -246,7 +246,7 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
         <div class="contact-info">
           <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
           <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 081 737 8878</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
         </div>
         <p class="footer-text" style="margin-top: 24px;">
           We look forward to seeing you! If you need to make any changes to your booking, please contact us at least 24 hours in advance.
@@ -375,7 +375,7 @@ export function paymentConfirmationToClientTemplate(data: PaymentEmailData): str
         <div class="contact-info">
           <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
           <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 081 737 8878</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
         </div>
         <p class="footer-text" style="margin-top: 24px;">
           We look forward to seeing you!
@@ -453,7 +453,7 @@ export function reminder24hToClientTemplate(data: BookingEmailData): string {
         <div class="contact-info">
           <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
           <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 081 737 8878</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
         </div>
         <p class="footer-text" style="margin-top: 24px;">
           We look forward to seeing you tomorrow!
@@ -544,11 +544,171 @@ export function bookingRequestToClientTemplate(data: BookingEmailData): string {
         <div class="contact-info">
           <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
           <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 081 737 8878</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
         </div>
         <p class="footer-text" style="margin-top: 24px;">
           If you have any questions, please don't hesitate to contact us.
         </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+export interface EventBookingEmailData {
+  eventBookingId: string
+  eventTitle: string
+  eventDate: string
+  quantity: number
+  customerName: string
+  customerEmail: string
+  customerPhone: string
+  voucherCode: string | null
+  voucherDiscount: number
+  totalAmount: number
+  paymentReference: string | null
+}
+
+export function eventBookingConfirmationToClientTemplate(data: EventBookingEmailData): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Event Booking Confirmed</title>
+  <style>${baseStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="logo">Crowned Studio</div>
+        <h1 class="title" style="margin-top: 16px;">Your Event Booking is Confirmed</h1>
+        <p class="subtitle">Thank you for booking with Crowned Studio</p>
+      </div>
+
+      <p style="font-size: 15px; color: #374151; margin-bottom: 24px;">
+        Dear ${data.customerName},<br><br>
+        We're delighted to confirm your event booking. Here are your details:
+      </p>
+
+      <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px;">
+        <div style="font-size: 14px; color: #9ca3af; margin-bottom: 8px;">YOUR EVENT</div>
+        <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.eventTitle}</div>
+        <div style="font-size: 16px;">${data.eventDate}</div>
+        <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.quantity} ${data.quantity === 1 ? 'ticket' : 'tickets'}</div>
+      </div>
+
+      <div class="section" style="margin-top: 24px;">
+        <div class="section-title">Booking Reference</div>
+        <div style="font-size: 18px; font-weight: 600; color: #111827; font-family: monospace;">${data.eventBookingId.slice(0, 8).toUpperCase()}</div>
+      </div>
+
+      ${data.voucherCode ? `
+      <div class="section">
+        <div class="section-title">Voucher Applied</div>
+        <div class="highlight-box" style="background: #d1fae5;">
+          <table>
+            <tr><td class="label-cell">Voucher Code</td><td class="value-cell" style="color: #065f46; font-weight: 600;">${data.voucherCode}</td></tr>
+            <tr><td class="label-cell">Discount</td><td class="value-cell" style="color: #065f46; font-weight: 600;">R${data.voucherDiscount}</td></tr>
+          </table>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <div class="section-title">Payment Summary</div>
+        <div class="highlight-box" style="background: #d1fae5; text-align: center;">
+          <span class="badge badge-success">Payment Complete</span>
+          <div style="font-size: 24px; font-weight: 700; color: #065f46; margin-top: 8px;">R${data.totalAmount.toLocaleString()}</div>
+          ${data.paymentReference ? `<div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Payment Ref: ${data.paymentReference}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="section-title">Contact Us</div>
+        <div class="contact-info">
+          <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
+          <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
+        </div>
+        <p class="footer-text" style="margin-top: 24px;">
+          We look forward to seeing you at the event!
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+export function eventBookingNotificationToSpaTemplate(data: EventBookingEmailData): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Event Booking</title>
+  <style>${baseStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="logo">Crowned Studio</div>
+        <h1 class="title" style="margin-top: 16px;">New Event Booking Received</h1>
+        <p class="subtitle">Booking ID: ${data.eventBookingId.slice(0, 8).toUpperCase()}</p>
+      </div>
+
+      <div class="highlight-box" style="text-align: center;">
+        <div style="font-size: 14px; color: #6b7280; margin-bottom: 4px;">Amount Received</div>
+        <div class="amount" style="color: #059669;">R${data.totalAmount.toLocaleString()}</div>
+        <span class="badge badge-success" style="margin-top: 8px;">Payment Complete</span>
+      </div>
+
+      <div class="section" style="margin-top: 24px;">
+        <div class="section-title">Event Details</div>
+        <table>
+          <tr><td class="label-cell">Event</td><td class="value-cell">${data.eventTitle}</td></tr>
+          <tr><td class="label-cell">Date</td><td class="value-cell">${data.eventDate}</td></tr>
+          <tr><td class="label-cell">Tickets</td><td class="value-cell">${data.quantity}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Customer Details</div>
+        <table>
+          <tr><td class="label-cell">Name</td><td class="value-cell">${data.customerName}</td></tr>
+          <tr><td class="label-cell">Email</td><td class="value-cell">${data.customerEmail}</td></tr>
+          <tr><td class="label-cell">Phone</td><td class="value-cell">${data.customerPhone || 'Not provided'}</td></tr>
+        </table>
+      </div>
+
+      ${data.voucherCode ? `
+      <div class="section">
+        <div class="section-title">Voucher Applied</div>
+        <div class="highlight-box" style="background: #d1fae5;">
+          <table>
+            <tr><td class="label-cell">Voucher Code</td><td class="value-cell" style="color: #065f46; font-weight: 600;">${data.voucherCode}</td></tr>
+            <tr><td class="label-cell">Discount</td><td class="value-cell" style="color: #065f46; font-weight: 600;">R${data.voucherDiscount}</td></tr>
+          </table>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <div class="section-title">Payment Details</div>
+        <table>
+          <tr><td class="label-cell">Total Paid</td><td class="value-cell"><strong>R${data.totalAmount.toLocaleString()}</strong></td></tr>
+          ${data.paymentReference ? `<tr><td class="label-cell">Payment Ref</td><td class="value-cell">${data.paymentReference}</td></tr>` : ''}
+        </table>
+      </div>
+
+      <div class="footer">
+        <p class="footer-text">This is an automated notification from Crowned Studio booking system.</p>
       </div>
     </div>
   </div>
