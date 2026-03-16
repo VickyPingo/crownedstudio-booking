@@ -157,6 +157,12 @@ export default function RoomsCalendarPage() {
 
   const unassignedBookings = bookings.filter(b => !b.room_id)
 
+  const getBookingsForRoom = (roomId: string): RoomBooking[] => {
+    return bookings
+      .filter(b => b.room_id === roomId)
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+  }
+
   return (
     <AdminLayout>
       <div>
@@ -223,87 +229,158 @@ export default function RoomsCalendarPage() {
               </div>
             )}
 
-            <p className="text-xs text-gray-500 mb-2 lg:hidden">Scroll horizontally to view all rooms</p>
-            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-              <div className="min-w-[700px] lg:min-w-0">
-                <div className="grid gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden"
-                  style={{ gridTemplateColumns: `60px repeat(${rooms.length}, minmax(100px, 1fr))` }}
-                >
-                  <div className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-700 text-xs sm:text-sm">
-                    Time
+            <div className="hidden lg:block overflow-x-auto">
+              <div className="grid gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden"
+                style={{ gridTemplateColumns: `60px repeat(${rooms.length}, minmax(100px, 1fr))` }}
+              >
+                <div className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-700 text-xs sm:text-sm">
+                  Time
+                </div>
+                {rooms.map((room) => (
+                  <div key={room.id} className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-900 text-xs sm:text-sm text-center">
+                    <span className="truncate block">{room.room_name}</span>
+                    <span className="block text-xs text-gray-500 font-normal">Cap: {room.capacity}</span>
                   </div>
-                  {rooms.map((room) => (
-                    <div key={room.id} className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-900 text-xs sm:text-sm text-center">
-                      <span className="truncate block">{room.room_name}</span>
-                      <span className="block text-xs text-gray-500 font-normal">Cap: {room.capacity}</span>
+                ))}
+
+                {TIME_SLOTS.map((timeSlot) => (
+                  <>
+                    <div key={`time-${timeSlot}`} className="bg-white p-1 sm:p-2 text-xs sm:text-sm text-gray-600 border-t border-gray-100">
+                      {timeSlot}
                     </div>
-                  ))}
+                    {rooms.map((room) => {
+                      const booking = getBookingForSlot(room.id, timeSlot)
+                      const isStart = booking && isBookingStart(room.id, timeSlot)
 
-                  {TIME_SLOTS.map((timeSlot) => (
-                    <>
-                      <div key={`time-${timeSlot}`} className="bg-white p-1 sm:p-2 text-xs sm:text-sm text-gray-600 border-t border-gray-100">
-                        {timeSlot}
-                      </div>
-                      {rooms.map((room) => {
-                        const booking = getBookingForSlot(room.id, timeSlot)
-                        const isStart = booking && isBookingStart(room.id, timeSlot)
+                      if (booking && !isStart) {
+                        return <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100" />
+                      }
 
-                        if (booking && !isStart) {
-                          return <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100" />
-                        }
-
-                        if (booking && isStart) {
-                          const span = getBookingSpan(booking)
-                          const paymentStatus = getPaymentStatus(booking)
-
-                          return (
-                            <div
-                              key={`${room.id}-${timeSlot}`}
-                              className="bg-white border-t border-gray-100 relative"
-                              style={{ gridRow: `span ${span}` }}
-                            >
-                              <button
-                                onClick={() => setSelectedBookingId(booking.id)}
-                                className={`absolute inset-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)}`}
-                              >
-                                <p className="font-medium text-sm truncate">
-                                  {booking.customer?.full_name}
-                                </p>
-                                <p className="text-xs truncate opacity-80">
-                                  {booking.service?.name}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs">
-                                    {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </span>
-                                  <span className="text-xs opacity-70">
-                                    {booking.people_count}p
-                                  </span>
-                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                    paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
-                                    paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
-                                    'bg-amber-200 text-amber-800'
-                                  }`}>
-                                    {paymentStatus === 'paid' ? 'Paid' :
-                                     paymentStatus === 'partial' ? 'Partial' : 'Pending'}
-                                  </span>
-                                </div>
-                              </button>
-                            </div>
-                          )
-                        }
+                      if (booking && isStart) {
+                        const span = getBookingSpan(booking)
+                        const paymentStatus = getPaymentStatus(booking)
 
                         return (
-                          <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100 min-h-[40px]" />
+                          <div
+                            key={`${room.id}-${timeSlot}`}
+                            className="bg-white border-t border-gray-100 relative"
+                            style={{ gridRow: `span ${span}` }}
+                          >
+                            <button
+                              onClick={() => setSelectedBookingId(booking.id)}
+                              className={`absolute inset-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)}`}
+                            >
+                              <p className="font-medium text-sm truncate">
+                                {booking.customer?.full_name}
+                              </p>
+                              <p className="text-xs truncate opacity-80">
+                                {booking.service?.name}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs">
+                                  {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                                <span className="text-xs opacity-70">
+                                  {booking.people_count}p
+                                </span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                  paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
+                                  paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
+                                  'bg-amber-200 text-amber-800'
+                                }`}>
+                                  {paymentStatus === 'paid' ? 'Paid' :
+                                   paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                                </span>
+                              </div>
+                            </button>
+                          </div>
                         )
-                      })}
-                    </>
-                  ))}
-                </div>
+                      }
+
+                      return (
+                        <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100 min-h-[40px]" />
+                      )
+                    })}
+                  </>
+                ))}
               </div>
+            </div>
+
+            <div className="lg:hidden space-y-4">
+              {rooms.map((room) => {
+                const roomBookings = getBookingsForRoom(room.id)
+                return (
+                  <div key={room.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold">{room.room_name}</h3>
+                        <p className="text-xs text-gray-300">Capacity: {room.capacity}</p>
+                      </div>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        roomBookings.length > 0 ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'
+                      }`}>
+                        {roomBookings.length} booking{roomBookings.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {roomBookings.length === 0 ? (
+                      <div className="p-4 text-center text-gray-500 text-sm">
+                        No bookings for this room today
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {roomBookings.map((booking) => {
+                          const paymentStatus = getPaymentStatus(booking)
+                          return (
+                            <button
+                              key={booking.id}
+                              onClick={() => setSelectedBookingId(booking.id)}
+                              className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${getStatusColor(booking.status)} border-l-4`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {booking.customer?.full_name}
+                                  </p>
+                                  <p className="text-sm text-gray-600 truncate">
+                                    {booking.service?.name}
+                                  </p>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded shrink-0 ${
+                                  paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
+                                  paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
+                                  'bg-amber-200 text-amber-800'
+                                }`}>
+                                  {paymentStatus === 'paid' ? 'Paid' :
+                                   paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                                <span className="font-medium">
+                                  {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                  {' - '}
+                                  {new Date(booking.end_time).toLocaleTimeString('en-ZA', {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                                <span className="text-gray-400">|</span>
+                                <span>{booking.people_count} person{booking.people_count !== 1 ? 's' : ''}</span>
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </>
         )}
