@@ -19,10 +19,16 @@ export default async function Home() {
       price_6_people,
       max_people,
       duration_minutes,
-      allowed_upsells
+      allowed_upsells,
+      weekend_surcharge_pp
     `)
     .eq("active", true)
     .order("name", { ascending: true })
+
+  const { data: publicHolidays } = await supabaseAdmin
+    .from("public_holidays")
+    .select("date")
+    .eq("active", true)
 
   const { data: allUpsells } = await supabaseAdmin
     .from("upsells")
@@ -88,6 +94,7 @@ export default async function Home() {
         services={servicesWithUpsells}
         businessHours={businessHours}
         serviceTimeWindows={timeWindowsMap}
+        publicHolidayDates={(publicHolidays || []).map(h => h.date)}
       />
     </main>
   )

@@ -12,6 +12,7 @@ export interface Service {
   max_people: number
   duration_minutes: number
   allowed_upsells: string | null
+  weekend_surcharge_pp: number
 }
 
 export interface ServiceWithUpsells extends Service {

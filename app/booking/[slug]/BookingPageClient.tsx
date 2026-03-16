@@ -12,6 +12,7 @@ interface BookingPageClientProps {
   serviceName: string
   businessHours: BusinessHoursData
   serviceTimeWindows: Record<string, ServiceTimeWindowData>
+  publicHolidayDates: string[]
 }
 
 export function BookingPageClient({
@@ -20,6 +21,7 @@ export function BookingPageClient({
   serviceName,
   businessHours,
   serviceTimeWindows,
+  publicHolidayDates,
 }: BookingPageClientProps) {
   const { openModalBySlug } = useBookingModal()
 
@@ -41,6 +43,7 @@ export function BookingPageClient({
         services={services}
         businessHours={businessHours}
         serviceTimeWindows={serviceTimeWindows}
+        publicHolidayDates={publicHolidayDates}
       />
     </main>
   )

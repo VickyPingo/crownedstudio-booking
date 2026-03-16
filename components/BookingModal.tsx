@@ -71,12 +71,14 @@ interface BookingModalProps {
   services: ServiceWithUpsells[]
   businessHours?: BusinessHoursData
   serviceTimeWindows?: Record<string, ServiceTimeWindowData>
+  publicHolidayDates?: string[]
 }
 
 export function BookingModal({
   services,
   businessHours = DEFAULT_BUSINESS_HOURS,
   serviceTimeWindows = {},
+  publicHolidayDates = [],
 }: BookingModalProps) {
   const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
@@ -258,6 +260,7 @@ export function BookingModal({
             service={resolvedService}
             formData={formData}
             businessHours={businessHours}
+            publicHolidayDates={publicHolidayDates}
           />
         )
       case 5:

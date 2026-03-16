@@ -106,13 +106,23 @@ function getPerPersonUpsellSummary(
   return summaries
 }
 
+function isWeekendOrHoliday(dateString: string, publicHolidayDates: string[]): boolean {
+  if (!dateString) return false
+  const date = new Date(dateString)
+  const dayOfWeek = date.getDay()
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+  const isHoliday = publicHolidayDates.includes(dateString)
+  return isWeekend || isHoliday
+}
+
 interface PaymentStepProps {
   service: ServiceWithUpsells
   formData: BookingFormData
   businessHours: BusinessHoursData
+  publicHolidayDates: string[]
 }
 
-export function PaymentStep({ service, formData, businessHours }: PaymentStepProps) {
+export function PaymentStep({ service, formData, businessHours, publicHolidayDates }: PaymentStepProps) {
   const [isCreatingBooking, setIsCreatingBooking] = useState(false)
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const { savedBooking, setSavedBooking } = useBookingModal()
@@ -178,7 +188,13 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
     : false
   const afterHoursSurcharge = isAfterHours ? AFTER_HOURS_SURCHARGE_PP * formData.peopleCount : 0
 
-  const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge
+  const weekendSurchargePP = service.weekend_surcharge_pp || 0
+  const isWeekendOrHolidayDate = isWeekendOrHoliday(formData.selectedDate, publicHolidayDates)
+  const weekendSurcharge = isWeekendOrHolidayDate && weekendSurchargePP > 0
+    ? weekendSurchargePP * formData.peopleCount
+    : 0
+
+  const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge + weekendSurcharge
 
   const repeatCustomerDiscount = isRepeatCustomer && !appliedVoucher
     ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
@@ -278,6 +294,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         servicePrice,
         upsellsTotal,
         afterHoursSurcharge,
+        weekendSurcharge,
         subtotal,
         discountAmount: savedBooking.discountAmount,
         discountType: savedBooking.discountType,
@@ -288,6 +305,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         servicePrice,
         upsellsTotal,
         afterHoursSurcharge,
+        weekendSurcharge,
         subtotal,
         discountAmount: activeDiscount,
         discountType: activeDiscountType,
@@ -319,6 +337,7 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
+        weekendSurchargeAmount: weekendSurcharge,
         discountAmount: activeDiscount,
         discountType: activeDiscountType,
         totalPrice: finalTotal,
@@ -581,6 +600,18 @@ export function PaymentStep({ service, formData, businessHours }: PaymentStepPro
                   After-hours surcharge (R{AFTER_HOURS_SURCHARGE_PP} x {formData.peopleCount})
                 </span>
                 <span className="font-medium">R{pricing.afterHoursSurcharge}</span>
+              </div>
+            )}
+
+            {pricing.weekendSurcharge > 0 && (
+              <div className="flex justify-between text-sm text-amber-800 bg-amber-50 -mx-4 px-4 py-2">
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Weekend / Public Holiday Surcharge (R{weekendSurchargePP} x {formData.peopleCount})
+                </span>
+                <span className="font-medium">R{pricing.weekendSurcharge}</span>
               </div>
             )}
 

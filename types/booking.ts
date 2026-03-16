@@ -24,6 +24,7 @@ export interface BookingPricing {
   servicePrice: number
   upsellsTotal: number
   afterHoursSurcharge: number
+  weekendSurcharge: number
   subtotal: number
   discountAmount: number
   discountType: 'repeat_customer' | 'voucher' | null
@@ -47,6 +48,7 @@ export interface CreateBookingPayload {
   selectedUpsellsByPerson: PerPersonUpsells
   basePrice: number
   upsellsTotal: number
+  weekendSurchargeAmount?: number
   discountAmount: number
   discountType: string | null
   totalPrice: number

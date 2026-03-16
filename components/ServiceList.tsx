@@ -9,9 +9,10 @@ interface ServiceListProps {
   services: ServiceWithUpsells[]
   businessHours: BusinessHoursData
   serviceTimeWindows: Record<string, ServiceTimeWindowData>
+  publicHolidayDates: string[]
 }
 
-export function ServiceList({ services, businessHours, serviceTimeWindows }: ServiceListProps) {
+export function ServiceList({ services, businessHours, serviceTimeWindows, publicHolidayDates }: ServiceListProps) {
   const { openModal } = useBookingModal()
 
   return (
@@ -63,6 +64,7 @@ export function ServiceList({ services, businessHours, serviceTimeWindows }: Ser
         services={services}
         businessHours={businessHours}
         serviceTimeWindows={serviceTimeWindows}
+        publicHolidayDates={publicHolidayDates}
       />
     </>
   )

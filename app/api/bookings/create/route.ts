@@ -75,6 +75,26 @@ async function checkRepeatCustomer(
   return confirmedBookings !== null && confirmedBookings.length > 0
 }
 
+function isWeekend(dateString: string): boolean {
+  const date = new Date(dateString)
+  const dayOfWeek = date.getDay()
+  return dayOfWeek === 0 || dayOfWeek === 6
+}
+
+async function isPublicHoliday(
+  supabase: typeof supabaseAdmin,
+  dateString: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('public_holidays')
+    .select('id')
+    .eq('date', dateString)
+    .eq('active', true)
+    .limit(1)
+
+  return data !== null && data.length > 0
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
@@ -113,6 +133,31 @@ export async function POST(request: NextRequest) {
     }
 
     const hasVoucher = payload.voucherId && payload.voucherCode && payload.voucherDiscount
+
+    const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
+    const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
+    const paymentExpiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60000)
+
+    const { data: service } = await supabase
+      .from('services')
+      .select('service_area, weekend_surcharge_pp')
+      .eq('slug', payload.serviceSlug)
+      .maybeSingle()
+
+    const serviceArea = service?.service_area || 'treatment'
+    const weekendSurchargePP = service?.weekend_surcharge_pp || 0
+
+    let weekendSurchargeAmount = 0
+    if (weekendSurchargePP > 0) {
+      const dateIsWeekend = isWeekend(payload.selectedDate)
+      const dateIsHoliday = await isPublicHoliday(supabase, payload.selectedDate)
+      if (dateIsWeekend || dateIsHoliday) {
+        weekendSurchargeAmount = weekendSurchargePP * payload.peopleCount
+      }
+    }
+
+    const subtotal = payload.basePrice + payload.upsellsTotal + weekendSurchargeAmount
+
     let discountAmount = 0
     let discountType: string | null = null
 
@@ -122,29 +167,15 @@ export async function POST(request: NextRequest) {
     } else {
       const isRepeatCustomer = await checkRepeatCustomer(supabase, payload.customerEmail, payload.customerPhone)
       if (isRepeatCustomer) {
-        const subtotal = payload.basePrice + payload.upsellsTotal
         discountAmount = Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
         discountType = 'repeat_customer'
       }
     }
 
-    const subtotal = payload.basePrice + payload.upsellsTotal
     const cappedDiscount = Math.min(discountAmount, subtotal)
     const totalPrice = Math.max(0, subtotal - cappedDiscount)
     const depositDue = Math.max(0, Math.round(totalPrice * DEPOSIT_PERCENT))
     const isZeroPayment = totalPrice === 0 || depositDue === 0
-
-    const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
-    const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
-    const paymentExpiresAt = new Date(Date.now() + PAYMENT_EXPIRY_MINUTES * 60000)
-
-    const { data: service } = await supabase
-      .from('services')
-      .select('service_area')
-      .eq('slug', payload.serviceSlug)
-      .maybeSingle()
-
-    const serviceArea = service?.service_area || 'treatment'
 
     let roomAllocation: { room_id: string | null; room_name: string | null; error?: string }
     try {
@@ -179,6 +210,7 @@ export async function POST(request: NextRequest) {
         end_time: endDateTime.toISOString(),
         base_price: payload.basePrice,
         upsells_total: payload.upsellsTotal,
+        weekend_surcharge_amount: weekendSurchargeAmount,
         discount_amount: cappedDiscount,
         discount_type: discountType,
         total_price: totalPrice,
