@@ -159,10 +159,10 @@ export default function RoomsCalendarPage() {
 
   return (
     <AdminLayout>
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Room Calendar</h1>
-          <div className="flex items-center gap-3">
+      <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Room Calendar</h1>
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => changeDate(-1)}
               className="p-2 hover:bg-gray-100 rounded-lg"
@@ -175,7 +175,7 @@ export default function RoomsCalendarPage() {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+              className="px-2 sm:px-4 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm sm:text-base w-[140px] sm:w-auto"
             />
             <button
               onClick={() => changeDate(1)}
@@ -187,7 +187,7 @@ export default function RoomsCalendarPage() {
             </button>
             <button
               onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+              className="px-3 sm:px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
             >
               Today
             </button>
@@ -199,7 +199,7 @@ export default function RoomsCalendarPage() {
         ) : (
           <>
             {unassignedBookings.length > 0 && (
-              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-lg">
                 <h3 className="text-sm font-semibold text-amber-800 mb-2">
                   Unassigned Bookings ({unassignedBookings.length})
                 </h3>
@@ -208,10 +208,10 @@ export default function RoomsCalendarPage() {
                     <button
                       key={booking.id}
                       onClick={() => setSelectedBookingId(booking.id)}
-                      className="px-3 py-2 bg-white border border-amber-300 rounded-lg text-sm hover:bg-amber-100"
+                      className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white border border-amber-300 rounded-lg text-xs sm:text-sm hover:bg-amber-100"
                     >
                       <span className="font-medium text-gray-900">{booking.customer?.full_name}</span>
-                      <span className="text-gray-500 ml-2">
+                      <span className="text-gray-500 ml-1 sm:ml-2">
                         {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
                           hour: '2-digit',
                           minute: '2-digit'
@@ -223,24 +223,25 @@ export default function RoomsCalendarPage() {
               </div>
             )}
 
-            <div className="overflow-x-auto">
-              <div className="min-w-[900px]">
+            <p className="text-xs text-gray-500 mb-2 lg:hidden">Scroll horizontally to view all rooms</p>
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <div className="min-w-[700px] lg:min-w-0">
                 <div className="grid gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden"
-                  style={{ gridTemplateColumns: `80px repeat(${rooms.length}, 1fr)` }}
+                  style={{ gridTemplateColumns: `60px repeat(${rooms.length}, minmax(100px, 1fr))` }}
                 >
-                  <div className="bg-gray-50 p-3 font-semibold text-gray-700 text-sm">
+                  <div className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-700 text-xs sm:text-sm">
                     Time
                   </div>
                   {rooms.map((room) => (
-                    <div key={room.id} className="bg-gray-50 p-3 font-semibold text-gray-900 text-sm text-center">
-                      {room.room_name}
+                    <div key={room.id} className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-900 text-xs sm:text-sm text-center">
+                      <span className="truncate block">{room.room_name}</span>
                       <span className="block text-xs text-gray-500 font-normal">Cap: {room.capacity}</span>
                     </div>
                   ))}
 
                   {TIME_SLOTS.map((timeSlot) => (
                     <>
-                      <div key={`time-${timeSlot}`} className="bg-white p-2 text-sm text-gray-600 border-t border-gray-100">
+                      <div key={`time-${timeSlot}`} className="bg-white p-1 sm:p-2 text-xs sm:text-sm text-gray-600 border-t border-gray-100">
                         {timeSlot}
                       </div>
                       {rooms.map((room) => {

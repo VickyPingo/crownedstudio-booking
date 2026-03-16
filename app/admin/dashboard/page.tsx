@@ -162,14 +162,14 @@ export default function AdminDashboardPage() {
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">Welcome back. Here is your overview for today.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1 text-sm sm:text-base">Welcome back. Here is your overview for today.</p>
           </div>
           <button
             onClick={() => setShowManualBooking(true)}
-            className="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+            className="px-4 py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -188,7 +188,7 @@ export default function AdminDashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             <StatCard
               title="Today's Bookings"
               value={stats.todayBookings.toString()}
@@ -216,8 +216,8 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border-2 border-teal-500">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border-2 border-teal-500">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
               <p className="text-xs font-bold text-teal-600 mb-1">ROOM OVERVIEW</p>
               <h2 className="text-lg font-semibold text-gray-900">Room Overview</h2>
@@ -226,9 +226,9 @@ export default function AdminDashboardPage() {
           </div>
 
           {roomsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="bg-gray-50 rounded-lg p-4 animate-pulse">
+                <div key={i} className="bg-gray-50 rounded-lg p-3 sm:p-4 animate-pulse">
                   <div className="h-4 bg-gray-200 rounded w-20 mb-3" />
                   <div className="h-3 bg-gray-200 rounded w-full mb-2" />
                   <div className="h-3 bg-gray-200 rounded w-2/3" />
@@ -257,19 +257,19 @@ export default function AdminDashboardPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                 {roomStatuses.map(({ room, currentBooking, nextBooking }) => (
                   <div
                     key={room.id}
-                    className={`rounded-lg p-4 border ${
+                    className={`rounded-lg p-3 sm:p-4 border ${
                       currentBooking
                         ? 'bg-blue-50 border-blue-200'
                         : 'bg-gray-50 border-gray-200'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900">{room.room_name}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{room.room_name}</h3>
+                      <span className={`text-xs px-2 py-0.5 rounded-full w-fit ${
                         room.room_area === 'public'
                           ? 'bg-teal-100 text-teal-800'
                           : 'bg-blue-100 text-blue-800'
@@ -277,12 +277,12 @@ export default function AdminDashboardPage() {
                         {room.room_area}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-3">Capacity: {room.capacity}</p>
+                    <p className="text-xs text-gray-500 mb-2 sm:mb-3">Cap: {room.capacity}</p>
 
                     {currentBooking ? (
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-blue-800">In Session</p>
-                        <p className="text-sm text-gray-900 truncate">{currentBooking.customer?.full_name}</p>
+                        <p className="text-xs sm:text-sm text-gray-900 truncate">{currentBooking.customer?.full_name}</p>
                         <p className="text-xs text-gray-600">
                           Until {new Date(currentBooking.end_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
                         </p>
@@ -290,7 +290,7 @@ export default function AdminDashboardPage() {
                     ) : nextBooking ? (
                       <div className="space-y-1">
                         <p className="text-xs font-medium text-gray-600">Next</p>
-                        <p className="text-sm text-gray-900 truncate">{nextBooking.customer?.full_name}</p>
+                        <p className="text-xs sm:text-sm text-gray-900 truncate">{nextBooking.customer?.full_name}</p>
                         <p className="text-xs text-gray-600">
                           {new Date(nextBooking.start_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
                         </p>
@@ -305,8 +305,8 @@ export default function AdminDashboardPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl p-6 shadow-sm">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
             <div className="space-y-3">
               <button
@@ -324,7 +324,7 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl p-6 shadow-sm">
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
             <p className="text-gray-600 text-sm">Activity feed will appear here once bookings are made.</p>
           </div>
@@ -356,14 +356,14 @@ function StatCard({
   color: string
 }) {
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+    <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+      <div className="flex items-start sm:items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-gray-600 truncate">{title}</p>
+          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">{value}</p>
         </div>
-        <div className={`p-3 rounded-lg ${color}`}>
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <div className={`p-2 sm:p-3 rounded-lg shrink-0 ${color}`}>
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
           </svg>
         </div>

@@ -109,7 +109,7 @@ export default function AdminClientsPage() {
         </div>
 
         <div className="bg-white rounded-xl shadow-sm">
-          <div className="p-4 border-b flex items-center justify-between">
+          <div className="p-4 border-b flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
             <p className="text-sm text-gray-600">{filteredClients.length} clients</p>
             <div className="relative">
               <input
@@ -117,7 +117,7 @@ export default function AdminClientsPage() {
                 placeholder="Search clients..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-64 px-4 py-2 pl-10 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full sm:w-64 px-4 py-2 pl-10 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
               />
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500"
@@ -140,61 +140,91 @@ export default function AdminClientsPage() {
           ) : filteredClients.length === 0 ? (
             <div className="p-8 text-center text-gray-600">No clients found.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Client
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Bookings
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Total Spent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Last Booking
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredClients.map((client) => (
-                    <tr
-                      key={client.id}
-                      onClick={() => router.push(`/admin/clients/${client.id}`)}
-                      className="hover:bg-gray-50 cursor-pointer"
-                    >
-                      <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">{client.full_name}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-gray-900">{client.email || '-'}</p>
-                        <p className="text-sm text-gray-600">{client.phone || '-'}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {client.bookingCount} booking{client.bookingCount !== 1 ? 's' : ''}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900">R{client.totalSpent.toLocaleString()}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-gray-900">
-                          {client.lastBooking
-                            ? new Date(client.lastBooking).toLocaleDateString('en-ZA')
-                            : '-'}
-                        </p>
-                      </td>
+            <>
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Contact
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Bookings
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Total Spent
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Last Booking
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredClients.map((client) => (
+                      <tr
+                        key={client.id}
+                        onClick={() => router.push(`/admin/clients/${client.id}`)}
+                        className="hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="px-6 py-4">
+                          <p className="font-medium text-gray-900">{client.full_name}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-gray-900">{client.email || '-'}</p>
+                          <p className="text-sm text-gray-600">{client.phone || '-'}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {client.bookingCount} booking{client.bookingCount !== 1 ? 's' : ''}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="font-medium text-gray-900">R{client.totalSpent.toLocaleString()}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-gray-900">
+                            {client.lastBooking
+                              ? new Date(client.lastBooking).toLocaleDateString('en-ZA')
+                              : '-'}
+                          </p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="lg:hidden divide-y divide-gray-200">
+                {filteredClients.map((client) => (
+                  <button
+                    key={client.id}
+                    onClick={() => router.push(`/admin/clients/${client.id}`)}
+                    className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-900">{client.full_name}</p>
+                        <p className="text-sm text-gray-600 truncate">{client.email || '-'}</p>
+                      </div>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 shrink-0">
+                        {client.bookingCount} booking{client.bookingCount !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <p className="text-gray-600">
+                        Last: {client.lastBooking
+                          ? new Date(client.lastBooking).toLocaleDateString('en-ZA')
+                          : 'N/A'}
+                      </p>
+                      <p className="font-medium text-gray-900">R{client.totalSpent.toLocaleString()}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>

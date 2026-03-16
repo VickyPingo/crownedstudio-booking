@@ -242,92 +242,135 @@ export default function AdminBookingsPage() {
           ) : filteredBookings.length === 0 ? (
             <div className="p-8 text-center text-gray-600">No bookings found.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Client
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Service
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Room
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Date & Time
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Payment
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredBookings.map((booking) => {
-                    const paymentStatus = getPaymentStatus(booking)
-                    return (
-                      <tr
-                        key={booking.id}
-                        onClick={() => setSelectedBookingId(booking.id)}
-                        className="hover:bg-gray-50 cursor-pointer"
-                      >
-                        <td className="px-6 py-4">
-                          <div>
-                            <p className="font-medium text-gray-900">{booking.customer_name || 'Unknown'}</p>
-                            <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
-                          {booking.pricing_option_name && (
-                            <p className="text-sm text-gray-600">{booking.pricing_option_name}</p>
-                          )}
-                          <p className="text-sm text-gray-500">{booking.people_count} person(s)</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          {booking.room_name ? (
-                            <span className="text-gray-900">{booking.room_name}</span>
-                          ) : (
-                            <span className="text-gray-400 text-sm">Unassigned</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-gray-900">
-                            {new Date(booking.start_time).toLocaleDateString('en-ZA')}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-4">
+            <>
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Service
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Room
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Date & Time
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Payment
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredBookings.map((booking) => {
+                      const paymentStatus = getPaymentStatus(booking)
+                      return (
+                        <tr
+                          key={booking.id}
+                          onClick={() => setSelectedBookingId(booking.id)}
+                          className="hover:bg-gray-50 cursor-pointer"
+                        >
+                          <td className="px-6 py-4">
+                            <div>
+                              <p className="font-medium text-gray-900">{booking.customer_name || 'Unknown'}</p>
+                              <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
+                            {booking.pricing_option_name && (
+                              <p className="text-sm text-gray-600">{booking.pricing_option_name}</p>
+                            )}
+                            <p className="text-sm text-gray-500">{booking.people_count} person(s)</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            {booking.room_name ? (
+                              <span className="text-gray-900">{booking.room_name}</span>
+                            ) : (
+                              <span className="text-gray-400 text-sm">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-gray-900">
+                              {new Date(booking.start_time).toLocaleDateString('en-ZA')}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>
+                              {formatStatus(booking.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${paymentStatus.style}`}>
+                              {paymentStatus.label}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="lg:hidden divide-y divide-gray-200">
+                {filteredBookings.map((booking) => {
+                  const paymentStatus = getPaymentStatus(booking)
+                  return (
+                    <button
+                      key={booking.id}
+                      onClick={() => setSelectedBookingId(booking.id)}
+                      className="w-full p-4 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900 truncate">{booking.customer_name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-600 truncate">{booking.service_name || booking.service_slug || '-'}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
                           <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>
                             {formatStatus(booking.status)}
                           </span>
-                        </td>
-                        <td className="px-6 py-4">
                           <span className={`px-2 py-1 text-xs rounded-full ${paymentStatus.style}`}>
                             {paymentStatus.label}
                           </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="text-gray-600">
+                          {new Date(booking.start_time).toLocaleDateString('en-ZA')} at{' '}
+                          {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </div>
+                        <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
+                      </div>
+                      {booking.room_name && (
+                        <p className="text-xs text-gray-500 mt-1">{booking.room_name}</p>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

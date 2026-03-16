@@ -207,19 +207,19 @@ export default function AdminCalendarPage() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-            <p className="text-gray-600 mt-1">View and manage your booking schedule.</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Calendar</h1>
+            <p className="text-gray-600 mt-1 text-sm sm:text-base">View and manage your booking schedule.</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={() => {
                 const todayStr = new Date().toISOString().split('T')[0]
                 setBlockDate(todayStr)
                 setShowBlockModal(true)
               }}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              className="px-3 sm:px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
             >
               Block Time
             </button>
@@ -228,16 +228,17 @@ export default function AdminCalendarPage() {
                 setManualBookingDate(null)
                 setShowManualBooking(true)
               }}
-              className="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              New Booking
+              <span className="hidden sm:inline">New Booking</span>
+              <span className="sm:hidden">New</span>
             </button>
             <button
               onClick={goToToday}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              className="px-3 sm:px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
             >
               Today
             </button>
@@ -280,19 +281,20 @@ export default function AdminCalendarPage() {
               </button>
             </div>
           ) : (
-            <div className="p-4">
-              <div className="grid grid-cols-7 gap-1 mb-2">
+            <div className="p-2 sm:p-4">
+              <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2">
                 {DAYS.map((day) => (
-                  <div key={day} className="text-center text-sm font-medium text-gray-600 py-2">
-                    {day}
+                  <div key={day} className="text-center text-xs sm:text-sm font-medium text-gray-600 py-1 sm:py-2">
+                    <span className="hidden sm:inline">{day}</span>
+                    <span className="sm:hidden">{day.charAt(0)}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-1">
+              <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
                 {getDaysInMonth().map((day, idx) => {
                   if (day === null) {
-                    return <div key={`empty-${idx}`} className="h-24" />
+                    return <div key={`empty-${idx}`} className="h-14 sm:h-24" />
                   }
 
                   const dayBookings = getBookingsForDate(day)
@@ -305,7 +307,7 @@ export default function AdminCalendarPage() {
                     <button
                       key={day}
                       onClick={() => setSelectedDate(dateStr)}
-                      className={`h-24 p-2 border rounded-lg text-left transition-colors relative ${
+                      className={`h-14 sm:h-24 p-1 sm:p-2 border rounded-lg text-left transition-colors relative ${
                         hasFullDayBlock
                           ? 'bg-gray-200 border-gray-300'
                           : isToday(day)
@@ -315,31 +317,37 @@ export default function AdminCalendarPage() {
                           : 'bg-white border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      <span className={`text-sm font-medium ${
+                      <span className={`text-xs sm:text-sm font-medium ${
                         hasFullDayBlock ? 'text-gray-500' :
                         isToday(day) ? 'text-white' : 'text-gray-900'
                       }`}>
                         {day}
                       </span>
                       {hasFullDayBlock && (
-                        <div className="mt-1">
-                          <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-400 text-white">
+                        <div className="mt-0.5 sm:mt-1">
+                          <span className="hidden sm:inline-block px-2 py-0.5 text-xs rounded-full bg-gray-400 text-white">
                             Blocked
                           </span>
+                          <span className="sm:hidden inline-block w-2 h-2 bg-gray-400 rounded-full" />
                         </div>
                       )}
                       {hasPartialBlock && !hasFullDayBlock && (
-                        <div className="absolute top-1 right-1 w-2 h-2 bg-gray-400 rounded-full" />
+                        <div className="absolute top-1 right-1 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full" />
                       )}
                       {dayBookings.length > 0 && !hasFullDayBlock && (
-                        <div className="mt-1">
+                        <div className="mt-0.5 sm:mt-1">
                           <span
-                            className={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                            className={`hidden sm:inline-block px-2 py-0.5 text-xs rounded-full ${
                               isToday(day) ? 'bg-white text-gray-900' : 'bg-blue-100 text-blue-800'
                             }`}
                           >
                             {dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}
                           </span>
+                          <span
+                            className={`sm:hidden inline-block w-2 h-2 rounded-full ${
+                              isToday(day) ? 'bg-white' : 'bg-blue-500'
+                            }`}
+                          />
                         </div>
                       )}
                     </button>
@@ -351,9 +359,9 @@ export default function AdminCalendarPage() {
         </div>
 
         {selectedDate && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+          <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900">
                 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-ZA', {
                   weekday: 'long',
                   year: 'numeric',
@@ -367,7 +375,7 @@ export default function AdminCalendarPage() {
                     setManualBookingDate(selectedDate)
                     setShowManualBooking(true)
                   }}
-                  className="px-3 py-1.5 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1"
+                  className="flex-1 sm:flex-initial px-3 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-1"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -379,7 +387,7 @@ export default function AdminCalendarPage() {
                     setBlockDate(selectedDate)
                     setShowBlockModal(true)
                   }}
-                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex-1 sm:flex-initial px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   Block Time
                 </button>

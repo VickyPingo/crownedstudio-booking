@@ -19,9 +19,11 @@ const NAV_ITEMS = [
 interface AdminSidebarProps {
   adminName?: string | null
   adminEmail?: string
+  onClose?: () => void
+  isMobile?: boolean
 }
 
-export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
+export function AdminSidebar({ adminName, adminEmail, onClose, isMobile }: AdminSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -30,11 +32,30 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
     router.push('/admin/login')
   }
 
+  const handleNavClick = () => {
+    if (isMobile && onClose) {
+      onClose()
+    }
+  }
+
   return (
     <aside className="w-64 bg-gray-900 text-white flex flex-col min-h-screen">
-      <div className="p-6 border-b border-gray-800">
-        <h1 className="text-xl font-bold">Crowned Studio</h1>
-        <p className="text-gray-400 text-sm mt-1">Admin Dashboard</p>
+      <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">Crowned Studio</h1>
+          <p className="text-gray-400 text-sm mt-1">Admin Dashboard</p>
+        </div>
+        {isMobile && onClose && (
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 p-4">
@@ -45,6 +66,7 @@ export function AdminSidebar({ adminName, adminEmail }: AdminSidebarProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={handleNavClick}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-white text-gray-900 font-medium'

@@ -139,22 +139,22 @@ export default function AdminPaymentsPage() {
           <p className="text-gray-600 mt-1">Track and manage booking payments.</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-600">Total Received</p>
-            <p className="text-2xl font-bold text-green-700 mt-1">R{stats.totalReceived.toLocaleString()}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Total Received</p>
+            <p className="text-lg sm:text-2xl font-bold text-green-700 mt-1">R{stats.totalReceived.toLocaleString()}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-600">Pending Balance</p>
-            <p className="text-2xl font-bold text-amber-700 mt-1">R{stats.pendingBalance.toLocaleString()}</p>
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Pending Balance</p>
+            <p className="text-lg sm:text-2xl font-bold text-amber-700 mt-1">R{stats.pendingBalance.toLocaleString()}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-600">Fully Paid</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.fullyPaid}</p>
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Fully Paid</p>
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">{stats.fullyPaid}</p>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-sm">
-            <p className="text-sm font-medium text-gray-600">Awaiting Balance</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.awaitingBalance}</p>
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Awaiting Balance</p>
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">{stats.awaitingBalance}</p>
           </div>
         </div>
 
@@ -187,86 +187,135 @@ export default function AdminPaymentsPage() {
           ) : filteredBookings.length === 0 ? (
             <div className="p-8 text-center text-gray-600">No bookings found.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Client
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Service
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Total
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Deposit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Balance Due
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredBookings.map((booking) => {
-                    const payment = getPaymentStatus(booking)
-                    return (
-                      <tr key={booking.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">
-                          <p className="font-medium text-gray-900">{booking.customer?.full_name}</p>
-                          <p className="text-sm text-gray-600">{booking.customer?.email}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-gray-900">{booking.service?.name}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-gray-900">
-                            {new Date(booking.start_time).toLocaleDateString('en-ZA')}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4">
+            <>
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Client
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Service
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Deposit
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Balance Due
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredBookings.map((booking) => {
+                      const payment = getPaymentStatus(booking)
+                      return (
+                        <tr key={booking.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-gray-900">{booking.customer?.full_name}</p>
+                            <p className="text-sm text-gray-600">{booking.customer?.email}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-gray-900">{booking.service?.name}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-gray-900">
+                              {new Date(booking.start_time).toLocaleDateString('en-ZA')}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-green-700 font-medium">R{payment.depositPaid.toLocaleString()}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className={`font-medium ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                              R{payment.balanceDue.toLocaleString()}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(payment.status)}`}>
+                              {formatStatus(payment.status)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {payment.status === 'deposit_paid' && payment.balanceDue > 0 && (
+                              <button
+                                onClick={() => handleMarkBalancePaid(booking.id, payment.balanceDue)}
+                                disabled={markingPayment === booking.id}
+                                className="text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+                              >
+                                {markingPayment === booking.id ? 'Marking...' : 'Mark Paid'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="lg:hidden divide-y divide-gray-200">
+                {filteredBookings.map((booking) => {
+                  const payment = getPaymentStatus(booking)
+                  return (
+                    <div key={booking.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-gray-900 truncate">{booking.customer?.full_name}</p>
+                          <p className="text-sm text-gray-600">{booking.service?.name}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full shrink-0 ${getStatusBadge(payment.status)}`}>
+                          {formatStatus(payment.status)}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-3">
+                        {new Date(booking.start_time).toLocaleDateString('en-ZA')}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div>
+                          <p className="text-gray-500 text-xs">Total</p>
                           <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <p className="text-green-700 font-medium">R{payment.depositPaid.toLocaleString()}</p>
-                        </td>
-                        <td className="px-6 py-4">
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Deposit</p>
+                          <p className="font-medium text-green-700">R{payment.depositPaid.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 text-xs">Balance</p>
                           <p className={`font-medium ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
                             R{payment.balanceDue.toLocaleString()}
                           </p>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(payment.status)}`}>
-                            {formatStatus(payment.status)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {payment.status === 'deposit_paid' && payment.balanceDue > 0 && (
-                            <button
-                              onClick={() => handleMarkBalancePaid(booking.id, payment.balanceDue)}
-                              disabled={markingPayment === booking.id}
-                              className="text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
-                            >
-                              {markingPayment === booking.id ? 'Marking...' : 'Mark Paid'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                      {payment.status === 'deposit_paid' && payment.balanceDue > 0 && (
+                        <button
+                          onClick={() => handleMarkBalancePaid(booking.id, payment.balanceDue)}
+                          disabled={markingPayment === booking.id}
+                          className="mt-3 w-full py-2 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                        >
+                          {markingPayment === booking.id ? 'Marking...' : 'Mark Balance as Paid'}
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
