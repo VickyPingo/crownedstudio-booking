@@ -49,8 +49,6 @@ function getStatusColor(status: string): string {
       return 'bg-blue-100 border-blue-300 text-blue-900'
     case 'completed':
       return 'bg-green-100 border-green-300 text-green-900'
-    case 'pending_payment':
-      return 'bg-amber-100 border-amber-300 text-amber-900'
     case 'cancelled':
     case 'cancelled_expired':
       return 'bg-red-100 border-red-300 text-red-900'
@@ -103,7 +101,7 @@ export default function RoomsCalendarPage() {
       `)
       .gte('start_time', dayStart)
       .lte('start_time', dayEnd)
-      .in('status', ['confirmed', 'pending_payment', 'completed'])
+      .in('status', ['confirmed', 'completed'])
 
     setRooms((roomsData || []) as Room[])
     setBookings((bookingsData || []) as unknown as RoomBooking[])

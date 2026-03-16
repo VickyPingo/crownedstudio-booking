@@ -148,7 +148,7 @@ export async function getRoomsForDate(
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id, start_time, end_time, room_id, status, people_count')
-    .in('status', ['confirmed', 'pending_payment', 'completed'])
+    .in('status', ['confirmed', 'completed'])
     .gte('start_time', dayStart.toISOString())
     .lte('start_time', dayEnd.toISOString())
 

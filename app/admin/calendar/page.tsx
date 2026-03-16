@@ -54,6 +54,7 @@ export default function AdminCalendarPage() {
         .select('id, customer_id, service_slug, status, start_time, people_count, room_id')
         .gte('start_time', `${startOfMonth}T00:00:00`)
         .lte('start_time', `${endOfMonth}T23:59:59`)
+        .in('status', ['confirmed', 'completed', 'cancelled', 'no_show'])
         .order('start_time')
 
       if (bookingsError) {
@@ -191,7 +192,6 @@ export default function AdminCalendarPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      pending_payment: 'bg-amber-100 text-amber-800',
       confirmed: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',

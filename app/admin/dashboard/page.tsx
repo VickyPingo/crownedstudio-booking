@@ -65,9 +65,9 @@ export default function AdminDashboardPage() {
           .lt('start_time', todayEnd)
           .in('status', ['confirmed', 'completed']),
         supabase
-          .from('bookings')
-          .select('id', { count: 'exact' })
-          .eq('status', 'pending_payment'),
+          .from('payment_transactions')
+          .select('booking_id', { count: 'exact' })
+          .eq('status', 'pending'),
         supabase
           .from('customers')
           .select('id', { count: 'exact' }),
@@ -119,7 +119,7 @@ export default function AdminDashboardPage() {
         `)
         .gte('start_time', todayStart)
         .lt('start_time', todayEnd)
-        .in('status', ['confirmed', 'pending_payment', 'completed'])
+        .in('status', ['confirmed', 'completed'])
         .order('start_time', { ascending: true })
 
       const bookings = (todayBookings || []) as unknown as RoomBooking[]
