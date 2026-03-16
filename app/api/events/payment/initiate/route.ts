@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
     const paymentData = {
       merchant_id: config.merchantId,
       merchant_key: config.merchantKey,
-      returnUrl: `https://book.crownedstudio.co.za/api/events/payment/return?transaction_id=${transaction.merchant_transaction_id}`,
-cancelUrl: `https://book.crownedstudio.co.za/api/events/payment/cancel?transaction_id=${transaction.merchant_transaction_id}`,
-notifyUrl: `https://book.crownedstudio.co.za/api/events/payment/notify`,
+      return_url: `https://book.crownedstudio.co.za/api/events/payment/return?transaction_id=${transaction.merchant_transaction_id}`,
+      cancel_url: `https://book.crownedstudio.co.za/api/events/payment/cancel?transaction_id=${transaction.merchant_transaction_id}`,
+      notify_url: `https://book.crownedstudio.co.za/api/events/payment/notify`,
       name_first: splitName(booking.booker_name).firstName,
       name_last: splitName(booking.booker_name).lastName,
       email_address: booking.booker_email,
