@@ -30,6 +30,7 @@ interface BookingData {
   medical_history: string | null
   customer_date_of_birth: string | null
   pressure_preferences: Record<string, string> | null
+  is_pregnant: boolean
   pricing_option_name: string | null
   customer?: { id: string; full_name: string; email: string | null; phone: string | null; date_of_birth: string | null } | null
   service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
@@ -557,6 +558,21 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Medical History</p>
                   <p className="text-sm text-gray-900">{booking.medical_history || 'None specified'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Pregnancy Status</p>
+                  <div className="flex items-center gap-2">
+                    {booking.is_pregnant ? (
+                      <>
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                          Pregnant
+                        </span>
+                        <span className="text-xs text-gray-600 italic">Pregnancy-safe massage required</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-gray-900">Not pregnant</span>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>

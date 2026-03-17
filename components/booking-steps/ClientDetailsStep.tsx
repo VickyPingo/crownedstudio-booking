@@ -7,6 +7,7 @@ interface ClientDetailsStepProps {
   clientDateOfBirth: string
   clientAllergies: string
   clientMedicalHistory: string
+  clientIsPregnant: boolean | null
   onUpdateClient: (updates: {
     clientName?: string
     clientEmail?: string
@@ -14,6 +15,7 @@ interface ClientDetailsStepProps {
     clientDateOfBirth?: string
     clientAllergies?: string
     clientMedicalHistory?: string
+    clientIsPregnant?: boolean | null
   }) => void
 }
 
@@ -24,9 +26,10 @@ export function ClientDetailsStep({
   clientDateOfBirth,
   clientAllergies,
   clientMedicalHistory,
+  clientIsPregnant,
   onUpdateClient,
 }: ClientDetailsStepProps) {
-  const isAllComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== '' && clientDateOfBirth.trim() !== ''
+  const isAllComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== '' && clientDateOfBirth.trim() !== '' && clientIsPregnant !== null
 
   return (
     <div className="space-y-6">
@@ -130,6 +133,66 @@ export function ClientDetailsStep({
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-800 mb-3">
+              Are you pregnant? <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => onUpdateClient({ clientIsPregnant: false })}
+                className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all ${
+                  clientIsPregnant === false
+                    ? 'bg-gray-900 text-white border-2 border-gray-900'
+                    : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={() => onUpdateClient({ clientIsPregnant: true })}
+                className={`flex-1 px-6 py-3 rounded-lg font-medium transition-all ${
+                  clientIsPregnant === true
+                    ? 'bg-gray-900 text-white border-2 border-gray-900'
+                    : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                Yes
+              </button>
+            </div>
+            {clientIsPregnant === null && (
+              <p className="text-xs text-red-500 mt-2">Please answer this question to continue</p>
+            )}
+          </div>
+
+          {clientIsPregnant === true && (
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <h5 className="font-semibold text-blue-900 text-base mb-2">Pregnancy Safe Massage Policy</h5>
+                  <div className="text-sm text-blue-800 space-y-2">
+                    <p>
+                      Please note that for all pregnant clients, the full body massage included in any package will be substituted with a pregnancy-safe massage.
+                    </p>
+                    <p>
+                      This massage includes gentle, light-pressure techniques only and focuses on the back, neck, shoulders, scalp, hands, and feet.
+                    </p>
+                    <p>
+                      For safety reasons, no deep pressure, abdominal work, or hot treatments are permitted during pregnancy.
+                    </p>
+                    <p className="font-semibold">
+                      We only accommodate clients who are between 3 and 6 months pregnant.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

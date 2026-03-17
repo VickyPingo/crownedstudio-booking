@@ -96,6 +96,7 @@ export function BookingModal({
     clientAllergies: '',
     clientMassagePressure: '',
     clientMedicalHistory: '',
+    clientIsPregnant: null,
     afterHoursSurcharge: 0,
     selectedPricingOption: null,
   })
@@ -181,6 +182,7 @@ export function BookingModal({
       clientAllergies: '',
       clientMassagePressure: '',
       clientMedicalHistory: '',
+      clientIsPregnant: null,
       afterHoursSurcharge: 0,
       selectedPricingOption: null,
     })
@@ -205,7 +207,8 @@ export function BookingModal({
           formData.clientName.trim() !== '' &&
           formData.clientEmail.trim() !== '' &&
           formData.clientPhone.trim() !== '' &&
-          formData.clientDateOfBirth.trim() !== ''
+          formData.clientDateOfBirth.trim() !== '' &&
+          formData.clientIsPregnant !== null
         )
       default:
         return true
@@ -266,6 +269,7 @@ export function BookingModal({
             clientDateOfBirth={formData.clientDateOfBirth}
             clientAllergies={formData.clientAllergies}
             clientMedicalHistory={formData.clientMedicalHistory}
+            clientIsPregnant={formData.clientIsPregnant}
             onUpdateClient={(updates) => updateFormData(updates)}
           />
         )

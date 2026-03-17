@@ -19,6 +19,7 @@ export interface BookingFormData {
   clientAllergies: string
   clientMassagePressure: MassagePressure | ''
   clientMedicalHistory: string
+  clientIsPregnant: boolean | null
   afterHoursSurcharge: number
   selectedPricingOption?: ServicePricingOption | null
 }
@@ -43,6 +44,7 @@ export interface CreateBookingPayload {
   customerAllergies: string
   customerMassagePressure: MassagePressure
   customerMedicalHistory: string
+  customerIsPregnant: boolean
   serviceSlug: string
   selectedDate: string
   selectedTime: string

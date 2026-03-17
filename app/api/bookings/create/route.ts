@@ -238,6 +238,7 @@ export async function POST(request: NextRequest) {
         medical_history: payload.customerMedicalHistory || null,
         customer_date_of_birth: payload.customerDateOfBirth || null,
         pressure_preferences: payload.pressureByPerson || {},
+        is_pregnant: payload.customerIsPregnant,
         voucher_code: payload.voucherCode || null,
         voucher_id: payload.voucherId || null,
         voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),
