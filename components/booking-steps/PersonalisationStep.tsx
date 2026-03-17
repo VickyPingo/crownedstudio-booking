@@ -78,23 +78,66 @@ export function PersonalisationStep({
 
   if (peopleCount === 1) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-5">
         <div>
           <h3 className="text-xl font-semibold text-gray-900">Personalisation</h3>
-          <p className="text-sm text-gray-700 mt-1">Customize your experience with extras and preferences</p>
+          <p className="text-sm text-gray-700 mt-1">Customize your experience with preferences and optional extras</p>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
+            Your Preferences
+          </h4>
+          <div>
+            <label className="text-base font-medium text-gray-900 mb-3 block">
+              Preferred Massage Pressure <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {PRESSURE_OPTIONS.map((option) => {
+                const isSelected = currentPersonPressure === option.value
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => selectPressure(option.value)}
+                    className={`border-2 rounded-lg p-3 text-left transition-all ${
+                      isSelected
+                        ? 'border-black bg-white shadow-sm'
+                        : 'border-gray-300 bg-white hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-black' : 'border-gray-400'
+                        }`}
+                      >
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                      <span className={`font-semibold text-sm ${isSelected ? 'text-black' : 'text-gray-900'}`}>
+                        {option.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 ml-6">{option.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
         {availableUpsells.length > 0 && (
           <div>
-            <h4 className="text-base font-semibold text-gray-900 mb-3">Add Extras (Optional)</h4>
-            <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
+              Optional Add-ons
+            </h4>
+            <div className="space-y-2.5">
               {availableUpsells.map((upsell) => {
                 const isSelected = currentPersonUpsells.includes(upsell.id)
                 return (
                   <div
                     key={upsell.id}
                     onClick={() => toggleUpsell(upsell.id)}
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                    className={`border rounded-lg p-3.5 cursor-pointer transition-all ${
                       isSelected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -126,42 +169,6 @@ export function PersonalisationStep({
             </div>
           </div>
         )}
-
-        <div>
-          <h4 className="text-base font-semibold text-gray-900 mb-3">
-            Preferred Massage Pressure <span className="text-red-500">*</span>
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {PRESSURE_OPTIONS.map((option) => {
-              const isSelected = currentPersonPressure === option.value
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => selectPressure(option.value)}
-                  className={`border-2 rounded-lg p-4 text-left transition-all ${
-                    isSelected
-                      ? 'border-black bg-gray-50 shadow-sm'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        isSelected ? 'border-black' : 'border-gray-400'
-                      }`}
-                    >
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-black" />}
-                    </div>
-                    <span className={`font-semibold ${isSelected ? 'text-black' : 'text-gray-900'}`}>
-                      {option.label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-600 ml-6">{option.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </div>
       </div>
     )
   }
@@ -202,22 +209,65 @@ export function PersonalisationStep({
         })}
       </div>
 
-      <div className="border-t border-gray-200 pt-4 space-y-6">
+      <div className="border-t border-gray-200 pt-3 space-y-5">
         <p className="text-sm font-medium text-gray-700">
           Personalising for <span className="text-black font-semibold">Person {activePerson}</span>
         </p>
 
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
+            Your Preferences
+          </h4>
+          <div>
+            <label className="text-base font-medium text-gray-900 mb-3 block">
+              Preferred Massage Pressure <span className="text-red-500">*</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {PRESSURE_OPTIONS.map((option) => {
+                const isSelected = currentPersonPressure === option.value
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => selectPressure(option.value)}
+                    className={`border-2 rounded-lg p-3 text-left transition-all ${
+                      isSelected
+                        ? 'border-black bg-white shadow-sm'
+                        : 'border-gray-300 bg-white hover:border-gray-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-black' : 'border-gray-400'
+                        }`}
+                      >
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                      <span className={`font-semibold text-sm ${isSelected ? 'text-black' : 'text-gray-900'}`}>
+                        {option.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 ml-6">{option.description}</p>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
         {availableUpsells.length > 0 && (
           <div>
-            <h4 className="text-base font-semibold text-gray-900 mb-3">Add Extras (Optional)</h4>
-            <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wide">
+              Optional Add-ons
+            </h4>
+            <div className="space-y-2.5">
               {availableUpsells.map((upsell) => {
                 const isSelected = currentPersonUpsells.includes(upsell.id)
                 return (
                   <div
                     key={upsell.id}
                     onClick={() => toggleUpsell(upsell.id)}
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                    className={`border rounded-lg p-3.5 cursor-pointer transition-all ${
                       isSelected ? 'border-black bg-gray-50' : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
@@ -249,42 +299,6 @@ export function PersonalisationStep({
             </div>
           </div>
         )}
-
-        <div>
-          <h4 className="text-base font-semibold text-gray-900 mb-3">
-            Preferred Massage Pressure <span className="text-red-500">*</span>
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {PRESSURE_OPTIONS.map((option) => {
-              const isSelected = currentPersonPressure === option.value
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => selectPressure(option.value)}
-                  className={`border-2 rounded-lg p-4 text-left transition-all ${
-                    isSelected
-                      ? 'border-black bg-gray-50 shadow-sm'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                        isSelected ? 'border-black' : 'border-gray-400'
-                      }`}
-                    >
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-black" />}
-                    </div>
-                    <span className={`font-semibold ${isSelected ? 'text-black' : 'text-gray-900'}`}>
-                      {option.label}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-600 ml-6">{option.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </div>
       </div>
     </div>
   )

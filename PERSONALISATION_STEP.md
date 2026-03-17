@@ -1,7 +1,10 @@
-# Personalisation Step Implementation
+# Personalisation Step UX Improvement
 
 ## Overview
-Redesigned the booking flow by combining upsells and personal preferences into a unified "Personalisation" step.
+The Personalisation step has been restructured to prioritize required preference fields above optional add-ons, ensuring users don't miss the mandatory massage pressure selection.
+
+## Latest Update (Layout Restructure)
+Moved the "Preferred Massage Pressure" section ABOVE the add-ons list to ensure it's immediately visible and completed first.
 
 ## Changes Made
 
