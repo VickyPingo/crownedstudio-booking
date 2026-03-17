@@ -12,6 +12,7 @@ interface TimeBlockModalProps {
 }
 
 export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }: TimeBlockModalProps) {
+  const [blockDate, setBlockDate] = useState(selectedDate)
   const [isFullDay, setIsFullDay] = useState(true)
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('17:00')
@@ -23,7 +24,12 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
   const isEditing = !!existingBlock
 
   useEffect(() => {
+    setBlockDate(selectedDate)
+  }, [selectedDate])
+
+  useEffect(() => {
     if (existingBlock) {
+      setBlockDate(existingBlock.block_date)
       setIsFullDay(existingBlock.is_full_day)
       setStartTime(existingBlock.start_time?.slice(0, 5) || '09:00')
       setEndTime(existingBlock.end_time?.slice(0, 5) || '17:00')
@@ -44,7 +50,7 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
     const { data: { user } } = await supabase.auth.getUser()
 
     const blockData = {
-      block_date: selectedDate,
+      block_date: blockDate,
       is_full_day: isFullDay,
       start_time: isFullDay ? null : startTime,
       end_time: isFullDay ? null : endTime,
@@ -96,7 +102,7 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
     onClose()
   }
 
-  const formattedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-ZA', {
+  const formattedDate = new Date(blockDate + 'T00:00:00').toLocaleDateString('en-ZA', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -107,10 +113,9 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
           {isEditing ? 'Edit Time Block' : 'Block Time'}
         </h2>
-        <p className="text-sm text-gray-600 mb-6">{formattedDate}</p>
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -119,6 +124,17 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
         )}
 
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={blockDate}
+              onChange={(e) => setBlockDate(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+            />
+            <p className="text-xs text-gray-500 mt-1">{formattedDate}</p>
+          </div>
+
           <div>
             <label className="flex items-center gap-3 cursor-pointer">
               <input
