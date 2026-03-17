@@ -37,4 +37,6 @@ export interface CreateEventBookingPayload {
   quantity: number
   voucherCode?: string | null
   voucherDiscount?: number
+  termsAccepted: boolean
+  termsAcceptedAt: string
 }

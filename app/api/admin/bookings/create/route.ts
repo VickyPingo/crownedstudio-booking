@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
         balance_paid_at: fullyPaid || depositPaid ? new Date().toISOString() : null,
         balance_paid_by: fullyPaid || depositPaid ? user?.id : null,
         room_id: roomAllocation.room_id,
+        terms_accepted: true,
+        terms_accepted_at: new Date().toISOString(),
       })
       .select('id')
       .single()

@@ -68,6 +68,8 @@ export interface CreateBookingPayload {
   isZeroPayment?: boolean
   pricingOptionId?: string | null
   pricingOptionName?: string | null
+  termsAccepted: boolean
+  termsAcceptedAt: string
 }
 
 export interface SavedBooking {

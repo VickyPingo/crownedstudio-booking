@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
       quantity,
       voucherCode,
       voucherDiscount = 0,
+      termsAccepted,
+      termsAcceptedAt,
     } = payload
 
     if (!eventSlug || !bookerName || !bookerEmail || !bookerPhone || !quantity) {
@@ -77,6 +79,8 @@ export async function POST(request: NextRequest) {
         total_amount: totalAmount,
         payment_status: totalAmount === 0 ? 'paid' : 'pending',
         booking_status: totalAmount === 0 ? 'confirmed' : 'pending',
+        terms_accepted: termsAccepted,
+        terms_accepted_at: termsAcceptedAt,
       })
       .select('*')
       .single()

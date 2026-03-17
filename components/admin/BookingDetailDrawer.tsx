@@ -33,6 +33,8 @@ interface BookingData {
   pressure_preferences: Record<string, string> | null
   is_pregnant: boolean
   pricing_option_name: string | null
+  terms_accepted: boolean | null
+  terms_accepted_at: string | null
   customer?: { id: string; full_name: string; email: string | null; phone: string | null; date_of_birth: string | null } | null
   service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
   voucher?: { code: string; discount_type: string; discount_value: number } | null
@@ -695,6 +697,46 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">No pressure preferences specified</p>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Terms & Conditions</h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase">Terms Accepted</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {booking.terms_accepted ? (
+                      <>
+                        <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm font-medium text-green-700">Yes</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-sm text-gray-500">No</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {booking.terms_accepted_at && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Accepted At</p>
+                    <p className="text-sm text-gray-900">
+                      {new Date(booking.terms_accepted_at).toLocaleString('en-ZA', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
                 )}
               </div>
             </section>

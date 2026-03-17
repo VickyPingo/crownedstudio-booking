@@ -164,6 +164,8 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   const [isRepeatCustomer, setIsRepeatCustomer] = useState(false)
   const [repeatCheckDone, setRepeatCheckDone] = useState(false)
 
+  const [termsAccepted, setTermsAccepted] = useState(false)
+
   const servicePrice = getServicePrice(service, formData.peopleCount, formData.selectedPricingOption)
 
   const upsellsTotal = calculateUpsellsTotal(
@@ -387,6 +389,8 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         isZeroPayment,
         pricingOptionId: formData.selectedPricingOption?.id || null,
         pricingOptionName: formData.selectedPricingOption?.option_name || null,
+        termsAccepted: true,
+        termsAcceptedAt: new Date().toISOString(),
       }
 
       console.log('[RepeatDiscount] Creating booking with payload:', {
@@ -753,10 +757,34 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         </div>
       )}
 
+      {!savedBooking && (
+        <div className="flex items-start gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+          <input
+            type="checkbox"
+            id="terms-checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+            className="mt-1 w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900 focus:ring-2 cursor-pointer"
+          />
+          <label htmlFor="terms-checkbox" className="text-sm text-gray-700 cursor-pointer">
+            I accept the{' '}
+            <a
+              href="https://crownedstudio.co.za/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-900 underline font-medium hover:text-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Terms & Conditions
+            </a>
+          </label>
+        </div>
+      )}
+
       {!savedBooking ? (
         <button
           onClick={handleCreateBooking}
-          disabled={isCreatingBooking}
+          disabled={isCreatingBooking || !termsAccepted}
           className="w-full bg-black text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
         >
           {isCreatingBooking

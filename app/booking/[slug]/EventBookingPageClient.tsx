@@ -49,6 +49,7 @@ export function EventBookingPageClient({ event }: EventBookingPageClientProps) {
   const [savedBooking, setSavedBooking] = useState<SavedBooking | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   const subtotal = event.price_per_person * formData.quantity
   const totalAmount = Math.max(0, subtotal - voucherDiscount)
@@ -138,6 +139,8 @@ export function EventBookingPageClient({ event }: EventBookingPageClientProps) {
           quantity: formData.quantity,
           voucherCode: appliedVoucher?.code || null,
           voucherDiscount: voucherDiscount,
+          termsAccepted: true,
+          termsAcceptedAt: new Date().toISOString(),
         }),
       })
 
@@ -422,17 +425,40 @@ export function EventBookingPageClient({ event }: EventBookingPageClientProps) {
                     {isInitiatingPayment ? 'Redirecting to PayFast...' : `Pay R${savedBooking.totalAmount}`}
                   </button>
                 ) : (
-                  <button
-                    onClick={handleCreateBooking}
-                    disabled={isSubmitting}
-                    className="w-full bg-gray-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting
-                      ? 'Creating Booking...'
-                      : totalAmount === 0
-                        ? 'Confirm Booking'
-                        : 'Continue to Payment'}
-                  </button>
+                  <>
+                    <div className="flex items-start gap-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <input
+                        type="checkbox"
+                        id="terms-checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900 focus:ring-2 cursor-pointer"
+                      />
+                      <label htmlFor="terms-checkbox" className="text-sm text-gray-700 cursor-pointer">
+                        I accept the{' '}
+                        <a
+                          href="https://crownedstudio.co.za/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-gray-900 underline font-medium hover:text-gray-700"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Terms & Conditions
+                        </a>
+                      </label>
+                    </div>
+                    <button
+                      onClick={handleCreateBooking}
+                      disabled={isSubmitting || !termsAccepted}
+                      className="w-full bg-gray-900 text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    >
+                      {isSubmitting
+                        ? 'Creating Booking...'
+                        : totalAmount === 0
+                          ? 'Confirm Booking'
+                          : 'Continue to Payment'}
+                    </button>
+                  </>
                 )}
               </div>
             )}
