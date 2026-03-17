@@ -66,37 +66,46 @@ function findRoomCombination(
     return singleRoom ? [singleRoom] : null
   }
 
-  const preferredRoomNames = ['Room 1', 'Room 3', 'Room 4']
-  const preferredRooms = availableRooms.filter(r => preferredRoomNames.includes(r.room_name))
-  const otherRooms = availableRooms.filter(r => !preferredRoomNames.includes(r.room_name))
+  const allValidCombinations: Room[][] = []
 
-  function tryFindCombination(rooms: Room[], needed: number, selected: Room[] = []): Room[] | null {
-    if (needed <= 0) return selected
+  function findAllCombinations(rooms: Room[], selected: Room[] = []): void {
+    const totalCapacity = selected.reduce((sum, r) => sum + r.capacity, 0)
+
+    if (totalCapacity >= peopleCount) {
+      allValidCombinations.push([...selected])
+      return
+    }
 
     for (let i = 0; i < rooms.length; i++) {
       const room = rooms[i]
       if (selected.includes(room)) continue
 
       const newSelected = [...selected, room]
-      const totalCapacity = newSelected.reduce((sum, r) => sum + r.capacity, 0)
-
-      if (totalCapacity >= peopleCount) {
-        return newSelected
-      }
-
       const remainingRooms = rooms.slice(i + 1)
-      const result = tryFindCombination(remainingRooms, peopleCount - totalCapacity, newSelected)
-      if (result) return result
+      findAllCombinations(remainingRooms, newSelected)
     }
+  }
 
+  findAllCombinations(availableRooms)
+
+  if (allValidCombinations.length === 0) {
     return null
   }
 
-  let combination = tryFindCombination(preferredRooms, peopleCount)
-  if (combination) return combination
+  const scoredCombinations = allValidCombinations.map(combo => {
+    const priorityScore = combo.reduce((sum, r) => sum + r.priority, 0)
+    const roomCount = combo.length
+    return { combo, priorityScore, roomCount }
+  })
 
-  combination = tryFindCombination([...preferredRooms, ...otherRooms], peopleCount)
-  return combination
+  scoredCombinations.sort((a, b) => {
+    if (a.priorityScore !== b.priorityScore) {
+      return a.priorityScore - b.priorityScore
+    }
+    return a.roomCount - b.roomCount
+  })
+
+  return scoredCombinations[0].combo
 }
 
 export async function POST(request: NextRequest) {
@@ -257,8 +266,9 @@ export async function POST(request: NextRequest) {
       if (peopleCount >= 4 && allPossibleSlots.indexOf(slot) < 3) {
         console.log(`[Availability] Slot ${slot}:`, {
           occupiedRooms: Array.from(occupiedRoomIds),
-          availableRooms: availableRooms.map(r => ({ name: r.room_name, capacity: r.capacity })),
-          roomCombination: roomCombination?.map(r => r.room_name),
+          availableRooms: availableRooms.map(r => ({ name: r.room_name, capacity: r.capacity, priority: r.priority })),
+          roomCombination: roomCombination?.map(r => ({ name: r.room_name, priority: r.priority })),
+          priorityScore: roomCombination?.reduce((sum, r) => sum + r.priority, 0),
           isAvailable: !!roomCombination
         })
       }

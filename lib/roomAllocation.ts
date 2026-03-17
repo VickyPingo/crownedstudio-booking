@@ -144,37 +144,52 @@ function findRoomCombination(
     return singleRoom ? [singleRoom] : null
   }
 
-  const preferredRoomNames = ['Room 1', 'Room 3', 'Room 4']
-  const preferredRooms = availableRooms.filter(r => preferredRoomNames.includes(r.room_name))
-  const otherRooms = availableRooms.filter(r => !preferredRoomNames.includes(r.room_name))
+  const allValidCombinations: Room[][] = []
 
-  function tryFindCombination(rooms: Room[], needed: number, selected: Room[] = []): Room[] | null {
-    if (needed <= 0) return selected
+  function findAllCombinations(rooms: Room[], selected: Room[] = []): void {
+    const totalCapacity = selected.reduce((sum, r) => sum + r.capacity, 0)
+
+    if (totalCapacity >= peopleCount) {
+      allValidCombinations.push([...selected])
+      return
+    }
 
     for (let i = 0; i < rooms.length; i++) {
       const room = rooms[i]
       if (selected.includes(room)) continue
 
       const newSelected = [...selected, room]
-      const totalCapacity = newSelected.reduce((sum, r) => sum + r.capacity, 0)
-
-      if (totalCapacity >= peopleCount) {
-        return newSelected
-      }
-
       const remainingRooms = rooms.slice(i + 1)
-      const result = tryFindCombination(remainingRooms, peopleCount - totalCapacity, newSelected)
-      if (result) return result
+      findAllCombinations(remainingRooms, newSelected)
     }
+  }
 
+  findAllCombinations(availableRooms)
+
+  if (allValidCombinations.length === 0) {
     return null
   }
 
-  let combination = tryFindCombination(preferredRooms, peopleCount)
-  if (combination) return combination
+  const scoredCombinations = allValidCombinations.map(combo => {
+    const priorityScore = combo.reduce((sum, r) => sum + r.priority, 0)
+    const roomCount = combo.length
+    return { combo, priorityScore, roomCount }
+  })
 
-  combination = tryFindCombination([...preferredRooms, ...otherRooms], peopleCount)
-  return combination
+  scoredCombinations.sort((a, b) => {
+    if (a.priorityScore !== b.priorityScore) {
+      return a.priorityScore - b.priorityScore
+    }
+    return a.roomCount - b.roomCount
+  })
+
+  console.log('[RoomAllocation] All valid combinations:', scoredCombinations.map(s => ({
+    rooms: s.combo.map(r => r.room_name).join(' + '),
+    priorityScore: s.priorityScore,
+    roomCount: s.roomCount
+  })))
+
+  return scoredCombinations[0].combo
 }
 
 export async function allocateRoom(
