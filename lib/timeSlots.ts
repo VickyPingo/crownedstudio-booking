@@ -34,6 +34,27 @@ export const AFTER_HOURS_START_TIME = '16:30'
 export const LATEST_START_TIME = '17:30'
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 
+export function isSameDayBooking(dateString: string): boolean {
+  const bookingDate = new Date(dateString)
+  const today = new Date()
+
+  bookingDate.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+
+  return bookingDate.getTime() === today.getTime()
+}
+
+export function getMinimumBookingDate(): string {
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+
+  const year = tomorrow.getFullYear()
+  const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
+  const day = String(tomorrow.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
 function timeToMinutes(time: string): number {
   const [hours, minutes] = time.split(':').map(Number)
   return hours * 60 + minutes

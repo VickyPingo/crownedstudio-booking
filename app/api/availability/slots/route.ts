@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { generateTimeSlots, isDateFullyBlocked, TimeSlotConfig, TimeBlock } from '@/lib/timeSlots'
+import { generateTimeSlots, isDateFullyBlocked, isSameDayBooking, TimeSlotConfig, TimeBlock } from '@/lib/timeSlots'
 import { CLEANUP_BUFFER_MINUTES } from '@/lib/roomAllocation'
 
 interface AvailabilityRequest {
@@ -51,6 +51,14 @@ export async function POST(request: NextRequest) {
 
     if (!date || !serviceSlug || !serviceDurationMinutes) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    if (isSameDayBooking(date)) {
+      return NextResponse.json({
+        availableSlots: [],
+        isFullyBlocked: true,
+        error: 'Same-day bookings are not allowed. Please choose a date from tomorrow onward.'
+      })
     }
 
     const supabase = supabaseAdmin

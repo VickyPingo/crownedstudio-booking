@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { allocateRoom } from '@/lib/roomAllocation'
+import { isSameDayBooking } from '@/lib/timeSlots'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
       fullyPaid,
       selectedUpsellsByPerson,
     } = payload
+
+    if (isSameDayBooking(selectedDate)) {
+      return NextResponse.json(
+        { error: 'Same-day bookings are not allowed. Please choose a date from tomorrow onward.' },
+        { status: 400 }
+      )
+    }
 
     const startDateTime = new Date(`${selectedDate}T${selectedTime}:00+02:00`)
     const endDateTime = new Date(startDateTime.getTime() + totalDuration * 60000)

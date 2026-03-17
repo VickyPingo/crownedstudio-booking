@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { PerPersonUpsells, MassagePressure } from '@/types/booking'
-import { generateTimeSlots, isAfterHoursSlot, TimeSlotConfig, TimeBlock, ServiceTimeWindow, BOOKING_BUFFER_MINUTES } from '@/lib/timeSlots'
+import { generateTimeSlots, isAfterHoursSlot, getMinimumBookingDate, TimeSlotConfig, TimeBlock, ServiceTimeWindow, BOOKING_BUFFER_MINUTES } from '@/lib/timeSlots'
 
 interface Service {
   id: string
@@ -712,7 +712,7 @@ export function ManualBookingModal({
                       setSelectedDate(e.target.value)
                       setSelectedTime('')
                     }}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={getMinimumBookingDate()}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
                   />
                 </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { BusinessHoursData, ServiceTimeWindowData } from '@/types/booking'
-import { isAfterHoursSlot } from '@/lib/timeSlots'
+import { isAfterHoursSlot, getMinimumBookingDate } from '@/lib/timeSlots'
 
 interface DateTimeStepProps {
   selectedDate: string
@@ -145,7 +145,7 @@ export function DateTimeStep({
           type="date"
           value={selectedDate}
           onChange={(e) => handleDateChange(e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
+          min={getMinimumBookingDate()}
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
         />
       </div>

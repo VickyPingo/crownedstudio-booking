@@ -4,6 +4,7 @@ import { CreateBookingPayload } from '@/types/booking'
 import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers'
 import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
 import { allocateRoom } from '@/lib/roomAllocation'
+import { isSameDayBooking } from '@/lib/timeSlots'
 
 const PAYMENT_EXPIRY_MINUTES = 20
 
@@ -100,6 +101,13 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
     const payload: CreateBookingPayload = await request.json()
+
+    if (isSameDayBooking(payload.selectedDate)) {
+      return NextResponse.json(
+        { error: 'Same-day bookings are not allowed. Please choose a date from tomorrow onward.' },
+        { status: 400 }
+      )
+    }
 
     let customerId: string
 

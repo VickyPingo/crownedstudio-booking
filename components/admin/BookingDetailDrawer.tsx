@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { BookingStatus, Room } from '@/types/admin'
+import { getMinimumBookingDate, isSameDayBooking } from '@/lib/timeSlots'
 
 interface BookingDetailDrawerProps {
   bookingId: string | null
@@ -222,6 +223,11 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
   const handleReschedule = async () => {
     if (!booking || !rescheduleDate || !rescheduleTime) return
+
+    if (isSameDayBooking(rescheduleDate)) {
+      alert('Same-day bookings are not allowed. Please choose a date from tomorrow onward.')
+      return
+    }
 
     const timeInMinutes = parseInt(rescheduleTime.split(':')[0]) * 60 + parseInt(rescheduleTime.split(':')[1])
     const latestStartMinutes = 17 * 60 + 30
@@ -710,11 +716,12 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">New Date</label>
+                        <label className="block text-xs text-gray-600 mb-1">New Date (tomorrow or later)</label>
                         <input
                           type="date"
                           value={rescheduleDate}
                           onChange={(e) => setRescheduleDate(e.target.value)}
+                          min={getMinimumBookingDate()}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
                         />
                       </div>
