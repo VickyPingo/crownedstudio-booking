@@ -42,6 +42,7 @@ interface BookingData {
     quantity: number
     price_total: number
     person_number: number | null
+    duration_added_minutes: number
     upsell_name?: string
     upsell_slug?: string
   }>
@@ -118,7 +119,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         bookingData.room_id
           ? supabase.from('rooms').select('id, room_name, room_area, capacity').eq('id', bookingData.room_id).maybeSingle()
           : { data: null, error: null },
-        supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number').eq('booking_id', bookingId),
+        supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number, duration_added_minutes').eq('booking_id', bookingId),
         supabase.from('booking_notes').select('id, note, created_at, created_by').eq('booking_id', bookingId).order('created_at', { ascending: false }),
         supabase.from('payment_transactions').select('id, status, amount, created_at').eq('booking_id', bookingId).order('created_at', { ascending: false }),
       ])
@@ -239,8 +240,11 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
     const newStartTime = `${rescheduleDate}T${rescheduleTime}:00`
     const startDate = new Date(newStartTime)
-    const duration = booking.service?.duration_minutes || 60
-    const endDate = new Date(startDate.getTime() + duration * 60000)
+
+    const baseDuration = booking.service?.duration_minutes || 60
+    const upsellDuration = booking.booking_upsells.reduce((total, bu) => total + (bu.duration_added_minutes || 0), 0)
+    const totalDuration = baseDuration + upsellDuration
+    const endDate = new Date(startDate.getTime() + totalDuration * 60000)
 
     const { error } = await supabase
       .from('bookings')
@@ -356,7 +360,12 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   <p className="text-sm text-blue-700 font-medium">{booking.pricing_option_name}</p>
                 )}
                 <p className="text-sm text-gray-600">{booking.service?.category}</p>
-                <p className="text-sm text-gray-600">{booking.people_count} person(s) - {booking.service?.duration_minutes} min</p>
+                <p className="text-sm text-gray-600">
+                  {booking.people_count} person(s) - {Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)} min
+                  {Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000) > (booking.service?.duration_minutes || 0) && (
+                    <span className="text-gray-500"> (includes add-ons)</span>
+                  )}
+                </p>
               </div>
             </section>
 

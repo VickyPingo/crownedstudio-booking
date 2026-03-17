@@ -193,6 +193,30 @@ export function BookingModal({
     setFormData((prev) => ({ ...prev, ...updates }))
   }
 
+  const calculateTotalDuration = (): number => {
+    if (!resolvedService) return 0
+
+    let totalDuration = resolvedService.duration_minutes
+    const upsellMap = new Map(resolvedService.upsells.map((u) => [u.id, u]))
+    const addedDurations = new Set<string>()
+
+    for (let person = 1; person <= formData.peopleCount; person++) {
+      const personUpsells = formData.selectedUpsellsByPerson[person] || []
+      for (const upsellId of personUpsells) {
+        const upsell = upsellMap.get(upsellId)
+        if (upsell && upsell.duration_added_minutes > 0) {
+          const key = `${person}-${upsellId}`
+          if (!addedDurations.has(key)) {
+            totalDuration += upsell.duration_added_minutes
+            addedDurations.add(key)
+          }
+        }
+      }
+    }
+
+    return totalDuration
+  }
+
   const canProceedToNext = () => {
     switch (currentStep) {
       case 1:
@@ -254,7 +278,7 @@ export function BookingModal({
             onUpdateDate={(date) => updateFormData({ selectedDate: date })}
             onUpdateTime={(time) => updateFormData({ selectedTime: time })}
             serviceSlug={resolvedService.slug}
-            serviceDurationMinutes={resolvedService.duration_minutes}
+            serviceDurationMinutes={calculateTotalDuration()}
             peopleCount={formData.peopleCount}
             businessHours={businessHours}
             serviceTimeWindow={serviceTimeWindow}
@@ -348,7 +372,11 @@ export function BookingModal({
               <div className="mb-4 rounded-lg bg-white p-4 shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900">{resolvedService.name}</h3>
                 <p className="mt-1 text-sm text-gray-700">
-                  {resolvedService.duration_minutes} minutes • R{getDisplayPrice(resolvedService, formData.peopleCount, formData.selectedPricingOption)} for {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
+                  {calculateTotalDuration()} minutes
+                  {calculateTotalDuration() > resolvedService.duration_minutes && (
+                    <span className="text-gray-500"> (includes add-ons)</span>
+                  )}
+                  {' • '}R{getDisplayPrice(resolvedService, formData.peopleCount, formData.selectedPricingOption)} for {formData.peopleCount} {formData.peopleCount === 1 ? 'person' : 'people'}
                 </p>
                 {formData.selectedPricingOption && formData.selectedPricingOption.sessions_included > 1 && (
                   <p className="mt-1 text-xs text-gray-500">

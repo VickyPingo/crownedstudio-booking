@@ -71,6 +71,33 @@ function calculateUpsellsTotal(
   return total
 }
 
+function calculateTotalDuration(
+  baseDurationMinutes: number,
+  selectedUpsellsByPerson: PerPersonUpsells,
+  peopleCount: number,
+  upsells: Upsell[]
+): number {
+  let totalDuration = baseDurationMinutes
+  const upsellMap = new Map(upsells.map((u) => [u.id, u]))
+  const addedDurations = new Set<string>()
+
+  for (let person = 1; person <= peopleCount; person++) {
+    const personUpsells = selectedUpsellsByPerson[person] || []
+    for (const upsellId of personUpsells) {
+      const upsell = upsellMap.get(upsellId)
+      if (upsell && upsell.duration_added_minutes > 0) {
+        const key = `${person}-${upsellId}`
+        if (!addedDurations.has(key)) {
+          totalDuration += upsell.duration_added_minutes
+          addedDurations.add(key)
+        }
+      }
+    }
+  }
+
+  return totalDuration
+}
+
 interface PersonUpsellSummary {
   person: number
   upsells: Upsell[]
@@ -140,6 +167,13 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   const servicePrice = getServicePrice(service, formData.peopleCount, formData.selectedPricingOption)
 
   const upsellsTotal = calculateUpsellsTotal(
+    formData.selectedUpsellsByPerson,
+    formData.peopleCount,
+    service.upsells
+  )
+
+  const totalDuration = calculateTotalDuration(
+    service.duration_minutes,
     formData.selectedUpsellsByPerson,
     formData.peopleCount,
     service.upsells
@@ -334,7 +368,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         serviceSlug: service.slug,
         selectedDate: formData.selectedDate,
         selectedTime: formData.selectedTime,
-        durationMinutes: service.duration_minutes,
+        durationMinutes: totalDuration,
         peopleCount: formData.peopleCount,
         selectedUpsellIds: formData.selectedUpsells,
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
@@ -476,26 +510,36 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
 
         <div className="p-4">
           <h4 className="font-semibold text-gray-900 mb-2">Date & Time</h4>
-          <p className="text-sm text-gray-800">
-            {formData.selectedDate ? (
-              <>
-                {new Date(formData.selectedDate).toLocaleDateString('en-ZA', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-                {formData.selectedTime && ` at ${formData.selectedTime}`}
-                {isAfterHours && (
-                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                    After-hours
-                  </span>
+          <div className="space-y-1 text-sm">
+            <p className="text-gray-800">
+              {formData.selectedDate ? (
+                <>
+                  {new Date(formData.selectedDate).toLocaleDateString('en-ZA', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  })}
+                  {formData.selectedTime && ` at ${formData.selectedTime}`}
+                  {isAfterHours && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                      After-hours
+                    </span>
+                  )}
+                </>
+              ) : (
+                'Not selected'
+              )}
+            </p>
+            {formData.selectedTime && (
+              <p className="text-gray-600">
+                Duration: {totalDuration} minutes
+                {totalDuration > service.duration_minutes && (
+                  <span className="text-gray-500"> ({service.duration_minutes} + {totalDuration - service.duration_minutes} from add-ons)</span>
                 )}
-              </>
-            ) : (
-              'Not selected'
+              </p>
             )}
-          </p>
+          </div>
         </div>
 
         <div className="p-4">
