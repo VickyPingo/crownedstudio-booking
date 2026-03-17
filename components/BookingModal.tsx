@@ -97,6 +97,7 @@ export function BookingModal({
     clientMassagePressure: '',
     clientMedicalHistory: '',
     clientIsPregnant: null,
+    clientPregnancyWeeks: null,
     afterHoursSurcharge: 0,
     selectedPricingOption: null,
   })
@@ -183,6 +184,7 @@ export function BookingModal({
       clientMassagePressure: '',
       clientMedicalHistory: '',
       clientIsPregnant: null,
+      clientPregnancyWeeks: null,
       afterHoursSurcharge: 0,
       selectedPricingOption: null,
     })

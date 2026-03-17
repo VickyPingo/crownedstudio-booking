@@ -365,6 +365,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         customerMassagePressure: (formData.pressureByPerson[1] || 'medium') as MassagePressure,
         customerMedicalHistory: formData.clientMedicalHistory,
         customerIsPregnant: formData.clientIsPregnant ?? false,
+        customerPregnancyWeeks: formData.clientPregnancyWeeks ?? null,
         serviceSlug: service.slug,
         selectedDate: formData.selectedDate,
         selectedTime: formData.selectedTime,
