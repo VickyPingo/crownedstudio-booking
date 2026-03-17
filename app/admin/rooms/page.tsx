@@ -26,13 +26,17 @@ interface RoomBooking {
   }[]
 }
 
-const TIME_SLOTS = [
+const MAJOR_TIME_SLOTS = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
   '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
   '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
   '20:00'
 ]
+
+const CALENDAR_START_HOUR = 8
+const CALENDAR_END_HOUR = 20
+const SLOT_HEIGHT_PX = 60
 
 function getPaymentStatus(booking: RoomBooking): 'paid' | 'pending' | 'partial' {
   const completedPayments = booking.payment_transactions?.filter(p => p.status === 'complete') || []
@@ -108,43 +112,23 @@ export default function RoomsCalendarPage() {
     setLoading(false)
   }
 
-  const getBookingForSlot = (roomId: string, timeSlot: string): RoomBooking | null => {
-    const slotTime = new Date(`${selectedDate}T${timeSlot}:00`)
-
-    for (const booking of bookings) {
-      if (booking.room_id !== roomId) continue
-
-      const bookingStart = new Date(booking.start_time)
-      const bookingEnd = new Date(booking.end_time)
-
-      if (slotTime >= bookingStart && slotTime < bookingEnd) {
-        return booking
-      }
-    }
-
-    return null
+  const getMinutesFromCalendarStart = (time: Date): number => {
+    const hours = time.getHours()
+    const minutes = time.getMinutes()
+    return (hours - CALENDAR_START_HOUR) * 60 + minutes
   }
 
-  const isBookingStart = (roomId: string, timeSlot: string): boolean => {
-    const slotTime = new Date(`${selectedDate}T${timeSlot}:00`)
+  const getBookingPosition = (booking: RoomBooking): { top: number; height: number } => {
+    const startTime = new Date(booking.start_time)
+    const endTime = new Date(booking.end_time)
 
-    for (const booking of bookings) {
-      if (booking.room_id !== roomId) continue
+    const startMinutes = getMinutesFromCalendarStart(startTime)
+    const durationMinutes = (endTime.getTime() - startTime.getTime()) / 60000
 
-      const bookingStart = new Date(booking.start_time)
-      if (bookingStart.getTime() === slotTime.getTime()) {
-        return true
-      }
-    }
+    const top = (startMinutes / 30) * SLOT_HEIGHT_PX
+    const height = (durationMinutes / 30) * SLOT_HEIGHT_PX
 
-    return false
-  }
-
-  const getBookingSpan = (booking: RoomBooking): number => {
-    const start = new Date(booking.start_time)
-    const end = new Date(booking.end_time)
-    const durationMinutes = (end.getTime() - start.getTime()) / 60000
-    return Math.ceil(durationMinutes / 30)
+    return { top, height }
   }
 
   const changeDate = (days: number) => {
@@ -227,83 +211,116 @@ export default function RoomsCalendarPage() {
               </div>
             )}
 
-            <div className="hidden lg:block overflow-x-auto">
-              <div className="grid gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden"
-                style={{ gridTemplateColumns: `60px repeat(${rooms.length}, minmax(100px, 1fr))` }}
-              >
-                <div className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-700 text-xs sm:text-sm">
-                  Time
-                </div>
-                {rooms.map((room) => (
-                  <div key={room.id} className="bg-gray-50 p-2 sm:p-3 font-semibold text-gray-900 text-xs sm:text-sm text-center">
-                    <span className="truncate block">{room.room_name}</span>
-                    <span className="block text-xs text-gray-500 font-normal">Cap: {room.capacity}</span>
+            <div className="hidden lg:block overflow-x-auto bg-white border border-gray-200 rounded-lg">
+              <div className="flex">
+                <div className="w-16 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+                  <div className="h-14 border-b border-gray-200 flex items-center justify-center">
+                    <span className="text-xs font-semibold text-gray-700">Time</span>
                   </div>
-                ))}
+                  <div className="relative" style={{ height: `${MAJOR_TIME_SLOTS.length * SLOT_HEIGHT_PX}px` }}>
+                    {MAJOR_TIME_SLOTS.map((timeSlot, index) => (
+                      <div
+                        key={timeSlot}
+                        className="absolute w-full border-t border-gray-300"
+                        style={{ top: `${index * SLOT_HEIGHT_PX}px`, height: `${SLOT_HEIGHT_PX}px` }}
+                      >
+                        <span className="text-xs text-gray-600 pl-2 pt-1 block">{timeSlot}</span>
+                        <div
+                          className="absolute w-full border-t border-gray-100"
+                          style={{ top: `${SLOT_HEIGHT_PX / 3}px` }}
+                        />
+                        <div
+                          className="absolute w-full border-t border-gray-100"
+                          style={{ top: `${(SLOT_HEIGHT_PX * 2) / 3}px` }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-                {TIME_SLOTS.map((timeSlot) => (
-                  <>
-                    <div key={`time-${timeSlot}`} className="bg-white p-1 sm:p-2 text-xs sm:text-sm text-gray-600 border-t border-gray-100">
-                      {timeSlot}
-                    </div>
-                    {rooms.map((room) => {
-                      const booking = getBookingForSlot(room.id, timeSlot)
-                      const isStart = booking && isBookingStart(room.id, timeSlot)
-
-                      if (booking && !isStart) {
-                        return <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100" />
-                      }
-
-                      if (booking && isStart) {
-                        const span = getBookingSpan(booking)
-                        const paymentStatus = getPaymentStatus(booking)
-
-                        return (
-                          <div
-                            key={`${room.id}-${timeSlot}`}
-                            className="bg-white border-t border-gray-100 relative"
-                            style={{ gridRow: `span ${span}` }}
-                          >
-                            <button
-                              onClick={() => setSelectedBookingId(booking.id)}
-                              className={`absolute inset-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)}`}
-                            >
-                              <p className="font-medium text-sm truncate">
-                                {booking.customer?.full_name}
-                              </p>
-                              <p className="text-xs truncate opacity-80">
-                                {booking.service?.name}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                <span className="text-xs">
-                                  {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </span>
-                                <span className="text-xs opacity-70">
-                                  {booking.people_count}p
-                                </span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                  paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
-                                  paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
-                                  'bg-amber-200 text-amber-800'
-                                }`}>
-                                  {paymentStatus === 'paid' ? 'Paid' :
-                                   paymentStatus === 'partial' ? 'Partial' : 'Pending'}
-                                </span>
-                              </div>
-                            </button>
+                <div className="flex-1 flex">
+                  {rooms.map((room, roomIndex) => {
+                    const roomBookings = getBookingsForRoom(room.id)
+                    return (
+                      <div
+                        key={room.id}
+                        className={`flex-1 min-w-[120px] ${roomIndex < rooms.length - 1 ? 'border-r border-gray-200' : ''}`}
+                      >
+                        <div className="h-14 border-b border-gray-200 px-3 py-2 bg-gray-50">
+                          <div className="text-center">
+                            <p className="font-semibold text-gray-900 text-sm truncate">{room.room_name}</p>
+                            <p className="text-xs text-gray-500">Cap: {room.capacity}</p>
                           </div>
-                        )
-                      }
+                        </div>
 
-                      return (
-                        <div key={`${room.id}-${timeSlot}`} className="bg-white border-t border-gray-100 min-h-[40px]" />
-                      )
-                    })}
-                  </>
-                ))}
+                        <div className="relative" style={{ height: `${MAJOR_TIME_SLOTS.length * SLOT_HEIGHT_PX}px` }}>
+                          {MAJOR_TIME_SLOTS.map((timeSlot, index) => (
+                            <div
+                              key={timeSlot}
+                              className="absolute w-full border-t border-gray-200"
+                              style={{ top: `${index * SLOT_HEIGHT_PX}px`, height: `${SLOT_HEIGHT_PX}px` }}
+                            >
+                              <div
+                                className="absolute w-full border-t border-gray-100"
+                                style={{ top: `${SLOT_HEIGHT_PX / 3}px` }}
+                              />
+                              <div
+                                className="absolute w-full border-t border-gray-100"
+                                style={{ top: `${(SLOT_HEIGHT_PX * 2) / 3}px` }}
+                              />
+                            </div>
+                          ))}
+
+                          {roomBookings.map((booking) => {
+                            const { top, height } = getBookingPosition(booking)
+                            const paymentStatus = getPaymentStatus(booking)
+
+                            return (
+                              <button
+                                key={booking.id}
+                                onClick={() => setSelectedBookingId(booking.id)}
+                                className={`absolute left-1 right-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)}`}
+                                style={{
+                                  top: `${top}px`,
+                                  height: `${height}px`,
+                                  zIndex: 10
+                                }}
+                              >
+                                <p className="font-medium text-sm truncate">
+                                  {booking.customer?.full_name}
+                                </p>
+                                <p className="text-xs truncate opacity-80">
+                                  {booking.service?.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-xs">
+                                    {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                  <span className="text-xs opacity-70">
+                                    {booking.people_count}p
+                                  </span>
+                                  {height > 50 && (
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
+                                      paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
+                                      'bg-amber-200 text-amber-800'
+                                    }`}>
+                                      {paymentStatus === 'paid' ? 'Paid' :
+                                       paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                                    </span>
+                                  )}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
