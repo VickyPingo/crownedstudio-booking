@@ -180,10 +180,12 @@ export async function GET(request: NextRequest) {
           day: 'numeric',
           month: 'long',
           year: 'numeric',
+          timeZone: 'Africa/Johannesburg',
         }),
         bookingTime: startTime.toLocaleTimeString('en-ZA', {
           hour: '2-digit',
           minute: '2-digit',
+          timeZone: 'Africa/Johannesburg',
         }),
         peopleCount: booking.people_count,
         upsells: upsellNames,

@@ -182,6 +182,7 @@ export async function POST(request: NextRequest) {
           year: 'numeric',
           month: 'long',
           day: 'numeric',
+          timeZone: 'Africa/Johannesburg',
         })
 
         const emailData: EventBookingEmailData = {
