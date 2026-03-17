@@ -25,6 +25,11 @@ export async function sendEmail(
   subject: string,
   html: string
 ): Promise<SendEmailResult> {
+  if (process.env.SEND_EMAILS !== 'true') {
+    console.log(`Emails disabled (testing mode) - Would send to: ${to}, subject: "${subject}"`)
+    return { success: true, id: 'test-mode-disabled' }
+  }
+
   if (!RESEND_API_KEY || RESEND_API_KEY === 'your_resend_api_key_here') {
     console.error('Email send failed: RESEND_API_KEY is not configured')
     return { success: false, error: 'RESEND_API_KEY not configured' }
