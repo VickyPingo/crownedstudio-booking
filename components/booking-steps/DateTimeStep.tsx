@@ -223,7 +223,7 @@ export function DateTimeStep({
             {!isCrownedNight && businessHours.after_hours_enabled && (
               <p className="text-xs text-gray-700 mt-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
-                After-hours slots include R100 surcharge per person
+                After-hours bookings include a R100 surcharge per person. Last available start time is 17:30.
               </p>
             )}
           </div>

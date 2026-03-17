@@ -223,6 +223,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const handleReschedule = async () => {
     if (!booking || !rescheduleDate || !rescheduleTime) return
 
+    const timeInMinutes = parseInt(rescheduleTime.split(':')[0]) * 60 + parseInt(rescheduleTime.split(':')[1])
+    const latestStartMinutes = 17 * 60 + 30
+
+    if (timeInMinutes > latestStartMinutes) {
+      alert('Booking start time cannot be later than 17:30')
+      return
+    }
+
     const newStartTime = `${rescheduleDate}T${rescheduleTime}:00`
     const startDate = new Date(newStartTime)
     const duration = booking.service?.duration_minutes || 60
@@ -711,11 +719,12 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">New Time</label>
+                        <label className="block text-xs text-gray-600 mb-1">New Time (max 17:30)</label>
                         <input
                           type="time"
                           value={rescheduleTime}
                           onChange={(e) => setRescheduleTime(e.target.value)}
+                          max="17:30"
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
                         />
                       </div>

@@ -31,6 +31,7 @@ export interface TimeSlotConfig {
 export const BOOKING_BUFFER_MINUTES = 10
 export const SLOT_INTERVAL_MINUTES = 10
 export const AFTER_HOURS_START_TIME = '16:30'
+export const LATEST_START_TIME = '17:30'
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 
 function timeToMinutes(time: string): number {
@@ -47,6 +48,7 @@ function minutesToTime(minutes: number): string {
 export function generateTimeSlots(config: TimeSlotConfig): string[] {
   const { serviceSlug, serviceDurationMinutes, businessHours, serviceTimeWindow, timeBlocks } = config
   const slots: string[] = []
+  const latestStartMinutes = timeToMinutes(LATEST_START_TIME)
 
   const isCrownedNight = CROWNED_NIGHT_SERVICES.includes(serviceSlug)
 
@@ -55,7 +57,9 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
     const windowEnd = timeToMinutes(serviceTimeWindow.end_time)
 
     for (let time = windowStart; time + serviceDurationMinutes <= windowEnd; time += SLOT_INTERVAL_MINUTES) {
-      slots.push(minutesToTime(time))
+      if (time <= latestStartMinutes) {
+        slots.push(minutesToTime(time))
+      }
     }
   } else {
     const openTime = timeToMinutes(businessHours.open_time)
@@ -65,12 +69,14 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
       : closeTime
 
     for (let time = openTime; time + serviceDurationMinutes <= closeTime; time += SLOT_INTERVAL_MINUTES) {
-      slots.push(minutesToTime(time))
+      if (time <= latestStartMinutes) {
+        slots.push(minutesToTime(time))
+      }
     }
 
     if (businessHours.after_hours_enabled && businessHours.after_hours_end_time) {
       for (let time = closeTime; time + serviceDurationMinutes <= afterHoursEnd; time += SLOT_INTERVAL_MINUTES) {
-        if (!slots.includes(minutesToTime(time))) {
+        if (!slots.includes(minutesToTime(time)) && time <= latestStartMinutes) {
           slots.push(minutesToTime(time))
         }
       }
