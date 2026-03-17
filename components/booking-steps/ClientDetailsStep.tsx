@@ -4,12 +4,14 @@ interface ClientDetailsStepProps {
   clientName: string
   clientEmail: string
   clientPhone: string
+  clientDateOfBirth: string
   clientAllergies: string
   clientMedicalHistory: string
   onUpdateClient: (updates: {
     clientName?: string
     clientEmail?: string
     clientPhone?: string
+    clientDateOfBirth?: string
     clientAllergies?: string
     clientMedicalHistory?: string
   }) => void
@@ -19,11 +21,12 @@ export function ClientDetailsStep({
   clientName,
   clientEmail,
   clientPhone,
+  clientDateOfBirth,
   clientAllergies,
   clientMedicalHistory,
   onUpdateClient,
 }: ClientDetailsStepProps) {
-  const isAllComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== ''
+  const isAllComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== '' && clientDateOfBirth.trim() !== ''
 
   return (
     <div className="space-y-6">
@@ -78,6 +81,22 @@ export function ClientDetailsStep({
           />
           {clientPhone.trim() === '' && (
             <p className="text-xs text-red-500 mt-1">Phone number is required</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-800 mb-2">
+            Date of Birth <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            value={clientDateOfBirth}
+            onChange={(e) => onUpdateClient({ clientDateOfBirth: e.target.value })}
+            max={new Date().toISOString().split('T')[0]}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-gray-900"
+          />
+          {clientDateOfBirth.trim() === '' && (
+            <p className="text-xs text-red-500 mt-1">Date of birth is required</p>
           )}
         </div>
       </div>

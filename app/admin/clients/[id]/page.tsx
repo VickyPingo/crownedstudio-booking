@@ -92,6 +92,7 @@ export default function ClientProfilePage() {
 
   const [editMode, setEditMode] = useState(false)
   const [editData, setEditData] = useState({
+    date_of_birth: '',
     allergies: '',
     massage_pressure: 'medium',
     medical_notes: '',
@@ -156,6 +157,7 @@ export default function ClientProfilePage() {
     if (customerRes.data) {
       setCustomer(customerRes.data)
       setEditData({
+        date_of_birth: customerRes.data.date_of_birth || '',
         allergies: customerRes.data.allergies || '',
         massage_pressure: customerRes.data.massage_pressure || 'medium',
         medical_notes: customerRes.data.medical_notes || '',
@@ -409,7 +411,7 @@ export default function ClientProfilePage() {
             </button>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{customer.full_name}</h1>
-              <div className="flex items-center gap-4 mt-1">
+              <div className="flex flex-wrap items-center gap-4 mt-1">
                 {customer.email && (
                   <a href={`mailto:${customer.email}`} className="text-gray-600 hover:text-gray-900 flex items-center gap-1">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -425,6 +427,14 @@ export default function ClientProfilePage() {
                     </svg>
                     {customer.phone}
                   </a>
+                )}
+                {customer.date_of_birth && (
+                  <span className="text-gray-600 flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {new Date(customer.date_of_birth).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span>
                 )}
               </div>
             </div>
@@ -643,13 +653,13 @@ export default function ClientProfilePage() {
               {editMode ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
-                    <textarea
-                      value={editData.allergies}
-                      onChange={(e) => setEditData({ ...editData, allergies: e.target.value })}
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                    <input
+                      type="date"
+                      value={editData.date_of_birth}
+                      onChange={(e) => setEditData({ ...editData, date_of_birth: e.target.value })}
+                      max={new Date().toISOString().split('T')[0]}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
-                      rows={2}
-                      placeholder="Any known allergies..."
                     />
                   </div>
                   <div>
@@ -663,6 +673,16 @@ export default function ClientProfilePage() {
                       <option value="medium">Medium</option>
                       <option value="hard">Hard</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
+                    <textarea
+                      value={editData.allergies}
+                      onChange={(e) => setEditData({ ...editData, allergies: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900"
+                      rows={2}
+                      placeholder="Any known allergies..."
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Medical Notes</label>

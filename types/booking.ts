@@ -15,6 +15,7 @@ export interface BookingFormData {
   clientName: string
   clientEmail: string
   clientPhone: string
+  clientDateOfBirth: string
   clientAllergies: string
   clientMassagePressure: MassagePressure | ''
   clientMedicalHistory: string
@@ -38,6 +39,7 @@ export interface CreateBookingPayload {
   customerName: string
   customerEmail: string
   customerPhone: string
+  customerDateOfBirth: string
   customerAllergies: string
   customerMassagePressure: MassagePressure
   customerMedicalHistory: string
@@ -48,6 +50,7 @@ export interface CreateBookingPayload {
   peopleCount: number
   selectedUpsellIds: string[]
   selectedUpsellsByPerson: PerPersonUpsells
+  pressureByPerson: PerPersonPressure
   basePrice: number
   upsellsTotal: number
   weekendSurchargeAmount?: number

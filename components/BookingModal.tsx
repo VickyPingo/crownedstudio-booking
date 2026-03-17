@@ -92,6 +92,7 @@ export function BookingModal({
     clientName: '',
     clientEmail: '',
     clientPhone: '',
+    clientDateOfBirth: '',
     clientAllergies: '',
     clientMassagePressure: '',
     clientMedicalHistory: '',
@@ -176,6 +177,7 @@ export function BookingModal({
       clientName: '',
       clientEmail: '',
       clientPhone: '',
+      clientDateOfBirth: '',
       clientAllergies: '',
       clientMassagePressure: '',
       clientMedicalHistory: '',
@@ -202,7 +204,8 @@ export function BookingModal({
         return (
           formData.clientName.trim() !== '' &&
           formData.clientEmail.trim() !== '' &&
-          formData.clientPhone.trim() !== ''
+          formData.clientPhone.trim() !== '' &&
+          formData.clientDateOfBirth.trim() !== ''
         )
       default:
         return true
@@ -260,6 +263,7 @@ export function BookingModal({
             clientName={formData.clientName}
             clientEmail={formData.clientEmail}
             clientPhone={formData.clientPhone}
+            clientDateOfBirth={formData.clientDateOfBirth}
             clientAllergies={formData.clientAllergies}
             clientMedicalHistory={formData.clientMedicalHistory}
             onUpdateClient={(updates) => updateFormData(updates)}

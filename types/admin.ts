@@ -98,6 +98,7 @@ export interface CustomerProfile {
   full_name: string
   email: string | null
   phone: string | null
+  date_of_birth: string | null
   allergies: string | null
   massage_pressure: string
   medical_notes: string | null

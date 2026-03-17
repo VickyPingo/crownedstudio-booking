@@ -28,8 +28,10 @@ interface BookingData {
   allergies: string | null
   massage_pressure: string | null
   medical_history: string | null
+  customer_date_of_birth: string | null
+  pressure_preferences: Record<string, string> | null
   pricing_option_name: string | null
-  customer?: { id: string; full_name: string; email: string | null; phone: string | null } | null
+  customer?: { id: string; full_name: string; email: string | null; phone: string | null; date_of_birth: string | null } | null
   service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
   voucher?: { code: string; discount_type: string; discount_value: number } | null
   room?: { id: string; room_name: string; room_area: string; capacity: number } | null
@@ -534,20 +536,49 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             )}
 
             <section>
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Health Information</h3>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Client Information</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                {(booking.customer_date_of_birth || booking.customer?.date_of_birth) && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase">Date of Birth</p>
+                    <p className="text-sm text-gray-900">
+                      {new Date(booking.customer_date_of_birth || booking.customer?.date_of_birth || '').toLocaleDateString('en-ZA', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs text-gray-500 uppercase">Allergies</p>
                   <p className="text-sm text-gray-900">{booking.allergies || 'None specified'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 uppercase">Massage Pressure</p>
-                  <p className="text-sm text-gray-900 capitalize">{booking.massage_pressure}</p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-500 uppercase">Medical History</p>
                   <p className="text-sm text-gray-900">{booking.medical_history || 'None specified'}</p>
                 </div>
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Massage Preferences</h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                {booking.pressure_preferences && Object.keys(booking.pressure_preferences).length > 0 ? (
+                  Object.entries(booking.pressure_preferences).map(([person, pressure]) => (
+                    <div key={person} className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Person {person}:</span>
+                      <span className="text-sm font-medium text-gray-900 capitalize">{pressure}</span>
+                    </div>
+                  ))
+                ) : booking.massage_pressure ? (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Pressure:</span>
+                    <span className="text-sm font-medium text-gray-900 capitalize">{booking.massage_pressure}</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No pressure preferences specified</p>
+                )}
               </div>
             </section>
 

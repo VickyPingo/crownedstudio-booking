@@ -111,6 +111,18 @@ export async function POST(request: NextRequest) {
 
     if (existingCustomer) {
       customerId = existingCustomer.id
+
+      await supabase
+        .from('customers')
+        .update({
+          full_name: payload.customerName,
+          phone: payload.customerPhone,
+          date_of_birth: payload.customerDateOfBirth || null,
+          allergies: payload.customerAllergies || null,
+          massage_pressure: payload.customerMassagePressure || 'medium',
+          medical_notes: payload.customerMedicalHistory || null,
+        })
+        .eq('id', customerId)
     } else {
       const { data: newCustomer, error: customerError } = await supabase
         .from('customers')
@@ -118,6 +130,10 @@ export async function POST(request: NextRequest) {
           full_name: payload.customerName,
           email: payload.customerEmail,
           phone: payload.customerPhone,
+          date_of_birth: payload.customerDateOfBirth || null,
+          allergies: payload.customerAllergies || null,
+          massage_pressure: payload.customerMassagePressure || 'medium',
+          medical_notes: payload.customerMedicalHistory || null,
         })
         .select('id')
         .single()
@@ -220,6 +236,8 @@ export async function POST(request: NextRequest) {
         allergies: payload.customerAllergies || null,
         massage_pressure: payload.customerMassagePressure,
         medical_history: payload.customerMedicalHistory || null,
+        customer_date_of_birth: payload.customerDateOfBirth || null,
+        pressure_preferences: payload.pressureByPerson || {},
         voucher_code: payload.voucherCode || null,
         voucher_id: payload.voucherId || null,
         voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),

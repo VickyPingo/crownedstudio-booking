@@ -326,6 +326,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         customerName: formData.clientName,
         customerEmail: formData.clientEmail,
         customerPhone: formData.clientPhone,
+        customerDateOfBirth: formData.clientDateOfBirth,
         customerAllergies: formData.clientAllergies,
         customerMassagePressure: (formData.pressureByPerson[1] || 'medium') as MassagePressure,
         customerMedicalHistory: formData.clientMedicalHistory,
@@ -336,6 +337,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         peopleCount: formData.peopleCount,
         selectedUpsellIds: formData.selectedUpsells,
         selectedUpsellsByPerson: formData.selectedUpsellsByPerson,
+        pressureByPerson: formData.pressureByPerson,
         basePrice: servicePrice,
         upsellsTotal: upsellsTotal,
         weekendSurchargeAmount: weekendSurcharge,
@@ -501,6 +503,9 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Name:</span> {formData.clientName}</p>
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Email:</span> {formData.clientEmail}</p>
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Phone:</span> {formData.clientPhone}</p>
+            {formData.clientDateOfBirth && (
+              <p className="text-gray-800"><span className="text-gray-600 font-medium">Date of Birth:</span> {new Date(formData.clientDateOfBirth).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            )}
           </div>
         </div>
 
