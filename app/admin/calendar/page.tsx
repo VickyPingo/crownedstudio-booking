@@ -46,8 +46,9 @@ export default function AdminCalendarPage() {
     setError(null)
 
     try {
-      const startOfMonth = new Date(year, month, 1).toISOString().split('T')[0]
-      const endOfMonth = new Date(year, month + 1, 0).toISOString().split('T')[0]
+      const startOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
