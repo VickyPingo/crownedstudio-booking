@@ -46,7 +46,19 @@ interface BookingData {
     upsell_name?: string
     upsell_slug?: string
   }>
-  booking_notes: Array<{ id: string; note: string; created_at: string; created_by: string | null }>
+  booking_notes: Array<{
+    id: string
+    note: string
+    created_at: string
+    created_by: string | null
+    note_type?: string
+    metadata?: {
+      old_start_time?: string
+      old_end_time?: string
+      new_start_time?: string
+      new_end_time?: string
+    }
+  }>
   payment_transactions: Array<{ id: string; status: string; amount: number; created_at: string }>
 }
 
@@ -120,7 +132,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
           ? supabase.from('rooms').select('id, room_name, room_area, capacity').eq('id', bookingData.room_id).maybeSingle()
           : { data: null, error: null },
         supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number, duration_added_minutes').eq('booking_id', bookingId),
-        supabase.from('booking_notes').select('id, note, created_at, created_by').eq('booking_id', bookingId).order('created_at', { ascending: false }),
+        supabase.from('booking_notes').select('id, note, created_at, created_by, note_type, metadata').eq('booking_id', bookingId).order('created_at', { ascending: false }),
         supabase.from('payment_transactions').select('id, status, amount, created_at').eq('booking_id', bookingId).order('created_at', { ascending: false }),
       ])
 
@@ -238,6 +250,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       return
     }
 
+    const oldStartTime = booking.start_time
+    const oldEndTime = booking.end_time
+
     const newStartTime = `${rescheduleDate}T${rescheduleTime}:00`
     const startDate = new Date(newStartTime)
 
@@ -255,6 +270,69 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       .eq('id', booking.id)
 
     if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      const oldDate = new Date(oldStartTime)
+      const newDate = new Date(startDate)
+
+      const rescheduleNote = `Booking rescheduled on ${new Date().toLocaleString('en-ZA', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Africa/Johannesburg',
+      })}. Previous: ${oldDate.toLocaleDateString('en-ZA', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'Africa/Johannesburg',
+      })} at ${oldDate.toLocaleTimeString('en-ZA', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Africa/Johannesburg',
+      })}. New: ${newDate.toLocaleDateString('en-ZA', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'Africa/Johannesburg',
+      })} at ${newDate.toLocaleTimeString('en-ZA', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Africa/Johannesburg',
+      })}.`
+
+      await supabase.from('booking_notes').insert({
+        booking_id: booking.id,
+        note: rescheduleNote,
+        note_type: 'reschedule',
+        metadata: {
+          old_start_time: oldStartTime,
+          old_end_time: oldEndTime,
+          new_start_time: startDate.toISOString(),
+          new_end_time: endDate.toISOString(),
+        },
+        created_by: user?.id || null,
+      })
+
+      if (booking.customer?.email) {
+        try {
+          await fetch('/api/bookings/send-reschedule-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bookingId: booking.id,
+              oldStartTime,
+              newStartTime: startDate.toISOString(),
+            }),
+          })
+        } catch (emailError) {
+          console.error('Failed to send reschedule email:', emailError)
+        }
+      }
+
       setShowReschedule(false)
       setRescheduleDate('')
       setRescheduleTime('')
@@ -681,10 +759,34 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 {booking.booking_notes && booking.booking_notes.length > 0 ? (
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {booking.booking_notes.map((note) => (
-                      <div key={note.id} className="bg-gray-50 rounded-lg p-3">
-                        <p className="text-sm text-gray-900">{note.note}</p>
+                      <div
+                        key={note.id}
+                        className={`rounded-lg p-3 ${
+                          note.note_type === 'reschedule'
+                            ? 'bg-amber-50 border border-amber-200'
+                            : 'bg-gray-50'
+                        }`}
+                      >
+                        {note.note_type === 'reschedule' && (
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-xs font-semibold text-amber-800 uppercase">Rescheduled</span>
+                          </div>
+                        )}
+                        <p className={`text-sm ${note.note_type === 'reschedule' ? 'text-amber-900' : 'text-gray-900'}`}>
+                          {note.note}
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          {new Date(note.created_at).toLocaleString('en-ZA')}
+                          {new Date(note.created_at).toLocaleString('en-ZA', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Africa/Johannesburg',
+                          })}
                         </p>
                       </div>
                     ))}

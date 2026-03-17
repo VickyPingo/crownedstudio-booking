@@ -4,6 +4,7 @@ import {
   BookingEmailData,
   PaymentEmailData,
   EventBookingEmailData,
+  RescheduleEmailData,
   newBookingToSpaTemplate,
   bookingConfirmationToClientTemplate,
   bookingRequestToClientTemplate,
@@ -12,6 +13,7 @@ import {
   reminder24hToClientTemplate,
   eventBookingConfirmationToClientTemplate,
   eventBookingNotificationToSpaTemplate,
+  bookingRescheduledToClientTemplate,
 } from './templates'
 
 type EmailType = 'new_booking_spa' | 'booking_request' | 'booking_confirmation' | 'payment_received_spa' | 'payment_confirmation' | 'reminder_24h'
@@ -354,6 +356,29 @@ export async function sendEventBookingNotificationToSpa(data: EventBookingEmailD
     console.log(`[Email] Event booking notification sent successfully to spa`)
   } else {
     console.error(`[Email] Event booking notification FAILED:`, result.error)
+  }
+
+  return result.success
+}
+
+export async function sendBookingRescheduledToClient(data: RescheduleEmailData): Promise<boolean> {
+  console.log(`[Email] Starting reschedule notification for booking ${data.bookingId}`)
+
+  if (!data.clientEmail) {
+    console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping reschedule notification`)
+    return false
+  }
+
+  const html = bookingRescheduledToClientTemplate(data)
+  const subject = 'Your Crowned Studio Booking Has Been Rescheduled'
+
+  console.log(`[Email] Sending reschedule notification to ${data.clientEmail}`)
+  const result = await sendEmail(data.clientEmail, subject, html)
+
+  if (result.success) {
+    console.log(`[Email] Reschedule notification sent successfully for booking ${data.bookingId}`)
+  } else {
+    console.error(`[Email] Reschedule notification FAILED for booking ${data.bookingId}:`, result.error)
   }
 
   return result.success

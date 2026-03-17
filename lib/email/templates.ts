@@ -47,6 +47,22 @@ export interface PaymentEmailData {
   balanceDue: number
 }
 
+export interface RescheduleEmailData {
+  bookingId: string
+  bookingReference: string
+  clientName: string
+  clientEmail: string
+  serviceName: string
+  pricingOptionName: string | null
+  oldBookingDate: string
+  oldBookingTime: string
+  newBookingDate: string
+  newBookingTime: string
+  peopleCount: number
+  totalPrice: number
+  balanceDue: number
+}
+
 const baseStyles = `
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
   .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
@@ -715,3 +731,97 @@ export function eventBookingNotificationToSpaTemplate(data: EventBookingEmailDat
 </body>
 </html>`
 }
+
+export function bookingRescheduledToClientTemplate(data: RescheduleEmailData): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Rescheduled</title>
+  <style>${baseStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="logo">Crowned Studio</div>
+        <h1 class="title" style="margin-top: 16px;">Your Booking Has Been Rescheduled</h1>
+        <p class="subtitle">Booking Reference: ${data.bookingReference}</p>
+      </div>
+
+      <p style="font-size: 15px; color: #374151; margin-bottom: 24px;">
+        Dear ${data.clientName},<br><br>
+        Your booking has been rescheduled. Here are your updated appointment details:
+      </p>
+
+      <div class="highlight-box" style="background: #fef3c7; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+        <div style="text-align: center;">
+          <div style="font-size: 12px; color: #92400e; font-weight: 600; text-transform: uppercase; margin-bottom: 8px;">Previous Appointment</div>
+          <div style="font-size: 14px; color: #78350f;">${data.oldBookingDate}</div>
+          <div style="font-size: 16px; color: #78350f; font-weight: 600;">${data.oldBookingTime}</div>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin: 16px 0;">
+        <svg style="width: 24px; height: 24px; color: #6b7280; display: inline-block;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+        </svg>
+      </div>
+
+      <div class="highlight-box" style="background: #111827; color: #ffffff; text-align: center; padding: 24px;">
+        <div style="font-size: 12px; color: #9ca3af; font-weight: 600; text-transform: uppercase; margin-bottom: 8px;">New Appointment</div>
+        <div style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">${data.serviceName}</div>
+        ${data.pricingOptionName ? `<div style="font-size: 14px; color: #60a5fa; margin-bottom: 8px;">${data.pricingOptionName}</div>` : ''}
+        <div style="font-size: 18px; margin-top: 8px;">${data.newBookingDate}</div>
+        <div style="font-size: 24px; font-weight: 700; margin-top: 4px;">${data.newBookingTime}</div>
+        <div style="font-size: 14px; color: #9ca3af; margin-top: 8px;">${data.peopleCount} ${data.peopleCount === 1 ? 'person' : 'people'}</div>
+      </div>
+
+      <div class="section" style="margin-top: 24px;">
+        <div class="section-title">Booking Reference</div>
+        <div style="font-size: 18px; font-weight: 600; color: #111827; font-family: monospace;">${data.bookingReference}</div>
+        <p style="font-size: 13px; color: #6b7280; margin-top: 8px;">Please save this reference for your records.</p>
+      </div>
+
+      ${data.balanceDue > 0 ? `
+      <div class="section">
+        <div class="section-title">Payment Reminder</div>
+        <div class="highlight-box" style="background: #fef3c7;">
+          <p style="font-size: 14px; color: #92400e; margin: 0;">
+            Outstanding balance: <strong>R${data.balanceDue.toLocaleString()}</strong> (payable on arrival)
+          </p>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="section">
+        <div class="section-title">What to Remember</div>
+        <ul style="font-size: 14px; color: #374151; padding-left: 20px; margin: 0;">
+          <li>Arrive 10-15 minutes early for your appointment</li>
+          <li>Bring comfortable clothing</li>
+          ${data.balanceDue > 0 ? '<li>Bring payment for the outstanding balance</li>' : ''}
+        </ul>
+      </div>
+
+      <div class="footer">
+        <div class="section-title">Need to Make Changes?</div>
+        <p style="font-size: 13px; color: #6b7280; margin: 8px 0;">
+          Please contact us as soon as possible if you need to make any further changes.
+        </p>
+        <div class="contact-info">
+          <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
+          <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
+          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
+        </div>
+        <p class="footer-text" style="margin-top: 24px;">
+          We look forward to seeing you at your new appointment time!
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
