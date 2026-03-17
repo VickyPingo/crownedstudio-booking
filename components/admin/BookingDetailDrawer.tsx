@@ -39,6 +39,7 @@ interface BookingData {
   service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
   voucher?: { code: string; discount_type: string; discount_value: number } | null
   room?: { id: string; room_name: string; room_area: string; capacity: number } | null
+  assigned_rooms?: Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }>
   booking_upsells: Array<{
     upsell_id: string
     quantity: number
@@ -120,7 +121,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         return
       }
 
-      const [customerRes, serviceRes, voucherRes, roomRes, upsellsRes, notesRes, paymentsRes] = await Promise.all([
+      const [customerRes, serviceRes, voucherRes, roomRes, bookingRoomsRes, upsellsRes, notesRes, paymentsRes] = await Promise.all([
         bookingData.customer_id
           ? supabase.from('customers').select('id, full_name, email, phone').eq('id', bookingData.customer_id).maybeSingle()
           : { data: null, error: null },
@@ -133,6 +134,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         bookingData.room_id
           ? supabase.from('rooms').select('id, room_name, room_area, capacity').eq('id', bookingData.room_id).maybeSingle()
           : { data: null, error: null },
+        supabase.from('booking_rooms').select('room_id').eq('booking_id', bookingId),
         supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number, duration_added_minutes').eq('booking_id', bookingId),
         supabase.from('booking_notes').select('id, note, created_at, created_by, note_type, metadata').eq('booking_id', bookingId).order('created_at', { ascending: false }),
         supabase.from('payment_transactions').select('id, status, amount, created_at').eq('booking_id', bookingId).order('created_at', { ascending: false }),
@@ -150,12 +152,26 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         }))
       }
 
+      let assignedRooms: Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }> = []
+      if (bookingRoomsRes.data && bookingRoomsRes.data.length > 0) {
+        const roomIds = bookingRoomsRes.data.map(br => br.room_id)
+        const { data: roomsData } = await supabase
+          .from('rooms')
+          .select('id, room_name, room_area, capacity, priority')
+          .in('id', roomIds)
+          .order('priority', { ascending: true })
+        assignedRooms = (roomsData || []) as Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }>
+      } else if (bookingData.room_id) {
+        assignedRooms = roomRes.data ? [{ ...roomRes.data, priority: 0 }] : []
+      }
+
       const enrichedBooking: BookingData = {
         ...bookingData,
         customer: customerRes.data || undefined,
         service: serviceRes.data || undefined,
         voucher: voucherRes.data || undefined,
         room: roomRes.data || undefined,
+        assigned_rooms: assignedRooms,
         booking_upsells: upsellsWithNames,
         booking_notes: notesRes.data || [],
         payment_transactions: paymentsRes.data || [],
@@ -489,20 +505,39 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 </div>
                 {!showRoomSelect ? (
                   <div className="flex items-center justify-between">
-                    <div>
-                      {booking.room ? (
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-gray-900">{booking.room.room_name}</p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              booking.room.room_area === 'public'
-                                ? 'bg-teal-100 text-teal-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {booking.room.room_area}
-                            </span>
+                    <div className="flex-1">
+                      {booking.assigned_rooms && booking.assigned_rooms.length > 0 ? (
+                        <div className="space-y-2">
+                          {booking.assigned_rooms.length > 1 && (
+                            <p className="text-xs text-blue-600 font-medium mb-2">
+                              Multi-room booking ({booking.assigned_rooms.length} rooms)
+                            </p>
+                          )}
+                          {booking.assigned_rooms.map((room, index) => (
+                            <div key={room.id} className={index > 0 ? 'pt-2 border-t border-gray-200' : ''}>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">{room.room_name}</p>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                  room.room_area === 'public'
+                                    ? 'bg-teal-100 text-teal-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {room.room_area}
+                                </span>
+                                {booking.assigned_rooms && booking.assigned_rooms.length > 1 && (
+                                  <span className="text-xs text-gray-500">
+                                    (Priority {room.priority})
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-600">Capacity: {room.capacity}</p>
+                            </div>
+                          ))}
+                          <div className="pt-2 border-t border-gray-200">
+                            <p className="text-xs text-gray-600">
+                              Total capacity: {booking.assigned_rooms.reduce((sum, r) => sum + r.capacity, 0)} people
+                            </p>
                           </div>
-                          <p className="text-sm text-gray-600">Capacity: {booking.room.capacity}</p>
                         </div>
                       ) : (
                         <p className="text-sm text-gray-500">No room assigned</p>

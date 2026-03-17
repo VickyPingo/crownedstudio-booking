@@ -14,6 +14,7 @@ interface RoomBooking {
   status: string
   people_count: number
   total_price: number
+  assigned_room_ids?: string[]
   customer: {
     full_name: string
   }
@@ -124,18 +125,46 @@ export default function RoomsCalendarPage() {
       console.error('Room Calendar bookings query error:', bookingsError)
     }
 
+    let enrichedBookings: RoomBooking[] = []
+    if (bookingsData && bookingsData.length > 0) {
+      const bookingIds = bookingsData.map(b => b.id)
+      const { data: bookingRoomsData } = await supabase
+        .from('booking_rooms')
+        .select('booking_id, room_id')
+        .in('booking_id', bookingIds)
+
+      const bookingRoomsMap = new Map<string, string[]>()
+      if (bookingRoomsData) {
+        bookingRoomsData.forEach(br => {
+          if (!bookingRoomsMap.has(br.booking_id)) {
+            bookingRoomsMap.set(br.booking_id, [])
+          }
+          bookingRoomsMap.get(br.booking_id)!.push(br.room_id)
+        })
+      }
+
+      enrichedBookings = bookingsData.map(b => {
+        const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
+        return {
+          ...(b as unknown as RoomBooking),
+          assigned_room_ids: assignedRoomIds
+        }
+      })
+    }
+
     console.log('Room Calendar bookings loaded:', {
-      count: bookingsData?.length || 0,
-      bookings: bookingsData?.map(b => ({
+      count: enrichedBookings.length,
+      bookings: enrichedBookings.map(b => ({
         id: b.id,
         start_time: b.start_time,
         room_id: b.room_id,
-        customer: (b.customer as any)?.full_name
+        assigned_room_ids: b.assigned_room_ids,
+        customer: b.customer?.full_name
       }))
     })
 
     setRooms((roomsData || []) as Room[])
-    setBookings((bookingsData || []) as unknown as RoomBooking[])
+    setBookings(enrichedBookings)
     setLoading(false)
   }
 
@@ -164,11 +193,16 @@ export default function RoomsCalendarPage() {
     setSelectedDate(date.toISOString().split('T')[0])
   }
 
-  const unassignedBookings = bookings.filter(b => !b.room_id)
+  const unassignedBookings = bookings.filter(b => !b.room_id && (!b.assigned_room_ids || b.assigned_room_ids.length === 0))
 
   const getBookingsForRoom = (roomId: string): RoomBooking[] => {
     const roomBookings = bookings
-      .filter(b => b.room_id === roomId)
+      .filter(b => {
+        if (b.assigned_room_ids && b.assigned_room_ids.length > 0) {
+          return b.assigned_room_ids.includes(roomId)
+        }
+        return b.room_id === roomId
+      })
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
     if (roomBookings.length > 0) {
@@ -176,7 +210,9 @@ export default function RoomsCalendarPage() {
         id: b.id,
         customer: b.customer?.full_name,
         start_time: b.start_time,
-        local_time: new Date(b.start_time).toLocaleString('en-ZA')
+        local_time: new Date(b.start_time).toLocaleString('en-ZA'),
+        is_multi_room: (b.assigned_room_ids && b.assigned_room_ids.length > 1) || false,
+        assigned_rooms: b.assigned_room_ids || [b.room_id || '']
       })))
     }
 
@@ -312,18 +348,28 @@ export default function RoomsCalendarPage() {
                           {roomBookings.map((booking) => {
                             const { top, height } = getBookingPosition(booking)
                             const paymentStatus = getPaymentStatus(booking)
+                            const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
 
                             return (
                               <button
                                 key={booking.id}
                                 onClick={() => setSelectedBookingId(booking.id)}
-                                className={`absolute left-1 right-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)}`}
+                                className={`absolute left-1 right-1 rounded-lg border p-2 text-left overflow-hidden hover:shadow-md transition-shadow ${getStatusColor(booking.status)} ${
+                                  isMultiRoom ? 'border-l-4 border-l-purple-500' : ''
+                                }`}
                                 style={{
                                   top: `${top}px`,
                                   height: `${height}px`,
                                   zIndex: 10
                                 }}
                               >
+                                {isMultiRoom && (
+                                  <div className="absolute top-1 right-1">
+                                    <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-purple-500 rounded-full">
+                                      {booking.assigned_room_ids!.length}
+                                    </span>
+                                  </div>
+                                )}
                                 <p className="font-medium text-sm truncate">
                                   {booking.customer?.full_name}
                                 </p>
@@ -387,17 +433,27 @@ export default function RoomsCalendarPage() {
                       <div className="divide-y divide-gray-100">
                         {roomBookings.map((booking) => {
                           const paymentStatus = getPaymentStatus(booking)
+                          const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
                           return (
                             <button
                               key={booking.id}
                               onClick={() => setSelectedBookingId(booking.id)}
-                              className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${getStatusColor(booking.status)} border-l-4`}
+                              className={`w-full p-4 text-left hover:bg-gray-50 transition-colors ${getStatusColor(booking.status)} border-l-4 ${
+                                isMultiRoom ? 'border-l-purple-500' : ''
+                              }`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
-                                  <p className="font-medium text-gray-900 truncate">
-                                    {booking.customer?.full_name}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium text-gray-900 truncate">
+                                      {booking.customer?.full_name}
+                                    </p>
+                                    {isMultiRoom && (
+                                      <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold text-white bg-purple-500 rounded-full">
+                                        {booking.assigned_room_ids!.length} rooms
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-sm text-gray-600 truncate">
                                     {booking.service?.name}
                                   </p>
