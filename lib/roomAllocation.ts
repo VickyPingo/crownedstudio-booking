@@ -24,6 +24,12 @@ export interface RoomAllocationResult {
   error?: string
 }
 
+export interface MultiRoomAllocationResult {
+  room_ids: string[]
+  room_names: string[]
+  error?: string
+}
+
 export const CLEANUP_BUFFER_MINUTES = 10
 
 function doTimesOverlapWithBuffer(
@@ -36,41 +42,24 @@ function doTimesOverlapWithBuffer(
   return newStart < existingEndWithBuffer && newEnd > existingStart
 }
 
-export async function allocateRoom(
+async function getAvailableRooms(
   serviceRoomArea: string,
   startTime: Date,
   endTime: Date,
-  peopleCount: number,
   excludeBookingId?: string
-): Promise<RoomAllocationResult> {
+): Promise<Room[]> {
   const supabase = supabaseAdmin
-
-  console.log('[RoomAllocation] Starting allocation:', {
-    serviceRoomArea,
-    startTime: startTime.toISOString(),
-    endTime: endTime.toISOString(),
-    peopleCount,
-    excludeBookingId,
-  })
 
   const { data: rooms, error: roomsError } = await supabase
     .from('rooms')
     .select('*')
     .eq('active', true)
     .eq('room_area', serviceRoomArea)
-    .gte('capacity', peopleCount)
     .order('priority', { ascending: true })
 
-  if (roomsError) {
+  if (roomsError || !rooms) {
     console.error('[RoomAllocation] Room query error:', roomsError)
-    return { room_id: null, room_name: null, error: `Room query failed: ${roomsError.message}` }
-  }
-
-  console.log('[RoomAllocation] Found rooms:', rooms?.map(r => ({ id: r.id, name: r.room_name, area: r.room_area, capacity: r.capacity })))
-
-  if (!rooms || rooms.length === 0) {
-    console.error('[RoomAllocation] No rooms found for:', { serviceRoomArea, peopleCount })
-    return { room_id: null, room_name: null, error: `No rooms available for area "${serviceRoomArea}" with capacity >= ${peopleCount}` }
+    return []
   }
 
   const dayStart = new Date(startTime)
@@ -80,7 +69,7 @@ export async function allocateRoom(
 
   let bookingsQuery = supabase
     .from('bookings')
-    .select('id, start_time, end_time, room_id, status, people_count, payment_expires_at')
+    .select('id, start_time, end_time, room_id, status, payment_expires_at')
     .in('status', ['confirmed', 'pending_payment'])
     .gte('start_time', dayStart.toISOString())
     .lte('start_time', dayEnd.toISOString())
@@ -90,36 +79,153 @@ export async function allocateRoom(
     bookingsQuery = bookingsQuery.neq('id', excludeBookingId)
   }
 
-  const { data: existingBookings } = await bookingsQuery
+  const { data: legacyBookings } = await bookingsQuery
+
+  const { data: bookingRooms } = await supabase
+    .from('booking_rooms')
+    .select('booking_id, room_id, bookings!inner(id, start_time, end_time, status, payment_expires_at)')
+    .gte('bookings.start_time', dayStart.toISOString())
+    .lte('bookings.start_time', dayEnd.toISOString())
+    .in('bookings.status', ['confirmed', 'pending_payment'])
 
   const now = new Date().toISOString()
-  const activeBookings = (existingBookings || []).filter(booking => {
-    if (booking.status === 'confirmed') return true
-    if (booking.status === 'pending_payment') {
-      return !booking.payment_expires_at || booking.payment_expires_at > now
-    }
-    return false
-  })
+  const occupiedRoomIds = new Set<string>()
 
-  for (const room of rooms) {
-    const roomBookings = activeBookings.filter(b => b.room_id === room.id)
+  if (legacyBookings) {
+    for (const booking of legacyBookings) {
+      if (excludeBookingId && booking.id === excludeBookingId) continue
 
-    const hasConflict = roomBookings.some(booking => {
-      const bookingStart = new Date(booking.start_time)
-      const bookingEnd = new Date(booking.end_time)
-      return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)
-    })
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
 
-    console.log(`[RoomAllocation] Room ${room.room_name}: ${roomBookings.length} bookings, hasConflict=${hasConflict}`)
-
-    if (!hasConflict) {
-      console.log(`[RoomAllocation] Allocated room: ${room.room_name} (${room.id})`)
-      return { room_id: room.id, room_name: room.room_name }
+      if (isActive && booking.room_id) {
+        const bookingStart = new Date(booking.start_time)
+        const bookingEnd = new Date(booking.end_time)
+        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
+          occupiedRoomIds.add(booking.room_id)
+        }
+      }
     }
   }
 
-  console.error('[RoomAllocation] All rooms occupied for this time slot')
-  return { room_id: null, room_name: null, error: 'All rooms are occupied for this time' }
+  if (bookingRooms) {
+    for (const br of bookingRooms) {
+      if (excludeBookingId && br.booking_id === excludeBookingId) continue
+
+      const booking = (br as any).bookings
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+
+      if (isActive) {
+        const bookingStart = new Date(booking.start_time)
+        const bookingEnd = new Date(booking.end_time)
+        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
+          occupiedRoomIds.add(br.room_id)
+        }
+      }
+    }
+  }
+
+  return rooms.filter(room => !occupiedRoomIds.has(room.id))
+}
+
+function findRoomCombination(
+  availableRooms: Room[],
+  peopleCount: number
+): Room[] | null {
+  if (peopleCount <= 3) {
+    const singleRoom = availableRooms.find(r => r.capacity >= peopleCount)
+    return singleRoom ? [singleRoom] : null
+  }
+
+  const preferredRoomNames = ['Room 1', 'Room 3', 'Room 4']
+  const preferredRooms = availableRooms.filter(r => preferredRoomNames.includes(r.room_name))
+  const otherRooms = availableRooms.filter(r => !preferredRoomNames.includes(r.room_name))
+
+  function tryFindCombination(rooms: Room[], needed: number, selected: Room[] = []): Room[] | null {
+    if (needed <= 0) return selected
+
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i]
+      if (selected.includes(room)) continue
+
+      const newSelected = [...selected, room]
+      const totalCapacity = newSelected.reduce((sum, r) => sum + r.capacity, 0)
+
+      if (totalCapacity >= peopleCount) {
+        return newSelected
+      }
+
+      const remainingRooms = rooms.slice(i + 1)
+      const result = tryFindCombination(remainingRooms, peopleCount - totalCapacity, newSelected)
+      if (result) return result
+    }
+
+    return null
+  }
+
+  let combination = tryFindCombination(preferredRooms, peopleCount)
+  if (combination) return combination
+
+  combination = tryFindCombination([...preferredRooms, ...otherRooms], peopleCount)
+  return combination
+}
+
+export async function allocateRoom(
+  serviceRoomArea: string,
+  startTime: Date,
+  endTime: Date,
+  peopleCount: number,
+  excludeBookingId?: string
+): Promise<MultiRoomAllocationResult> {
+  console.log('[RoomAllocation] Starting allocation:', {
+    serviceRoomArea,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString(),
+    peopleCount,
+    excludeBookingId,
+  })
+
+  const availableRooms = await getAvailableRooms(serviceRoomArea, startTime, endTime, excludeBookingId)
+
+  console.log('[RoomAllocation] Available rooms:', availableRooms.map(r => ({
+    name: r.room_name,
+    capacity: r.capacity,
+    priority: r.priority
+  })))
+
+  if (availableRooms.length === 0) {
+    console.error('[RoomAllocation] No available rooms for:', { serviceRoomArea, peopleCount })
+    return {
+      room_ids: [],
+      room_names: [],
+      error: `No rooms available for area "${serviceRoomArea}"`
+    }
+  }
+
+  const combination = findRoomCombination(availableRooms, peopleCount)
+
+  if (!combination) {
+    console.error('[RoomAllocation] No room combination found for:', { peopleCount, availableRooms: availableRooms.length })
+    return {
+      room_ids: [],
+      room_names: [],
+      error: `No available room combination can accommodate ${peopleCount} people`
+    }
+  }
+
+  const room_ids = combination.map(r => r.id)
+  const room_names = combination.map(r => r.room_name)
+
+  console.log(`[RoomAllocation] Allocated rooms: ${room_names.join(', ')} (${room_ids.length} rooms)`)
+
+  return { room_ids, room_names }
 }
 
 export async function getRoomsForDate(
@@ -176,6 +282,44 @@ export async function assignRoomToBooking(
   return { success: true }
 }
 
+export async function assignRoomsToBooking(
+  bookingId: string,
+  roomIds: string[]
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = supabaseAdmin
+
+  await supabase
+    .from('booking_rooms')
+    .delete()
+    .eq('booking_id', bookingId)
+
+  if (roomIds.length === 0) {
+    return { success: true }
+  }
+
+  const inserts = roomIds.map(roomId => ({
+    booking_id: bookingId,
+    room_id: roomId,
+  }))
+
+  const { error } = await supabase
+    .from('booking_rooms')
+    .insert(inserts)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  if (roomIds.length > 0) {
+    await supabase
+      .from('bookings')
+      .update({ room_id: roomIds[0] })
+      .eq('id', bookingId)
+  }
+
+  return { success: true }
+}
+
 export async function checkRoomAvailability(
   roomId: string,
   startTime: Date,
@@ -201,24 +345,63 @@ export async function checkRoomAvailability(
     query = query.neq('id', excludeBookingId)
   }
 
-  const { data: bookings } = await query
+  const { data: legacyBookings } = await query
 
-  if (!bookings || bookings.length === 0) {
-    return true
+  let bookingRoomsQuery = supabase
+    .from('booking_rooms')
+    .select('booking_id, bookings!inner(id, start_time, end_time, status, payment_expires_at)')
+    .eq('room_id', roomId)
+    .gte('bookings.start_time', dayStart.toISOString())
+    .lte('bookings.start_time', dayEnd.toISOString())
+    .in('bookings.status', ['confirmed', 'pending_payment'])
+
+  if (excludeBookingId) {
+    bookingRoomsQuery = bookingRoomsQuery.neq('booking_id', excludeBookingId)
   }
 
-  const now = new Date().toISOString()
-  const activeBookings = bookings.filter(booking => {
-    if (booking.status === 'confirmed') return true
-    if (booking.status === 'pending_payment') {
-      return !booking.payment_expires_at || booking.payment_expires_at > now
-    }
-    return false
-  })
+  const { data: bookingRooms } = await bookingRoomsQuery
 
-  const hasConflict = activeBookings.some(booking => {
-    const bookingStart = new Date(booking.start_time)
-    const bookingEnd = new Date(booking.end_time)
+  const now = new Date().toISOString()
+  const allConflicts: { start_time: string; end_time: string }[] = []
+
+  if (legacyBookings) {
+    for (const booking of legacyBookings) {
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+
+      if (isActive) {
+        allConflicts.push({
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+        })
+      }
+    }
+  }
+
+  if (bookingRooms) {
+    for (const br of bookingRooms) {
+      const booking = (br as any).bookings
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+
+      if (isActive) {
+        allConflicts.push({
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+        })
+      }
+    }
+  }
+
+  const hasConflict = allConflicts.some(conflict => {
+    const bookingStart = new Date(conflict.start_time)
+    const bookingEnd = new Date(conflict.end_time)
     return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)
   })
 

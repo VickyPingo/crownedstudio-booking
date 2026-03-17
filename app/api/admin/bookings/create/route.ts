@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { allocateRoom } from '@/lib/roomAllocation'
+import { allocateRoom, assignRoomsToBooking } from '@/lib/roomAllocation'
 import { isSameDayBooking } from '@/lib/timeSlots'
 
 export async function POST(request: NextRequest) {
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const serviceArea = serviceData?.service_area || 'treatment'
 
-    let roomAllocation: { room_id: string | null; room_name: string | null; error?: string }
+    let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }
     try {
       roomAllocation = await allocateRoom(
         serviceArea,
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (roomAllocation.error || !roomAllocation.room_id) {
+    if (roomAllocation.error || roomAllocation.room_ids.length === 0) {
       return NextResponse.json(
         { error: roomAllocation.error || 'No rooms available for this time slot' },
         { status: 409 }
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
         balance_paid: fullyPaid,
         balance_paid_at: fullyPaid || depositPaid ? new Date().toISOString() : null,
         balance_paid_by: fullyPaid || depositPaid ? user?.id : null,
-        room_id: roomAllocation.room_id,
+        room_id: roomAllocation.room_ids[0] || null,
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
       })
@@ -124,6 +124,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await assignRoomsToBooking(booking.id, roomAllocation.room_ids)
 
     if (selectedUpsellsByPerson && Object.keys(selectedUpsellsByPerson).length > 0) {
       const allUpsellSlugs = [...new Set(Object.values(selectedUpsellsByPerson).flat())]

@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
 import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers'
 import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
-import { allocateRoom } from '@/lib/roomAllocation'
+import { allocateRoom, assignRoomsToBooking } from '@/lib/roomAllocation'
 import { isSameDayBooking } from '@/lib/timeSlots'
 
 const PAYMENT_EXPIRY_MINUTES = 20
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
     const depositDue = Math.max(0, Math.round(totalPrice * DEPOSIT_PERCENT))
     const isZeroPayment = totalPrice === 0 || depositDue === 0
 
-    let roomAllocation: { room_id: string | null; room_name: string | null; error?: string }
+    let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }
     try {
       roomAllocation = await allocateRoom(
         serviceArea,
@@ -212,10 +212,10 @@ export async function POST(request: NextRequest) {
       )
     } catch (err) {
       console.error('Room allocation error:', err)
-      roomAllocation = { room_id: null, room_name: null, error: 'Room allocation failed' }
+      roomAllocation = { room_ids: [], room_names: [], error: 'Room allocation failed' }
     }
 
-    if (roomAllocation.error || !roomAllocation.room_id) {
+    if (roomAllocation.error || roomAllocation.room_ids.length === 0) {
       return NextResponse.json(
         { error: roomAllocation.error || 'No rooms available for this time slot. Please choose another time.' },
         { status: 409 }
@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
         voucher_code: payload.voucherCode || null,
         voucher_id: payload.voucherId || null,
         voucher_discount: Math.min(payload.voucherDiscount || 0, subtotal),
-        room_id: roomAllocation.room_id,
+        room_id: roomAllocation.room_ids[0] || null,
         pricing_option_name: payload.pricingOptionName || null,
         terms_accepted: payload.termsAccepted,
         terms_accepted_at: payload.termsAcceptedAt,
@@ -266,6 +266,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await assignRoomsToBooking(booking.id, roomAllocation.room_ids)
 
     const hasPerPersonUpsells = payload.selectedUpsellsByPerson &&
       Object.values(payload.selectedUpsellsByPerson).some(arr => arr.length > 0)
