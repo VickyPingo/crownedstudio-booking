@@ -86,10 +86,23 @@ export default function RoomsCalendarPage() {
       .eq('active', true)
       .order('priority', { ascending: true })
 
-    const dayStart = `${selectedDate}T00:00:00`
-    const dayEnd = `${selectedDate}T23:59:59`
+    // Convert selected date to UTC range for the entire local day
+    // Africa/Johannesburg is UTC+2
+    const localDate = new Date(selectedDate + 'T00:00:00')
+    const dayStartUTC = new Date(localDate.getTime() - (2 * 60 * 60 * 1000)) // Subtract 2 hours for UTC+2
+    const dayEndUTC = new Date(localDate.getTime() + (24 * 60 * 60 * 1000) - (2 * 60 * 60 * 1000) - 1000)
 
-    const { data: bookingsData } = await supabase
+    const dayStart = dayStartUTC.toISOString()
+    const dayEnd = dayEndUTC.toISOString()
+
+    console.log('Room Calendar Query:', {
+      selectedDate,
+      dayStart,
+      dayEnd,
+      localDate: localDate.toISOString()
+    })
+
+    const { data: bookingsData, error: bookingsError } = await supabase
       .from('bookings')
       .select(`
         id,
@@ -106,6 +119,20 @@ export default function RoomsCalendarPage() {
       .gte('start_time', dayStart)
       .lte('start_time', dayEnd)
       .in('status', ['confirmed', 'completed'])
+
+    if (bookingsError) {
+      console.error('Room Calendar bookings query error:', bookingsError)
+    }
+
+    console.log('Room Calendar bookings loaded:', {
+      count: bookingsData?.length || 0,
+      bookings: bookingsData?.map(b => ({
+        id: b.id,
+        start_time: b.start_time,
+        room_id: b.room_id,
+        customer: (b.customer as any)?.full_name
+      }))
+    })
 
     setRooms((roomsData || []) as Room[])
     setBookings((bookingsData || []) as unknown as RoomBooking[])
@@ -140,9 +167,20 @@ export default function RoomsCalendarPage() {
   const unassignedBookings = bookings.filter(b => !b.room_id)
 
   const getBookingsForRoom = (roomId: string): RoomBooking[] => {
-    return bookings
+    const roomBookings = bookings
       .filter(b => b.room_id === roomId)
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+
+    if (roomBookings.length > 0) {
+      console.log(`Bookings for room ${roomId}:`, roomBookings.map(b => ({
+        id: b.id,
+        customer: b.customer?.full_name,
+        start_time: b.start_time,
+        local_time: new Date(b.start_time).toLocaleString('en-ZA')
+      })))
+    }
+
+    return roomBookings
   }
 
   return (
