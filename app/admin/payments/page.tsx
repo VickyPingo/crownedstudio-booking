@@ -12,6 +12,8 @@ interface SpaBooking {
   balance_paid: number
   status: string
   start_time: string
+  voucher_discount: number
+  deposit_paid_manually: boolean
   customer: {
     full_name: string
     email: string | null
@@ -38,6 +40,7 @@ interface EventBookingPayment {
   total_amount: number
   payment_status: string
   created_at: string
+  voucher_discount: number
 }
 
 type PaymentItem = SpaBooking | EventBookingPayment
@@ -66,6 +69,8 @@ export default function AdminPaymentsPage() {
           balance_paid,
           status,
           start_time,
+          voucher_discount,
+          deposit_paid_manually,
           customer:customers(full_name, email),
           service:services(name),
           payment_transactions(id, status, amount, created_at, payment_id)
@@ -83,6 +88,7 @@ export default function AdminPaymentsPage() {
           total_amount,
           payment_status,
           created_at,
+          voucher_discount,
           event:events(title)
         `)
         .order('created_at', { ascending: false }),
@@ -107,6 +113,7 @@ export default function AdminPaymentsPage() {
             total_amount: b.total_amount,
             payment_status: b.payment_status,
             created_at: b.created_at,
+            voucher_discount: b.voucher_discount || 0,
           }
         })
       )
@@ -124,14 +131,15 @@ export default function AdminPaymentsPage() {
     const depositPaid = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
     const balancePaid = booking.balance_paid || 0
     const totalPaid = depositPaid + balancePaid
+    const voucherDiscount = booking.voucher_discount || 0
     const balanceDue = Math.max(0, booking.total_price - totalPaid)
 
     if (balanceDue <= 0) {
-      return { status: 'fully_paid', depositPaid, balancePaid, balanceDue, totalPaid }
-    } else if (depositPaid > 0) {
-      return { status: 'deposit_paid', depositPaid, balancePaid, balanceDue, totalPaid }
+      return { status: 'fully_paid', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
+    } else if (depositPaid > 0 || balancePaid > 0) {
+      return { status: 'deposit_paid', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
     }
-    return { status: 'pending', depositPaid, balancePaid, balanceDue, totalPaid }
+    return { status: 'pending', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
   }
 
   const filteredSpaBookings = spaBookings.filter((booking) => {
@@ -190,6 +198,7 @@ export default function AdminPaymentsPage() {
       const payment = getSpaPaymentStatus(b)
       return sum + payment.balanceDue
     }, 0),
+    voucherSavings: spaBookings.reduce((sum, b) => sum + (b.voucher_discount || 0), 0),
     fullyPaid: spaBookings.filter(b => getSpaPaymentStatus(b).status === 'fully_paid').length,
     awaitingBalance: spaBookings.filter(b => getSpaPaymentStatus(b).status === 'deposit_paid').length,
   }
@@ -201,6 +210,7 @@ export default function AdminPaymentsPage() {
     pendingAmount: eventPayments
       .filter(p => p.payment_status === 'pending')
       .reduce((sum, p) => sum + p.total_amount, 0),
+    voucherSavings: eventPayments.reduce((sum, p) => sum + (p.voucher_discount || 0), 0),
     paidCount: eventPayments.filter(p => p.payment_status === 'paid').length,
     pendingCount: eventPayments.filter(p => p.payment_status === 'pending').length,
   }
@@ -208,6 +218,7 @@ export default function AdminPaymentsPage() {
   const combinedStats = {
     totalReceived: spaStats.totalReceived + eventStats.totalReceived,
     pendingBalance: spaStats.pendingBalance + eventStats.pendingAmount,
+    voucherSavings: spaStats.voucherSavings + eventStats.voucherSavings,
   }
 
   return (
@@ -218,22 +229,31 @@ export default function AdminPaymentsPage() {
           <p className="text-gray-600 mt-1">Track and manage booking payments.</p>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6">
           <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <p className="text-xs sm:text-sm font-medium text-gray-600">Total Received</p>
             <p className="text-lg sm:text-2xl font-bold text-green-700 mt-1">R{combinedStats.totalReceived.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">Actual payments</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <p className="text-xs sm:text-sm font-medium text-gray-600">Pending Amount</p>
             <p className="text-lg sm:text-2xl font-bold text-amber-700 mt-1">R{combinedStats.pendingBalance.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">Outstanding</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <p className="text-xs sm:text-sm font-medium text-gray-600">Spa Payments</p>
             <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">R{spaStats.totalReceived.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">Spa only</p>
           </div>
           <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
             <p className="text-xs sm:text-sm font-medium text-gray-600">Event Payments</p>
             <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">R{eventStats.totalReceived.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">Events only</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 sm:p-6 shadow-sm">
+            <p className="text-xs sm:text-sm font-medium text-gray-600">Voucher Savings</p>
+            <p className="text-lg sm:text-2xl font-bold text-purple-700 mt-1">R{combinedStats.voucherSavings.toLocaleString()}</p>
+            <p className="text-xs text-gray-500 mt-1">Discounts applied</p>
           </div>
         </div>
 
@@ -299,7 +319,8 @@ export default function AdminPaymentsPage() {
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Service</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Deposit</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Voucher</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Due</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -324,7 +345,17 @@ export default function AdminPaymentsPage() {
                                 <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
                               </td>
                               <td className="px-6 py-4">
-                                <p className="text-green-700 font-medium">R{payment.depositPaid.toLocaleString()}</p>
+                                <p className="text-green-700 font-medium">R{payment.totalPaid.toLocaleString()}</p>
+                                {payment.totalPaid === 0 && payment.voucherDiscount > 0 && (
+                                  <p className="text-xs text-gray-500">Voucher covered</p>
+                                )}
+                              </td>
+                              <td className="px-6 py-4">
+                                {payment.voucherDiscount > 0 ? (
+                                  <p className="font-medium text-purple-700">R{payment.voucherDiscount.toLocaleString()}</p>
+                                ) : (
+                                  <p className="text-gray-400">-</p>
+                                )}
                               </td>
                               <td className="px-6 py-4">
                                 <p className={`font-medium ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
@@ -371,17 +402,27 @@ export default function AdminPaymentsPage() {
                           <div className="text-sm text-gray-600 mb-3">
                             {new Date(booking.start_time).toLocaleDateString('en-ZA')}
                           </div>
-                          <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="grid grid-cols-2 gap-2 text-sm mb-2">
                             <div>
                               <p className="text-gray-500 text-xs">Total</p>
                               <p className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</p>
                             </div>
                             <div>
-                              <p className="text-gray-500 text-xs">Deposit</p>
-                              <p className="font-medium text-green-700">R{payment.depositPaid.toLocaleString()}</p>
+                              <p className="text-gray-500 text-xs">Paid</p>
+                              <p className="font-medium text-green-700">R{payment.totalPaid.toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <p className="text-gray-500 text-xs">Voucher</p>
+                              {payment.voucherDiscount > 0 ? (
+                                <p className="font-medium text-purple-700">R{payment.voucherDiscount.toLocaleString()}</p>
+                              ) : (
+                                <p className="text-gray-400">-</p>
+                              )}
                             </div>
                             <div>
-                              <p className="text-gray-500 text-xs">Balance</p>
+                              <p className="text-gray-500 text-xs">Balance Due</p>
                               <p className={`font-medium ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
                                 R{payment.balanceDue.toLocaleString()}
                               </p>
@@ -418,6 +459,7 @@ export default function AdminPaymentsPage() {
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Event</th>
                           <th className="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Qty</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Voucher</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                           <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Booked</th>
                         </tr>
@@ -437,6 +479,13 @@ export default function AdminPaymentsPage() {
                             </td>
                             <td className="px-6 py-4">
                               <p className="font-medium text-gray-900">R{payment.total_amount.toLocaleString()}</p>
+                            </td>
+                            <td className="px-6 py-4">
+                              {payment.voucher_discount > 0 ? (
+                                <p className="font-medium text-purple-700">R{payment.voucher_discount.toLocaleString()}</p>
+                              ) : (
+                                <p className="text-gray-400">-</p>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(payment.payment_status)}`}>
@@ -464,10 +513,22 @@ export default function AdminPaymentsPage() {
                             {formatStatus(payment.payment_status)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <p className="text-gray-600">{payment.quantity} guest(s)</p>
-                          <p className="font-medium text-gray-900">R{payment.total_amount.toLocaleString()}</p>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <p className="text-gray-500 text-xs">Quantity</p>
+                            <p className="text-gray-900">{payment.quantity} guest(s)</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 text-xs">Total</p>
+                            <p className="font-medium text-gray-900">R{payment.total_amount.toLocaleString()}</p>
+                          </div>
                         </div>
+                        {payment.voucher_discount > 0 && (
+                          <div className="mt-2 text-sm">
+                            <p className="text-gray-500 text-xs">Voucher Discount</p>
+                            <p className="font-medium text-purple-700">R{payment.voucher_discount.toLocaleString()}</p>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
