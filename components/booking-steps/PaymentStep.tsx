@@ -327,7 +327,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         customerEmail: formData.clientEmail,
         customerPhone: formData.clientPhone,
         customerAllergies: formData.clientAllergies,
-        customerMassagePressure: formData.clientMassagePressure as MassagePressure,
+        customerMassagePressure: (formData.pressureByPerson[1] || 'medium') as MassagePressure,
         customerMedicalHistory: formData.clientMedicalHistory,
         serviceSlug: service.slug,
         selectedDate: formData.selectedDate,
@@ -505,12 +505,20 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         </div>
 
         <div className="p-4">
+          <h4 className="font-semibold text-gray-900 mb-2">Preferences</h4>
+          <div className="space-y-2 text-sm">
+            {Array.from({ length: formData.peopleCount }, (_, i) => i + 1).map((person) => (
+              <p key={person} className="text-gray-800">
+                <span className="text-gray-600 font-medium">Person {person} Pressure:</span>{' '}
+                <span className="capitalize">{formData.pressureByPerson[person] || 'Not set'}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-4">
           <h4 className="font-semibold text-gray-900 mb-2">Health Information</h4>
           <div className="space-y-1 text-sm">
-            <p className="text-gray-800">
-              <span className="text-gray-600 font-medium">Massage Pressure:</span>{' '}
-              <span className="capitalize">{formData.clientMassagePressure}</span>
-            </p>
             {formData.clientAllergies && (
               <p className="text-gray-800">
                 <span className="text-gray-600 font-medium">Allergies:</span> {formData.clientAllergies}

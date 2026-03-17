@@ -1,42 +1,29 @@
 'use client'
 
-import { MassagePressure } from '@/types/booking'
-
 interface ClientDetailsStepProps {
   clientName: string
   clientEmail: string
   clientPhone: string
   clientAllergies: string
-  clientMassagePressure: MassagePressure | ''
   clientMedicalHistory: string
   onUpdateClient: (updates: {
     clientName?: string
     clientEmail?: string
     clientPhone?: string
     clientAllergies?: string
-    clientMassagePressure?: MassagePressure | ''
     clientMedicalHistory?: string
   }) => void
 }
-
-const PRESSURE_OPTIONS: { value: MassagePressure; label: string }[] = [
-  { value: 'soft', label: 'Soft' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'hard', label: 'Hard' },
-]
 
 export function ClientDetailsStep({
   clientName,
   clientEmail,
   clientPhone,
   clientAllergies,
-  clientMassagePressure,
   clientMedicalHistory,
   onUpdateClient,
 }: ClientDetailsStepProps) {
-  const isContactComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== ''
-  const isPressureSelected = clientMassagePressure !== ''
-  const isAllComplete = isContactComplete && isPressureSelected
+  const isAllComplete = clientName.trim() !== '' && clientEmail.trim() !== '' && clientPhone.trim() !== ''
 
   return (
     <div className="space-y-6">
@@ -110,31 +97,6 @@ export function ClientDetailsStep({
               rows={2}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-3">
-              Preferred massage pressure <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2">
-              {PRESSURE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onUpdateClient({ clientMassagePressure: option.value })}
-                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
-                    clientMassagePressure === option.value
-                      ? 'bg-black text-white'
-                      : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {clientMassagePressure === '' && (
-              <p className="text-xs text-red-500 mt-2">Please select your preferred pressure</p>
-            )}
           </div>
 
           <div>

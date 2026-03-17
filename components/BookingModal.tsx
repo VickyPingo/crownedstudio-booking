@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useBookingModal } from '@/hooks/useBookingModal'
 import { ServiceDetailsStep } from './booking-steps/ServiceDetailsStep'
-import { UpsellsStep } from './booking-steps/UpsellsStep'
+import { PersonalisationStep } from './booking-steps/PersonalisationStep'
 import { DateTimeStep } from './booking-steps/DateTimeStep'
 import { ClientDetailsStep } from './booking-steps/ClientDetailsStep'
 import { PaymentStep } from './booking-steps/PaymentStep'
@@ -14,7 +14,7 @@ import { calculateAfterHoursSurcharge } from '@/lib/timeSlots'
 
 const STEPS = [
   { id: 'service', label: 'Service Details' },
-  { id: 'upsells', label: 'Upsells' },
+  { id: 'personalisation', label: 'Personalisation' },
   { id: 'datetime', label: 'Date & Time' },
   { id: 'client', label: 'Client Details' },
   { id: 'payment', label: 'Payment' },
@@ -86,6 +86,7 @@ export function BookingModal({
     peopleCount: 1,
     selectedUpsells: [],
     selectedUpsellsByPerson: { 1: [] },
+    pressureByPerson: {},
     selectedDate: '',
     selectedTime: '',
     clientName: '',
@@ -169,6 +170,7 @@ export function BookingModal({
       peopleCount: 1,
       selectedUpsells: [],
       selectedUpsellsByPerson: { 1: [] },
+      pressureByPerson: {},
       selectedDate: '',
       selectedTime: '',
       clientName: '',
@@ -189,12 +191,18 @@ export function BookingModal({
 
   const canProceedToNext = () => {
     switch (currentStep) {
+      case 1:
+        for (let i = 1; i <= formData.peopleCount; i++) {
+          if (!formData.pressureByPerson[i]) {
+            return false
+          }
+        }
+        return true
       case 3:
         return (
           formData.clientName.trim() !== '' &&
           formData.clientEmail.trim() !== '' &&
-          formData.clientPhone.trim() !== '' &&
-          formData.clientMassagePressure !== ''
+          formData.clientPhone.trim() !== ''
         )
       default:
         return true
@@ -215,16 +223,20 @@ export function BookingModal({
         )
       case 1:
         return (
-          <UpsellsStep
+          <PersonalisationStep
             availableUpsells={resolvedService.upsells}
             peopleCount={formData.peopleCount}
             selectedUpsellsByPerson={formData.selectedUpsellsByPerson}
+            pressureByPerson={formData.pressureByPerson}
             onUpdateUpsellsByPerson={(upsellsByPerson) => {
               const allUpsells = Object.values(upsellsByPerson).flat()
               updateFormData({
                 selectedUpsellsByPerson: upsellsByPerson,
                 selectedUpsells: [...new Set(allUpsells)],
               })
+            }}
+            onUpdatePressureByPerson={(pressures) => {
+              updateFormData({ pressureByPerson: pressures })
             }}
           />
         )
@@ -249,7 +261,6 @@ export function BookingModal({
             clientEmail={formData.clientEmail}
             clientPhone={formData.clientPhone}
             clientAllergies={formData.clientAllergies}
-            clientMassagePressure={formData.clientMassagePressure}
             clientMedicalHistory={formData.clientMedicalHistory}
             onUpdateClient={(updates) => updateFormData(updates)}
           />

@@ -1,6 +1,7 @@
 import { ServicePricingOption } from './service'
 
 export type PerPersonUpsells = Record<number, string[]>
+export type PerPersonPressure = Record<number, MassagePressure>
 
 export type MassagePressure = 'soft' | 'medium' | 'hard'
 
@@ -8,6 +9,7 @@ export interface BookingFormData {
   peopleCount: number
   selectedUpsells: string[]
   selectedUpsellsByPerson: PerPersonUpsells
+  pressureByPerson: PerPersonPressure
   selectedDate: string
   selectedTime: string
   clientName: string
