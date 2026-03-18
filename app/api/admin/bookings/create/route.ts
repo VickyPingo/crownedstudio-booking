@@ -63,24 +63,35 @@ export async function POST(request: NextRequest) {
 
     if (prefillRoomId) {
       const { checkRoomAvailability } = await import('@/lib/roomAllocation')
+
+      const { data: prefillRoomRow } = await supabase
+        .from('rooms')
+        .select('room_name, room_area, capacity, active')
+        .eq('id', prefillRoomId)
+        .maybeSingle()
+
+      console.log('[AdminBookingCreate] prefillRoomId:', prefillRoomId, '| room record:', prefillRoomRow, '| resolved serviceArea:', serviceArea)
+
       const isAvailable = await checkRoomAvailability(prefillRoomId, startDateTime, endDateTime)
+
+      console.log('[AdminBookingCreate] checkRoomAvailability result for', prefillRoomRow?.room_name ?? prefillRoomId, ':', isAvailable)
+
       if (isAvailable) {
-        const { data: roomRow } = await supabase
-          .from('rooms')
-          .select('room_name')
-          .eq('id', prefillRoomId)
-          .maybeSingle()
         roomAllocation = {
           room_ids: [prefillRoomId],
-          room_names: [roomRow?.room_name || ''],
+          room_names: [prefillRoomRow?.room_name || ''],
         }
+        console.log('[AdminBookingCreate] Using prefill room:', prefillRoomRow?.room_name ?? prefillRoomId)
       } else {
-        try {
-          roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, safeNum(peopleCount))
-        } catch (err) {
-          console.error('[AdminBookingCreate] Room allocation error:', err)
-          return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
-        }
+        console.error(
+          '[AdminBookingCreate] Prefill room', prefillRoomRow?.room_name ?? prefillRoomId,
+          'is not available for', startDateTime.toISOString(), '–', endDateTime.toISOString(),
+          '| NOT falling back to auto-allocation — returning conflict error'
+        )
+        return NextResponse.json(
+          { error: `Room "${prefillRoomRow?.room_name ?? prefillRoomId}" is not available for the selected time slot` },
+          { status: 409 }
+        )
       }
     } else {
       try {
