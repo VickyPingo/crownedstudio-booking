@@ -33,9 +33,9 @@ function toUtcMsFromSast(date: string, hhmm: string): number {
 export function msToTimeString(ms: number): string {
   if (!Number.isFinite(ms)) return ''
 
+  const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
   const localMs = ms + SAST_OFFSET_MS
   const totalMinutes = Math.floor(localMs / 60000) % (24 * 60)
-
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
 
