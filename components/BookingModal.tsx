@@ -198,25 +198,22 @@ export function BookingModal({
   const calculateTotalDuration = (): number => {
     if (!resolvedService) return 0
 
-    let totalDuration = resolvedService.duration_minutes
     const upsellMap = new Map(resolvedService.upsells.map((u) => [u.id, u]))
-    const addedDurations = new Set<string>()
+    let maxAddonDuration = 0
 
     for (let person = 1; person <= formData.peopleCount; person++) {
       const personUpsells = formData.selectedUpsellsByPerson[person] || []
       for (const upsellId of personUpsells) {
         const upsell = upsellMap.get(upsellId)
         if (upsell && upsell.duration_added_minutes > 0) {
-          const key = `${person}-${upsellId}`
-          if (!addedDurations.has(key)) {
-            totalDuration += upsell.duration_added_minutes
-            addedDurations.add(key)
+          if (upsell.duration_added_minutes > maxAddonDuration) {
+            maxAddonDuration = upsell.duration_added_minutes
           }
         }
       }
     }
 
-    return totalDuration
+    return resolvedService.duration_minutes + maxAddonDuration
   }
 
   const canProceedToNext = () => {

@@ -77,25 +77,22 @@ function calculateTotalDuration(
   peopleCount: number,
   upsells: Upsell[]
 ): number {
-  let totalDuration = baseDurationMinutes
   const upsellMap = new Map(upsells.map((u) => [u.id, u]))
-  const addedDurations = new Set<string>()
+  let maxAddonDuration = 0
 
   for (let person = 1; person <= peopleCount; person++) {
     const personUpsells = selectedUpsellsByPerson[person] || []
     for (const upsellId of personUpsells) {
       const upsell = upsellMap.get(upsellId)
       if (upsell && upsell.duration_added_minutes > 0) {
-        const key = `${person}-${upsellId}`
-        if (!addedDurations.has(key)) {
-          totalDuration += upsell.duration_added_minutes
-          addedDurations.add(key)
+        if (upsell.duration_added_minutes > maxAddonDuration) {
+          maxAddonDuration = upsell.duration_added_minutes
         }
       }
     }
   }
 
-  return totalDuration
+  return baseDurationMinutes + maxAddonDuration
 }
 
 interface PersonUpsellSummary {

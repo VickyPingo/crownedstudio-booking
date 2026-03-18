@@ -218,18 +218,19 @@ export function ManualBookingModal({
 
     if (!hours) return []
 
-    const upsellDuration = Object.values(selectedUpsellsByPerson)
+    const maxAddonDuration = Object.values(selectedUpsellsByPerson)
       .flat()
-      .reduce((total, slug) => {
+      .reduce((max, slug) => {
         const upsell = upsells.find((u) => u.slug === slug)
-        return total + (upsell?.duration_added_minutes || 0)
+        const d = upsell?.duration_added_minutes || 0
+        return d > max ? d : max
       }, 0)
 
     const serviceTimeWindow = serviceTimeWindows[selectedService.slug] || null
 
     const config: TimeSlotConfig = {
       serviceSlug: selectedService.slug,
-      serviceDurationMinutes: selectedService.duration_minutes + upsellDuration,
+      serviceDurationMinutes: selectedService.duration_minutes + maxAddonDuration,
       businessHours: hours,
       serviceTimeWindow,
       timeBlocks,
@@ -238,7 +239,7 @@ export function ManualBookingModal({
     const slots = generateTimeSlots(config)
 
     const bufferMs = BOOKING_BUFFER_MINUTES * 60000
-    const totalDuration = selectedService.duration_minutes + upsellDuration
+    const totalDuration = selectedService.duration_minutes + maxAddonDuration
     return slots.filter((slot) => {
       const slotStart = new Date(`${selectedDate}T${slot}:00+02:00`)
       const slotEnd = new Date(slotStart.getTime() + totalDuration * 60000)
@@ -422,14 +423,15 @@ export function ManualBookingModal({
         return
       }
 
-      const upsellDuration = Object.values(selectedUpsellsByPerson)
+      const maxAddonDuration = Object.values(selectedUpsellsByPerson)
         .flat()
-        .reduce((total, slug) => {
+        .reduce((max, slug) => {
           const upsell = upsells.find((u) => u.slug === slug)
-          return total + (upsell?.duration_added_minutes || 0)
+          const d = upsell?.duration_added_minutes || 0
+          return d > max ? d : max
         }, 0)
 
-      const totalDuration = selectedService.duration_minutes + upsellDuration
+      const totalDuration = selectedService.duration_minutes + maxAddonDuration
 
       const response = await fetch('/api/admin/bookings/create', {
         method: 'POST',
