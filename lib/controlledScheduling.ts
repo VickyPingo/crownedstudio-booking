@@ -111,7 +111,12 @@ export function checkSlotAvailableForRooms(
   return true
 }
 
-function calculateNextAvailableTime(
+function msToTimeString(ms: number): string {
+  const sast = new Date(ms).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', hour: '2-digit', minute: '2-digit', hour12: false })
+  return sast.replace(':', ':').padStart(5, '0')
+}
+
+function calculateValidSlotsForRoom(
   room: Room,
   date: string,
   serviceDurationMinutes: number,
@@ -121,19 +126,29 @@ function calculateNextAvailableTime(
 ): string[] {
   const bufferMs = BOOKING_BUFFER_MINUTES * 60000
   const serviceDurationMs = serviceDurationMinutes * 60000
-  const roomBookings = allBookings.filter(b => b.room_id === room.id)
-
-  const validSlots: string[] = []
+  const roomBookings = allBookings
+    .filter(b => b.room_id === room.id)
+    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
 
   const startOfDay = new Date(`${date}T${businessStartTime}:00+02:00`).getTime()
   const endOfDay = new Date(`${date}T${businessEndTime}:00+02:00`).getTime()
 
-  const timeIncrement = 10 * 60000
+  const candidateTimes: number[] = [startOfDay]
 
-  for (let currentMs = startOfDay; currentMs <= endOfDay; currentMs += timeIncrement) {
-    const slotEndMs = currentMs + serviceDurationMs
+  for (const booking of roomBookings) {
+    const bookingEnd = new Date(booking.end_time).getTime()
+    const nextAvailable = bookingEnd + bufferMs
+    if (nextAvailable < endOfDay) {
+      candidateTimes.push(nextAvailable)
+    }
+  }
 
-    if (slotEndMs > endOfDay) break
+  const validSlots: string[] = []
+
+  for (const candidateMs of candidateTimes) {
+    const slotEndMs = candidateMs + serviceDurationMs
+
+    if (slotEndMs > endOfDay) continue
 
     let hasConflict = false
     for (const booking of roomBookings) {
@@ -141,18 +156,14 @@ function calculateNextAvailableTime(
       const bookingEnd = new Date(booking.end_time).getTime()
       const bookingEndWithBuffer = bookingEnd + bufferMs
 
-      if (currentMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
+      if (candidateMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
         hasConflict = true
-        currentMs = bookingEndWithBuffer - timeIncrement
         break
       }
     }
 
     if (!hasConflict) {
-      const hours = new Date(currentMs).getHours()
-      const minutes = new Date(currentMs).getMinutes()
-      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
-      validSlots.push(timeStr)
+      validSlots.push(msToTimeString(candidateMs))
     }
   }
 
@@ -178,7 +189,7 @@ export function findAllAvailableSlotsInActiveGroup(
     const allValidSlotsSet = new Set<string>()
 
     for (const room of groupRooms) {
-      const roomValidSlots = calculateNextAvailableTime(
+      const roomValidSlots = calculateValidSlotsForRoom(
         room,
         date,
         serviceDurationMinutes,
