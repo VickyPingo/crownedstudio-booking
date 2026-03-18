@@ -111,24 +111,26 @@ export function checkSlotAvailableForRooms(
   return true
 }
 
-export function findEarliestAvailableSlot(
+export function findAllAvailableSlotsInActiveGroup(
   date: string,
   serviceDurationMinutes: number,
   peopleCount: number,
   allRooms: Room[],
   allBookings: RoomBooking[],
   allPossibleSlots: string[]
-): { slot: string; rooms: Room[]; groupNumber: number } | null {
+): { slots: string[]; groupNumber: number } | null {
   const bufferMs = BOOKING_BUFFER_MINUTES * 60000
   const roomGroups = groupRoomsByPriority(allRooms)
 
-  for (const slot of allPossibleSlots) {
-    const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
-    const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
+  for (let groupNum = 1; groupNum <= 3; groupNum++) {
+    const groupRooms = roomGroups.get(groupNum)
+    if (!groupRooms || groupRooms.length === 0) continue
 
-    for (let groupNum = 1; groupNum <= 3; groupNum++) {
-      const groupRooms = roomGroups.get(groupNum)
-      if (!groupRooms || groupRooms.length === 0) continue
+    const validSlotsInGroup: string[] = []
+
+    for (const slot of allPossibleSlots) {
+      const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
+      const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
 
       const availableRoomsInGroup = groupRooms.filter(room => {
         const roomBookings = allBookings.filter(b => b.room_id === room.id)
@@ -147,12 +149,15 @@ export function findEarliestAvailableSlot(
         )
 
         if (allRoomsAvailable) {
-          return {
-            slot,
-            rooms: roomCombination,
-            groupNumber: groupNum
-          }
+          validSlotsInGroup.push(slot)
         }
+      }
+    }
+
+    if (validSlotsInGroup.length > 0) {
+      return {
+        slots: validSlotsInGroup,
+        groupNumber: groupNum
       }
     }
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { generateTimeSlots, isDateFullyBlocked, isSameDayBooking, TimeSlotConfig, TimeBlock } from '@/lib/timeSlots'
 import { CLEANUP_BUFFER_MINUTES } from '@/lib/roomAllocation'
-import { findEarliestAvailableSlot } from '@/lib/controlledScheduling'
+import { findAllAvailableSlotsInActiveGroup } from '@/lib/controlledScheduling'
 
 interface AvailabilityRequest {
   date: string
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const result = findEarliestAvailableSlot(
+    const result = findAllAvailableSlotsInActiveGroup(
       date,
       serviceDurationMinutes,
       peopleCount || 1,
@@ -190,14 +190,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    console.log('[Availability] Found earliest slot:', {
-      slot: result.slot,
-      group: result.groupNumber,
-      rooms: result.rooms.map(r => r.room_name).join(', ')
-    })
+    console.log('[Availability] Found slots in Group', result.groupNumber, ':', result.slots.length, 'slots')
 
     return NextResponse.json({
-      availableSlots: [result.slot],
+      availableSlots: result.slots,
       isFullyBlocked: false,
     })
   } catch (error) {

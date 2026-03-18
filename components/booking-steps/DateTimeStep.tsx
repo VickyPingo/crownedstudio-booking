@@ -90,7 +90,7 @@ export function DateTimeStep({
     onUpdateDate(newDate)
   }
 
-  const availableSlot = availableSlots[0] || null
+  const hasAfterHoursSlots = availableSlots.some(slot => isAfterHoursSlot(slot, serviceSlug, businessHours))
 
   const renderTimeSlot = (time: string) => {
     const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
@@ -100,16 +100,13 @@ export function DateTimeStep({
       <button
         key={time}
         onClick={() => onUpdateTime(time)}
-        className={`w-full py-3 px-4 rounded-lg border transition-all relative ${
+        className={`py-3 px-4 rounded-lg border transition-all relative ${
           isSelected
             ? 'bg-black text-white border-black'
-            : 'bg-green-50 text-gray-900 border-green-300 hover:border-green-400'
+            : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
         }`}
       >
         <span className="font-medium">{time}</span>
-        {!isSelected && (
-          <span className="ml-2 text-xs text-green-700">Available time slot</span>
-        )}
         {isAfterHours && (
           <span
             className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
@@ -184,13 +181,11 @@ export function DateTimeStep({
           </div>
         ) : (
           <div className="space-y-3">
-            {availableSlot && (
-              <div>
-                {renderTimeSlot(availableSlot)}
-              </div>
-            )}
+            <div className="grid grid-cols-4 gap-2">
+              {availableSlots.map((time) => renderTimeSlot(time))}
+            </div>
 
-            {!isCrownedNight && businessHours.after_hours_enabled && isAfterHoursSlot(availableSlot || '', serviceSlug, businessHours) && (
+            {!isCrownedNight && businessHours.after_hours_enabled && hasAfterHoursSlots && (
               <p className="text-xs text-gray-700 mt-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
                 After-hours bookings include a R100 surcharge per person. Last available start time is 17:30.
