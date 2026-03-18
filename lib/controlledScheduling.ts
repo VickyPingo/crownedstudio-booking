@@ -112,8 +112,12 @@ export function checkSlotAvailableForRooms(
 }
 
 function msToTimeString(ms: number): string {
-  const sast = new Date(ms).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', hour: '2-digit', minute: '2-digit', hour12: false })
-  return sast.replace(':', ':').padStart(5, '0')
+  const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
+  const localMs = ms + SAST_OFFSET_MS
+  const totalMinutes = Math.floor(localMs / 60000) % (24 * 60)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
 }
 
 function calculateValidSlotsForRoom(
