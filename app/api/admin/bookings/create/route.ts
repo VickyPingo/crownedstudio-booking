@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: { user } } = await supabase.auth.getUser()
+    const adminUserId: string | null = user?.id ?? null
 
     let bookingStatus = 'pending_payment'
     if (paymentOption === 'no_payment') {
@@ -89,41 +90,47 @@ export async function POST(request: NextRequest) {
       bookingStatus = 'confirmed'
     }
 
+    const safeNum = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+    const insertPayload = {
+      customer_id: customerId,
+      service_slug: serviceSlug,
+      people_count: safeNum(peopleCount),
+      status: bookingStatus,
+      start_time: startDateTime.toISOString(),
+      end_time: endDateTime.toISOString(),
+      base_price: safeNum(pricing?.basePrice),
+      weekend_surcharge_amount: safeNum(pricing?.surcharge),
+      upsells_total: safeNum(pricing?.upsellsTotal),
+      discount_amount: safeNum(pricing?.discount),
+      discount_type: voucherId ? 'voucher' : null,
+      total_price: safeNum(pricing?.total),
+      deposit_due: safeNum(pricing?.deposit),
+      allergies: allergies || null,
+      massage_pressure: massagePressure || null,
+      medical_history: medicalHistory || null,
+      internal_notes: internalNotes || null,
+      voucher_code: voucherCode || null,
+      voucher_id: voucherId || null,
+      voucher_discount: safeNum(pricing?.discount),
+      is_manual_booking: true,
+      created_by_admin: adminUserId,
+      payment_method_manual: paymentOption !== 'no_payment' ? (manualPaymentMethod || null) : null,
+      deposit_paid_manually: depositPaid === true,
+      deposit_paid_at: depositPaid ? new Date().toISOString() : null,
+      balance_paid: fullyPaid === true,
+      balance_paid_at: (fullyPaid || depositPaid) ? new Date().toISOString() : null,
+      balance_paid_by: (fullyPaid || depositPaid) ? adminUserId : null,
+      room_id: roomAllocation.room_ids[0] || null,
+      terms_accepted: true,
+      terms_accepted_at: new Date().toISOString(),
+    }
+
+    console.log('[AdminBookingCreate] insert payload:', JSON.stringify(insertPayload))
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .insert({
-        customer_id: customerId,
-        service_slug: serviceSlug,
-        people_count: peopleCount,
-        status: bookingStatus,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
-        base_price: pricing.basePrice,
-        weekend_surcharge_amount: pricing.surcharge,
-        upsells_total: pricing.upsellsTotal,
-        discount_amount: pricing.discount,
-        discount_type: voucherId ? 'voucher' : null,
-        total_price: pricing.total,
-        deposit_due: pricing.deposit,
-        allergies: allergies || null,
-        massage_pressure: massagePressure,
-        medical_history: medicalHistory || null,
-        internal_notes: internalNotes || null,
-        voucher_code: voucherCode || null,
-        voucher_id: voucherId || null,
-        voucher_discount: pricing.discount,
-        is_manual_booking: true,
-        created_by_admin: user?.id || null,
-        payment_method_manual: paymentOption !== 'no_payment' ? manualPaymentMethod : null,
-        deposit_paid_manually: depositPaid,
-        deposit_paid_at: depositPaid ? new Date().toISOString() : null,
-        balance_paid: fullyPaid,
-        balance_paid_at: fullyPaid || depositPaid ? new Date().toISOString() : null,
-        balance_paid_by: fullyPaid || depositPaid ? user?.id : null,
-        room_id: roomAllocation.room_ids[0] || null,
-        terms_accepted: true,
-        terms_accepted_at: new Date().toISOString(),
-      })
+      .insert(insertPayload)
       .select('id')
       .single()
 
@@ -184,19 +191,20 @@ export async function POST(request: NextRequest) {
       await supabase.from('voucher_usage').insert({
         voucher_id: voucherId,
         booking_id: booking.id,
-        discount_applied: pricing.discount,
+        discount_applied: safeNum(pricing?.discount),
       })
 
       await supabase.rpc('increment_voucher_usage', { voucher_id: voucherId })
     }
 
     if ((depositPaid || fullyPaid) && paymentOption !== 'no_payment') {
+      const txAmount = fullyPaid ? safeNum(pricing?.total) : safeNum(pricing?.deposit)
       await supabase.from('payment_transactions').insert({
         booking_id: booking.id,
         merchant_transaction_id: `MANUAL-${booking.id.slice(0, 8)}-${Date.now()}`,
         status: 'complete',
-        amount: fullyPaid ? pricing.total : pricing.deposit,
-        payment_method: manualPaymentMethod,
+        amount: txAmount,
+        payment_method: manualPaymentMethod || null,
         item_name: `Manual booking - ${serviceSlug}`,
       })
     }
