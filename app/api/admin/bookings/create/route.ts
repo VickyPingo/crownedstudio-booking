@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       payment_method_manual: paymentOption !== 'no_payment' ? (manualPaymentMethod || null) : null,
       deposit_paid_manually: depositPaid === true,
       deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
-      balance_paid: fullyPaid === true,
+      balance_paid: fullyPaid === true ? safeNum(pricing?.total) : 0,
       balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
       balance_paid_by: fullyPaid === true ? adminUserId : null,
       room_id: roomAllocation.room_ids[0] || null,
