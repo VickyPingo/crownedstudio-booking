@@ -168,12 +168,12 @@ export async function POST(request: NextRequest) {
 
     console.log('[AdminBookingCreate] Booking created:', booking.id)
 
-    const assignError = await assignRoomsToBooking(booking.id, roomAllocation.room_ids).catch((err) => {
-      console.error('[AdminBookingCreate] assignRoomsToBooking error:', err)
-      return null
+    const assignResult = await assignRoomsToBooking(booking.id, roomAllocation.room_ids).catch((err) => {
+      console.error('[AdminBookingCreate] assignRoomsToBooking threw:', err)
+      return { success: false, error: String(err) }
     })
-    if (assignError) {
-      console.error('[AdminBookingCreate] assignRoomsToBooking returned error:', assignError)
+    if (!assignResult.success) {
+      console.error('[AdminBookingCreate] assignRoomsToBooking failed:', assignResult.error)
     }
 
     if (selectedUpsellsByPerson && Object.keys(selectedUpsellsByPerson).length > 0) {
