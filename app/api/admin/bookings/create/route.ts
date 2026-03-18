@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { allocateRoom, assignRoomsToBooking } from '@/lib/roomAllocation'
 
+const safeNum = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
     const payload = await request.json()
+
+    console.log('[AdminBookingCreate] incoming payload:', JSON.stringify(payload))
 
     const {
       customerId,
@@ -27,11 +34,22 @@ export async function POST(request: NextRequest) {
       fullyPaid,
       selectedUpsellsByPerson,
       prefillRoomId,
-      pressureByPerson,
     } = payload
 
+    const safeDuration = safeNum(totalDuration)
+
+    if (!selectedDate || !selectedTime || safeDuration <= 0) {
+      console.error('[AdminBookingCreate] Invalid booking data:', { selectedDate, selectedTime, safeDuration })
+      return NextResponse.json({ error: 'Invalid booking data: missing date, time, or duration' }, { status: 400 })
+    }
+
     const startDateTime = new Date(`${selectedDate}T${selectedTime}:00+02:00`)
-    const endDateTime = new Date(startDateTime.getTime() + totalDuration * 60000)
+    const endDateTime = new Date(startDateTime.getTime() + safeDuration * 60000)
+
+    if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
+      console.error('[AdminBookingCreate] Invalid date/time:', { selectedDate, selectedTime })
+      return NextResponse.json({ error: 'Invalid booking date/time' }, { status: 400 })
+    }
 
     const { data: serviceData } = await supabase
       .from('services')
@@ -58,17 +76,17 @@ export async function POST(request: NextRequest) {
         }
       } else {
         try {
-          roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, peopleCount)
+          roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, safeNum(peopleCount))
         } catch (err) {
-          console.error('Room allocation error:', err)
+          console.error('[AdminBookingCreate] Room allocation error:', err)
           return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
         }
       }
     } else {
       try {
-        roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, peopleCount)
+        roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, safeNum(peopleCount))
       } catch (err) {
-        console.error('Room allocation error:', err)
+        console.error('[AdminBookingCreate] Room allocation error:', err)
         return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
       }
     }
@@ -86,11 +104,11 @@ export async function POST(request: NextRequest) {
     let bookingStatus = 'pending_payment'
     if (paymentOption === 'no_payment') {
       bookingStatus = 'confirmed'
-    } else if (fullyPaid || (depositPaid && paymentOption === 'deposit_required')) {
+    } else if (fullyPaid === true) {
+      bookingStatus = 'confirmed'
+    } else if (depositPaid === true && paymentOption === 'deposit_required') {
       bookingStatus = 'confirmed'
     }
-
-    const safeNum = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
     const insertPayload = {
       customer_id: customerId,
@@ -117,10 +135,10 @@ export async function POST(request: NextRequest) {
       created_by_admin: adminUserId,
       payment_method_manual: paymentOption !== 'no_payment' ? (manualPaymentMethod || null) : null,
       deposit_paid_manually: depositPaid === true,
-      deposit_paid_at: depositPaid ? new Date().toISOString() : null,
+      deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
       balance_paid: fullyPaid === true,
-      balance_paid_at: (fullyPaid || depositPaid) ? new Date().toISOString() : null,
-      balance_paid_by: (fullyPaid || depositPaid) ? adminUserId : null,
+      balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
+      balance_paid_by: fullyPaid === true ? adminUserId : null,
       room_id: roomAllocation.room_ids[0] || null,
       terms_accepted: true,
       terms_accepted_at: new Date().toISOString(),
@@ -135,22 +153,40 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (bookingError || !booking) {
-      console.error('Booking error:', bookingError)
+      console.error('[AdminBookingCreate] Booking error full:', {
+        message: bookingError?.message,
+        details: bookingError?.details,
+        hint: bookingError?.hint,
+        code: bookingError?.code,
+        bookingError,
+      })
       return NextResponse.json(
-        { error: 'Failed to create booking' },
+        { error: 'Failed to create booking', details: bookingError?.message },
         { status: 500 }
       )
     }
 
-    await assignRoomsToBooking(booking.id, roomAllocation.room_ids)
+    console.log('[AdminBookingCreate] Booking created:', booking.id)
+
+    const assignError = await assignRoomsToBooking(booking.id, roomAllocation.room_ids).catch((err) => {
+      console.error('[AdminBookingCreate] assignRoomsToBooking error:', err)
+      return null
+    })
+    if (assignError) {
+      console.error('[AdminBookingCreate] assignRoomsToBooking returned error:', assignError)
+    }
 
     if (selectedUpsellsByPerson && Object.keys(selectedUpsellsByPerson).length > 0) {
-      const allUpsellSlugs = [...new Set(Object.values(selectedUpsellsByPerson).flat())]
+      const allUpsellSlugs = [...new Set(Object.values(selectedUpsellsByPerson).flat())] as string[]
       if (allUpsellSlugs.length > 0) {
-        const { data: upsellData } = await supabase
+        const { data: upsellData, error: upsellFetchError } = await supabase
           .from('upsells')
           .select('id, slug, price, duration_added_minutes')
           .in('slug', allUpsellSlugs)
+
+        if (upsellFetchError) {
+          console.error('[AdminBookingCreate] upsells fetch error:', upsellFetchError)
+        }
 
         if (upsellData) {
           const upsellMap = new Map(upsellData.map((u: any) => [u.slug, u]))
@@ -165,6 +201,7 @@ export async function POST(request: NextRequest) {
 
           for (const [personKey, slugs] of Object.entries(selectedUpsellsByPerson)) {
             const personNum = parseInt(personKey, 10)
+            if (!Number.isFinite(personNum)) continue
             for (const slug of slugs as string[]) {
               const upsell = upsellMap.get(slug)
               if (upsell) {
@@ -172,8 +209,8 @@ export async function POST(request: NextRequest) {
                   booking_id: booking.id,
                   upsell_id: upsell.id,
                   quantity: 1,
-                  price_total: upsell.price,
-                  duration_added_minutes: upsell.duration_added_minutes,
+                  price_total: safeNum(upsell.price),
+                  duration_added_minutes: safeNum(upsell.duration_added_minutes),
                   person_number: personNum,
                 })
               }
@@ -181,25 +218,34 @@ export async function POST(request: NextRequest) {
           }
 
           if (bookingUpsells.length > 0) {
-            await supabase.from('booking_upsells').insert(bookingUpsells)
+            const { error: upsellInsertError } = await supabase.from('booking_upsells').insert(bookingUpsells)
+            if (upsellInsertError) {
+              console.error('[AdminBookingCreate] booking_upsells insert error:', upsellInsertError)
+            }
           }
         }
       }
     }
 
     if (voucherId) {
-      await supabase.from('voucher_usage').insert({
+      const { error: voucherUsageError } = await supabase.from('voucher_usage').insert({
         voucher_id: voucherId,
         booking_id: booking.id,
         discount_applied: safeNum(pricing?.discount),
       })
+      if (voucherUsageError) {
+        console.error('[AdminBookingCreate] voucher_usage insert error:', voucherUsageError)
+      }
 
-      await supabase.rpc('increment_voucher_usage', { voucher_id: voucherId })
+      const { error: rpcError } = await supabase.rpc('increment_voucher_usage', { voucher_id: voucherId })
+      if (rpcError) {
+        console.error('[AdminBookingCreate] increment_voucher_usage rpc error:', rpcError)
+      }
     }
 
-    if ((depositPaid || fullyPaid) && paymentOption !== 'no_payment') {
-      const txAmount = fullyPaid ? safeNum(pricing?.total) : safeNum(pricing?.deposit)
-      await supabase.from('payment_transactions').insert({
+    if ((depositPaid === true || fullyPaid === true) && paymentOption !== 'no_payment') {
+      const txAmount = fullyPaid === true ? safeNum(pricing?.total) : safeNum(pricing?.deposit)
+      const { error: txError } = await supabase.from('payment_transactions').insert({
         booking_id: booking.id,
         merchant_transaction_id: `MANUAL-${booking.id.slice(0, 8)}-${Date.now()}`,
         status: 'complete',
@@ -207,6 +253,9 @@ export async function POST(request: NextRequest) {
         payment_method: manualPaymentMethod || null,
         item_name: `Manual booking - ${serviceSlug}`,
       })
+      if (txError) {
+        console.error('[AdminBookingCreate] payment_transactions insert error:', txError)
+      }
     }
 
     return NextResponse.json({
@@ -214,7 +263,7 @@ export async function POST(request: NextRequest) {
       bookingId: booking.id,
     })
   } catch (error) {
-    console.error('Manual booking API error:', error)
+    console.error('[AdminBookingCreate] Unhandled error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
