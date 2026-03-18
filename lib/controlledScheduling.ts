@@ -112,6 +112,7 @@ export function checkSlotAvailableForRooms(
 }
 
 function msToTimeString(ms: number): string {
+  if (!Number.isFinite(ms)) return 'NaN:NaN'
   const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
   const localMs = ms + SAST_OFFSET_MS
   const totalMinutes = Math.floor(localMs / 60000) % (24 * 60)
@@ -167,7 +168,10 @@ function calculateValidSlotsForRoom(
     }
 
     if (!hasConflict) {
-      validSlots.push(msToTimeString(candidateMs))
+      const formatted = msToTimeString(candidateMs)
+      if (/^\d{2}:\d{2}$/.test(formatted)) {
+        validSlots.push(formatted)
+      }
     }
   }
 

@@ -173,10 +173,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const businessStartTime = businessHoursData.open_time || '08:00'
-    const businessEndTime = businessHoursData.after_hours_enabled
-      ? (businessHoursData.after_hours_end_time || businessHoursData.close_time)
-      : businessHoursData.close_time
+    const toHHMM = (t: string) => t ? t.slice(0, 5) : t
+    const businessStartTime = toHHMM(businessHoursData.open_time) || '08:00'
+    const businessEndTime = toHHMM(
+      businessHoursData.after_hours_enabled
+        ? (businessHoursData.after_hours_end_time || businessHoursData.close_time)
+        : businessHoursData.close_time
+    )
 
     const result = findAllAvailableSlotsInActiveGroup(
       date,
@@ -198,8 +201,12 @@ export async function POST(request: NextRequest) {
 
     console.log('[Availability] Found slots in Group', result.groupNumber, ':', result.slots.length, 'slots')
 
+    const safeSlots = result.slots.filter(
+      (slot) => typeof slot === 'string' && /^\d{2}:\d{2}$/.test(slot)
+    )
+
     return NextResponse.json({
-      availableSlots: result.slots,
+      availableSlots: safeSlots,
       isFullyBlocked: false,
     })
   } catch (error) {
