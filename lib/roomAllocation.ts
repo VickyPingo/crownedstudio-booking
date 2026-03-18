@@ -43,6 +43,93 @@ function doTimesOverlapWithBuffer(
   return newStart < existingEndWithBuffer && newEnd > existingStart
 }
 
+/**
+ * Returns the set of room IDs that are occupied during the given time window.
+ *
+ * SOURCE OF TRUTH: booking_rooms is always the authoritative assignment.
+ * bookings.room_id is the legacy column — it is only consulted when a booking
+ * has NO booking_rooms entries at all (pre-migration legacy record).
+ * This prevents ghost-blocking from stale room_id values.
+ */
+async function getOccupiedRoomIds(
+  startTime: Date,
+  endTime: Date,
+  excludeBookingId?: string
+): Promise<Set<string>> {
+  const supabase = supabaseAdmin
+  const now = new Date().toISOString()
+
+  const dayStart = new Date(startTime)
+  dayStart.setHours(0, 0, 0, 0)
+  const dayEnd = new Date(startTime)
+  dayEnd.setHours(23, 59, 59, 999)
+
+  const occupied = new Set<string>()
+
+  const { data: bookingRooms } = await supabase
+    .from('booking_rooms')
+    .select('booking_id, room_id, bookings!inner(id, start_time, end_time, status, payment_expires_at)')
+    .gte('bookings.start_time', dayStart.toISOString())
+    .lte('bookings.start_time', dayEnd.toISOString())
+    .in('bookings.status', ['confirmed', 'pending_payment'])
+
+  const bookingIdsInBookingRooms = new Set<string>()
+
+  if (bookingRooms) {
+    for (const br of bookingRooms) {
+      if (excludeBookingId && br.booking_id === excludeBookingId) continue
+
+      const booking = (br as any).bookings
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+
+      if (isActive) {
+        const bookingStart = new Date(booking.start_time)
+        const bookingEnd = new Date(booking.end_time)
+        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
+          occupied.add(br.room_id)
+        }
+        bookingIdsInBookingRooms.add(br.booking_id)
+      }
+    }
+  }
+
+  // Fall back to bookings.room_id ONLY for legacy-only records with no booking_rooms entries
+  const { data: legacyOnlyBookings } = await supabase
+    .from('bookings')
+    .select('id, start_time, end_time, room_id, status, payment_expires_at')
+    .in('status', ['confirmed', 'pending_payment'])
+    .gte('start_time', dayStart.toISOString())
+    .lte('start_time', dayEnd.toISOString())
+    .not('room_id', 'is', null)
+
+  if (legacyOnlyBookings) {
+    for (const booking of legacyOnlyBookings) {
+      if (excludeBookingId && booking.id === excludeBookingId) continue
+      if (bookingIdsInBookingRooms.has(booking.id)) continue
+
+      let isActive = false
+      if (booking.status === 'confirmed') isActive = true
+      if (booking.status === 'pending_payment') {
+        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      }
+
+      if (isActive && booking.room_id) {
+        const bookingStart = new Date(booking.start_time)
+        const bookingEnd = new Date(booking.end_time)
+        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
+          occupied.add(booking.room_id)
+        }
+      }
+    }
+  }
+
+  return occupied
+}
+
 async function getAvailableRooms(
   serviceRoomArea: string,
   startTime: Date,
@@ -63,75 +150,7 @@ async function getAvailableRooms(
     return []
   }
 
-  const dayStart = new Date(startTime)
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(startTime)
-  dayEnd.setHours(23, 59, 59, 999)
-
-  let bookingsQuery = supabase
-    .from('bookings')
-    .select('id, start_time, end_time, room_id, status, payment_expires_at')
-    .in('status', ['confirmed', 'pending_payment'])
-    .gte('start_time', dayStart.toISOString())
-    .lte('start_time', dayEnd.toISOString())
-    .not('room_id', 'is', null)
-
-  if (excludeBookingId) {
-    bookingsQuery = bookingsQuery.neq('id', excludeBookingId)
-  }
-
-  const { data: legacyBookings } = await bookingsQuery
-
-  const { data: bookingRooms } = await supabase
-    .from('booking_rooms')
-    .select('booking_id, room_id, bookings!inner(id, start_time, end_time, status, payment_expires_at)')
-    .gte('bookings.start_time', dayStart.toISOString())
-    .lte('bookings.start_time', dayEnd.toISOString())
-    .in('bookings.status', ['confirmed', 'pending_payment'])
-
-  const now = new Date().toISOString()
-  const occupiedRoomIds = new Set<string>()
-
-  if (legacyBookings) {
-    for (const booking of legacyBookings) {
-      if (excludeBookingId && booking.id === excludeBookingId) continue
-
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
-      }
-
-      if (isActive && booking.room_id) {
-        const bookingStart = new Date(booking.start_time)
-        const bookingEnd = new Date(booking.end_time)
-        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
-          occupiedRoomIds.add(booking.room_id)
-        }
-      }
-    }
-  }
-
-  if (bookingRooms) {
-    for (const br of bookingRooms) {
-      if (excludeBookingId && br.booking_id === excludeBookingId) continue
-
-      const booking = (br as any).bookings
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
-      }
-
-      if (isActive) {
-        const bookingStart = new Date(booking.start_time)
-        const bookingEnd = new Date(booking.end_time)
-        if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
-          occupiedRoomIds.add(br.room_id)
-        }
-      }
-    }
-  }
+  const occupiedRoomIds = await getOccupiedRoomIds(startTime, endTime, excludeBookingId)
 
   return rooms.filter(room => !occupiedRoomIds.has(room.id))
 }
@@ -244,24 +263,11 @@ export async function getRoomsForDate(
   }
 }
 
-export async function assignRoomToBooking(
-  bookingId: string,
-  roomId: string
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = supabaseAdmin
-
-  const { error } = await supabase
-    .from('bookings')
-    .update({ room_id: roomId })
-    .eq('id', bookingId)
-
-  if (error) {
-    return { success: false, error: error.message }
-  }
-
-  return { success: true }
-}
-
+/**
+ * Assigns rooms to a booking.
+ * Always updates booking_rooms (source of truth) AND syncs bookings.room_id
+ * to the first/primary room so the legacy column never drifts out of sync.
+ */
 export async function assignRoomsToBooking(
   bookingId: string,
   roomIds: string[]
@@ -274,6 +280,10 @@ export async function assignRoomsToBooking(
     .eq('booking_id', bookingId)
 
   if (roomIds.length === 0) {
+    await supabase
+      .from('bookings')
+      .update({ room_id: null })
+      .eq('id', bookingId)
     return { success: true }
   }
 
@@ -290,100 +300,34 @@ export async function assignRoomsToBooking(
     return { success: false, error: error.message }
   }
 
-  if (roomIds.length > 0) {
-    await supabase
-      .from('bookings')
-      .update({ room_id: roomIds[0] })
-      .eq('id', bookingId)
-  }
+  // Always keep bookings.room_id in sync with the primary room from booking_rooms
+  // so the legacy column never causes ghost-blocking
+  await supabase
+    .from('bookings')
+    .update({ room_id: roomIds[0] })
+    .eq('id', bookingId)
 
   return { success: true }
 }
 
+export async function assignRoomToBooking(
+  bookingId: string,
+  roomId: string
+): Promise<{ success: boolean; error?: string }> {
+  return assignRoomsToBooking(bookingId, [roomId])
+}
+
+/**
+ * Checks whether a specific room is available for the given time window.
+ * Uses booking_rooms as source of truth; falls back to room_id only for
+ * legacy-only bookings (those with no booking_rooms entries).
+ */
 export async function checkRoomAvailability(
   roomId: string,
   startTime: Date,
   endTime: Date,
   excludeBookingId?: string
 ): Promise<boolean> {
-  const supabase = supabaseAdmin
-
-  const dayStart = new Date(startTime)
-  dayStart.setHours(0, 0, 0, 0)
-  const dayEnd = new Date(startTime)
-  dayEnd.setHours(23, 59, 59, 999)
-
-  let query = supabase
-    .from('bookings')
-    .select('id, start_time, end_time, status, payment_expires_at')
-    .eq('room_id', roomId)
-    .in('status', ['confirmed', 'pending_payment'])
-    .gte('start_time', dayStart.toISOString())
-    .lte('start_time', dayEnd.toISOString())
-
-  if (excludeBookingId) {
-    query = query.neq('id', excludeBookingId)
-  }
-
-  const { data: legacyBookings } = await query
-
-  let bookingRoomsQuery = supabase
-    .from('booking_rooms')
-    .select('booking_id, bookings!inner(id, start_time, end_time, status, payment_expires_at)')
-    .eq('room_id', roomId)
-    .gte('bookings.start_time', dayStart.toISOString())
-    .lte('bookings.start_time', dayEnd.toISOString())
-    .in('bookings.status', ['confirmed', 'pending_payment'])
-
-  if (excludeBookingId) {
-    bookingRoomsQuery = bookingRoomsQuery.neq('booking_id', excludeBookingId)
-  }
-
-  const { data: bookingRooms } = await bookingRoomsQuery
-
-  const now = new Date().toISOString()
-  const allConflicts: { start_time: string; end_time: string }[] = []
-
-  if (legacyBookings) {
-    for (const booking of legacyBookings) {
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
-      }
-
-      if (isActive) {
-        allConflicts.push({
-          start_time: booking.start_time,
-          end_time: booking.end_time,
-        })
-      }
-    }
-  }
-
-  if (bookingRooms) {
-    for (const br of bookingRooms) {
-      const booking = (br as any).bookings
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
-      }
-
-      if (isActive) {
-        allConflicts.push({
-          start_time: booking.start_time,
-          end_time: booking.end_time,
-        })
-      }
-    }
-  }
-
-  const hasConflict = allConflicts.some(conflict => {
-    const bookingStart = new Date(conflict.start_time)
-    const bookingEnd = new Date(conflict.end_time)
-    return doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)
-  })
-
-  return !hasConflict
+  const occupiedRoomIds = await getOccupiedRoomIds(startTime, endTime, excludeBookingId)
+  return !occupiedRoomIds.has(roomId)
 }

@@ -3,7 +3,6 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import {
   generateTimeSlots,
   BOOKING_BUFFER_MINUTES,
-  LATEST_START_TIME,
   NORMAL_HOURS_START_TIME,
   BusinessHours,
   TimeSlotConfig,
@@ -88,36 +87,20 @@ export async function POST(request: NextRequest) {
 
     const candidateSlots = generateTimeSlots(config)
 
+    const now = new Date().toISOString()
     const existingBookingTimes: { startMin: number; endMin: number }[] = []
 
     if (roomId) {
-      const { data: directBookings } = await supabase
-        .from('bookings')
-        .select('start_time, end_time')
-        .eq('room_id', roomId)
-        .in('status', ['confirmed', 'completed', 'pending_payment'])
-        .gte('start_time', dayStartISO)
-        .lte('start_time', dayEndISO)
-
+      // SOURCE OF TRUTH: booking_rooms first. Track which booking IDs we've seen.
       const { data: brBookings } = await supabase
         .from('booking_rooms')
-        .select('bookings!inner(start_time, end_time, status, payment_expires_at)')
+        .select('booking_id, bookings!inner(start_time, end_time, status, payment_expires_at)')
         .eq('room_id', roomId)
         .gte('bookings.start_time', dayStartISO)
         .lte('bookings.start_time', dayEndISO)
         .in('bookings.status', ['confirmed', 'completed', 'pending_payment'])
 
-      const now = new Date().toISOString()
-
-      if (directBookings) {
-        for (const b of directBookings) {
-          const startLocal = new Date(b.start_time)
-          const endLocal = new Date(b.end_time)
-          const startMin = startLocal.getHours() * 60 + startLocal.getMinutes()
-          const endMin = endLocal.getHours() * 60 + endLocal.getMinutes()
-          existingBookingTimes.push({ startMin, endMin })
-        }
-      }
+      const seenViaBookingRooms = new Set<string>()
 
       if (brBookings) {
         for (const br of brBookings) {
@@ -127,12 +110,38 @@ export async function POST(request: NextRequest) {
           }
           const startLocal = new Date(booking.start_time)
           const endLocal = new Date(booking.end_time)
-          const startMin = startLocal.getHours() * 60 + startLocal.getMinutes()
-          const endMin = endLocal.getHours() * 60 + endLocal.getMinutes()
-          existingBookingTimes.push({ startMin, endMin })
+          existingBookingTimes.push({
+            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
+            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+          })
+          seenViaBookingRooms.add((br as any).booking_id)
+        }
+      }
+
+      // Fallback: check bookings.room_id ONLY for legacy-only bookings
+      // (those with no booking_rooms entry) to avoid ghost-blocking from stale room_id
+      const { data: directBookings } = await supabase
+        .from('bookings')
+        .select('id, start_time, end_time, status, payment_expires_at')
+        .eq('room_id', roomId)
+        .in('status', ['confirmed', 'completed', 'pending_payment'])
+        .gte('start_time', dayStartISO)
+        .lte('start_time', dayEndISO)
+
+      if (directBookings) {
+        for (const b of directBookings) {
+          if (seenViaBookingRooms.has(b.id)) continue // already handled via booking_rooms
+          if (b.status === 'pending_payment' && b.payment_expires_at && b.payment_expires_at <= now) continue
+          const startLocal = new Date(b.start_time)
+          const endLocal = new Date(b.end_time)
+          existingBookingTimes.push({
+            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
+            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+          })
         }
       }
     } else {
+      // No specific room — show slots that don't conflict with any booking on this date
       const { data: allBookings } = await supabase
         .from('bookings')
         .select('start_time, end_time, status, payment_expires_at')
@@ -140,16 +149,15 @@ export async function POST(request: NextRequest) {
         .gte('start_time', dayStartISO)
         .lte('start_time', dayEndISO)
 
-      const now = new Date().toISOString()
-
       if (allBookings) {
         for (const b of allBookings) {
           if (b.status === 'pending_payment' && b.payment_expires_at && b.payment_expires_at <= now) continue
           const startLocal = new Date(b.start_time)
           const endLocal = new Date(b.end_time)
-          const startMin = startLocal.getHours() * 60 + startLocal.getMinutes()
-          const endMin = endLocal.getHours() * 60 + endLocal.getMinutes()
-          existingBookingTimes.push({ startMin, endMin })
+          existingBookingTimes.push({
+            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
+            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+          })
         }
       }
     }

@@ -239,9 +239,13 @@ export default function RoomsCalendarPage() {
   const getBookingsForRoom = (roomId: string): RoomBooking[] => {
     return bookings
       .filter(b => {
+        // booking_rooms is the authoritative source; assigned_room_ids is built from it.
+        // Only fall back to the legacy room_id for bookings that have no booking_rooms entries
+        // (true legacy records with no booking_rooms row at all).
         if (b.assigned_room_ids && b.assigned_room_ids.length > 0) {
           return b.assigned_room_ids.includes(roomId)
         }
+        // Fallback only for legacy-only bookings (no booking_rooms entry)
         return b.room_id === roomId
       })
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
@@ -344,7 +348,7 @@ export default function RoomsCalendarPage() {
   }
 
   const unassignedBookings = bookings.filter(
-    b => !b.room_id && (!b.assigned_room_ids || b.assigned_room_ids.length === 0)
+    b => (!b.assigned_room_ids || b.assigned_room_ids.length === 0) && !b.room_id
   )
 
   const formattedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-ZA', {
