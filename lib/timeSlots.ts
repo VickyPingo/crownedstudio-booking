@@ -32,7 +32,15 @@ export const BOOKING_BUFFER_MINUTES = 10
 export const SLOT_INTERVAL_MINUTES = 10
 export const AFTER_HOURS_START_TIME = '16:30'
 export const LATEST_START_TIME = '17:30'
+export const NORMAL_HOURS_START_TIME = '08:30'
+export const AFTER_HOURS_BOOKING_START_TIME = '17:30'
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
+
+export const ROOM_GROUPS = {
+  GROUP_1: { min: 1, max: 2 },
+  GROUP_2: { min: 3, max: 4 },
+  GROUP_3: { min: 5, max: 6 },
+} as const
 
 export function isSameDayBooking(dateString: string): boolean {
   const bookingDate = new Date(dateString)

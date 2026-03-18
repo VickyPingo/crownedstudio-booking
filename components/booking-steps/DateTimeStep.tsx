@@ -16,8 +16,6 @@ interface DateTimeStepProps {
   serviceTimeWindow?: ServiceTimeWindowData | null
 }
 
-const INITIAL_SLOTS_TO_SHOW = 4
-
 export function DateTimeStep({
   selectedDate,
   selectedTime,
@@ -33,7 +31,6 @@ export function DateTimeStep({
   const [isFullyBlocked, setIsFullyBlocked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showAllSlots, setShowAllSlots] = useState(false)
 
   useEffect(() => {
     if (!selectedDate) {
@@ -89,17 +86,13 @@ export function DateTimeStep({
   const handleDateChange = (newDate: string) => {
     if (newDate !== selectedDate) {
       onUpdateTime('')
-      setShowAllSlots(false)
     }
     onUpdateDate(newDate)
   }
 
-  const recommendedSlot = availableSlots[0] || null
-  const nextSlots = availableSlots.slice(1, INITIAL_SLOTS_TO_SHOW)
-  const remainingSlots = availableSlots.slice(INITIAL_SLOTS_TO_SHOW)
-  const hasMoreSlots = remainingSlots.length > 0
+  const availableSlot = availableSlots[0] || null
 
-  const renderTimeSlot = (time: string, isRecommended = false) => {
+  const renderTimeSlot = (time: string) => {
     const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
     const isSelected = selectedTime === time
 
@@ -107,17 +100,15 @@ export function DateTimeStep({
       <button
         key={time}
         onClick={() => onUpdateTime(time)}
-        className={`py-3 px-4 rounded-lg border transition-all relative ${
+        className={`w-full py-3 px-4 rounded-lg border transition-all relative ${
           isSelected
             ? 'bg-black text-white border-black'
-            : isRecommended
-            ? 'bg-green-50 text-gray-900 border-green-300 hover:border-green-400'
-            : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+            : 'bg-green-50 text-gray-900 border-green-300 hover:border-green-400'
         }`}
       >
         <span className="font-medium">{time}</span>
-        {isRecommended && !isSelected && (
-          <span className="ml-2 text-xs text-green-700">Recommended</span>
+        {!isSelected && (
+          <span className="ml-2 text-xs text-green-700">Available time slot</span>
         )}
         {isAfterHours && (
           <span
@@ -186,41 +177,20 @@ export function DateTimeStep({
           </div>
         ) : availableSlots.length === 0 ? (
           <div className="bg-gray-100 border border-gray-200 rounded-lg p-6 text-center">
-            <p className="text-gray-700 font-medium">No available time slots</p>
-            <p className="text-sm text-gray-500 mt-1">All rooms are fully booked. Please select another date.</p>
+            <p className="text-gray-700 font-medium">No availability</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Unfortunately, we don&apos;t have availability for your selected service and group size on this day. Please try another date or adjust your booking details.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {recommendedSlot && (
+            {availableSlot && (
               <div>
-                {renderTimeSlot(recommendedSlot, true)}
+                {renderTimeSlot(availableSlot)}
               </div>
             )}
 
-            {nextSlots.length > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {nextSlots.map((time) => renderTimeSlot(time))}
-              </div>
-            )}
-
-            {hasMoreSlots && (
-              <>
-                {showAllSlots ? (
-                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-200">
-                    {remainingSlots.map((time) => renderTimeSlot(time))}
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowAllSlots(true)}
-                    className="w-full py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Show {remainingSlots.length} more times
-                  </button>
-                )}
-              </>
-            )}
-
-            {!isCrownedNight && businessHours.after_hours_enabled && (
+            {!isCrownedNight && businessHours.after_hours_enabled && isAfterHoursSlot(availableSlot || '', serviceSlug, businessHours) && (
               <p className="text-xs text-gray-700 mt-2 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
                 After-hours bookings include a R100 surcharge per person. Last available start time is 17:30.

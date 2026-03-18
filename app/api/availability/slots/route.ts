@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { generateTimeSlots, isDateFullyBlocked, isSameDayBooking, TimeSlotConfig, TimeBlock } from '@/lib/timeSlots'
 import { CLEANUP_BUFFER_MINUTES } from '@/lib/roomAllocation'
+import { findEarliestAvailableSlot } from '@/lib/controlledScheduling'
 
 interface AvailabilityRequest {
   date: string
@@ -31,82 +32,6 @@ interface BookingRoom {
   }
 }
 
-interface Room {
-  id: string
-  room_name: string
-  room_area: string
-  capacity: number
-  priority: number
-}
-
-function checkSlotAvailableInRoom(
-  slotStartMs: number,
-  slotEndMs: number,
-  roomBookings: RoomBooking[],
-  bufferMs: number
-): boolean {
-  for (const booking of roomBookings) {
-    const bookingStart = new Date(booking.start_time).getTime()
-    const bookingEnd = new Date(booking.end_time).getTime()
-    const bookingEndWithBuffer = bookingEnd + bufferMs
-
-    if (slotStartMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
-      return false
-    }
-  }
-  return true
-}
-
-function findRoomCombination(
-  availableRooms: Room[],
-  peopleCount: number
-): Room[] | null {
-  if (peopleCount <= 3) {
-    const singleRoom = availableRooms.find(r => r.capacity >= peopleCount)
-    return singleRoom ? [singleRoom] : null
-  }
-
-  const allValidCombinations: Room[][] = []
-
-  function findAllCombinations(rooms: Room[], selected: Room[] = []): void {
-    const totalCapacity = selected.reduce((sum, r) => sum + r.capacity, 0)
-
-    if (totalCapacity >= peopleCount) {
-      allValidCombinations.push([...selected])
-      return
-    }
-
-    for (let i = 0; i < rooms.length; i++) {
-      const room = rooms[i]
-      if (selected.includes(room)) continue
-
-      const newSelected = [...selected, room]
-      const remainingRooms = rooms.slice(i + 1)
-      findAllCombinations(remainingRooms, newSelected)
-    }
-  }
-
-  findAllCombinations(availableRooms)
-
-  if (allValidCombinations.length === 0) {
-    return null
-  }
-
-  const scoredCombinations = allValidCombinations.map(combo => {
-    const priorityScore = combo.reduce((sum, r) => sum + r.priority, 0)
-    const roomCount = combo.length
-    return { combo, priorityScore, roomCount }
-  })
-
-  scoredCombinations.sort((a, b) => {
-    if (a.priorityScore !== b.priorityScore) {
-      return a.priorityScore - b.priorityScore
-    }
-    return a.roomCount - b.roomCount
-  })
-
-  return scoredCombinations[0].combo
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     const { data: allRooms } = await supabase
       .from('rooms')
-      .select('id, room_name, room_area, capacity, priority')
+      .select('id, room_name, room_area, capacity, priority, active')
       .eq('active', true)
       .eq('room_area', serviceArea)
       .order('priority', { ascending: true })
@@ -226,62 +151,53 @@ export async function POST(request: NextRequest) {
     }
 
     const allPossibleSlots = generateTimeSlots(config)
-    const bufferMs = CLEANUP_BUFFER_MINUTES * 60000
 
-    const availableSlots: string[] = []
+    const allBookings: { start_time: string; end_time: string; room_id: string }[] = []
 
-    for (const slot of allPossibleSlots) {
-      const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
-      const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
-
-      const occupiedRoomIds = new Set<string>()
-
-      for (const booking of activeLegacyBookings) {
-        const bookingStart = new Date(booking.start_time).getTime()
-        const bookingEnd = new Date(booking.end_time).getTime()
-        const bookingEndWithBuffer = bookingEnd + bufferMs
-
-        if (slotStartMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
-          if (booking.room_id) {
-            occupiedRoomIds.add(booking.room_id)
-          }
-        }
-      }
-
-      for (const br of activeBookingRooms) {
-        const booking = (br as any).bookings
-        const bookingStart = new Date(booking.start_time).getTime()
-        const bookingEnd = new Date(booking.end_time).getTime()
-        const bookingEndWithBuffer = bookingEnd + bufferMs
-
-        if (slotStartMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
-          occupiedRoomIds.add(br.room_id)
-        }
-      }
-
-      const availableRooms = allRooms.filter(room => !occupiedRoomIds.has(room.id))
-
-      const roomCombination = findRoomCombination(availableRooms, peopleCount || 1)
-
-      if (peopleCount >= 4 && allPossibleSlots.indexOf(slot) < 3) {
-        console.log(`[Availability] Slot ${slot}:`, {
-          occupiedRooms: Array.from(occupiedRoomIds),
-          availableRooms: availableRooms.map(r => ({ name: r.room_name, capacity: r.capacity, priority: r.priority })),
-          roomCombination: roomCombination?.map(r => ({ name: r.room_name, priority: r.priority })),
-          priorityScore: roomCombination?.reduce((sum, r) => sum + r.priority, 0),
-          isAvailable: !!roomCombination
+    for (const booking of activeLegacyBookings) {
+      if (booking.room_id) {
+        allBookings.push({
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+          room_id: booking.room_id
         })
-      }
-
-      if (roomCombination && roomCombination.length > 0) {
-        availableSlots.push(slot)
       }
     }
 
-    console.log('[Availability] Result:', { totalSlots: availableSlots.length, firstFew: availableSlots.slice(0, 3) })
+    for (const br of activeBookingRooms) {
+      const booking = (br as any).bookings
+      allBookings.push({
+        start_time: booking.start_time,
+        end_time: booking.end_time,
+        room_id: br.room_id
+      })
+    }
+
+    const result = findEarliestAvailableSlot(
+      date,
+      serviceDurationMinutes,
+      peopleCount || 1,
+      allRooms,
+      allBookings,
+      allPossibleSlots
+    )
+
+    if (!result) {
+      console.log('[Availability] No available slots found')
+      return NextResponse.json({
+        availableSlots: [],
+        isFullyBlocked: false,
+      })
+    }
+
+    console.log('[Availability] Found earliest slot:', {
+      slot: result.slot,
+      group: result.groupNumber,
+      rooms: result.rooms.map(r => r.room_name).join(', ')
+    })
 
     return NextResponse.json({
-      availableSlots,
+      availableSlots: [result.slot],
       isFullyBlocked: false,
     })
   } catch (error) {

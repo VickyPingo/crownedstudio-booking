@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/server'
+import { groupRoomsByPriority, findRoomCombinationInGroup } from './controlledScheduling'
 
 export interface Room {
   id: string
@@ -139,57 +140,21 @@ function findRoomCombination(
   availableRooms: Room[],
   peopleCount: number
 ): Room[] | null {
-  if (peopleCount <= 3) {
-    const singleRoom = availableRooms.find(r => r.capacity >= peopleCount)
-    return singleRoom ? [singleRoom] : null
-  }
+  const roomGroups = groupRoomsByPriority(availableRooms)
 
-  const allValidCombinations: Room[][] = []
+  for (let groupNum = 1; groupNum <= 3; groupNum++) {
+    const groupRooms = roomGroups.get(groupNum)
+    if (!groupRooms || groupRooms.length === 0) continue
 
-  function findAllCombinations(rooms: Room[], selected: Room[] = []): void {
-    const totalCapacity = selected.reduce((sum, r) => sum + r.capacity, 0)
-
-    if (totalCapacity >= peopleCount) {
-      allValidCombinations.push([...selected])
-      return
-    }
-
-    for (let i = 0; i < rooms.length; i++) {
-      const room = rooms[i]
-      if (selected.includes(room)) continue
-
-      const newSelected = [...selected, room]
-      const remainingRooms = rooms.slice(i + 1)
-      findAllCombinations(remainingRooms, newSelected)
+    const combination = findRoomCombinationInGroup(groupRooms, peopleCount)
+    if (combination) {
+      console.log('[RoomAllocation] Found combination in Group', groupNum, ':', combination.map(r => r.room_name).join(' + '))
+      return combination
     }
   }
 
-  findAllCombinations(availableRooms)
-
-  if (allValidCombinations.length === 0) {
-    return null
-  }
-
-  const scoredCombinations = allValidCombinations.map(combo => {
-    const priorityScore = combo.reduce((sum, r) => sum + r.priority, 0)
-    const roomCount = combo.length
-    return { combo, priorityScore, roomCount }
-  })
-
-  scoredCombinations.sort((a, b) => {
-    if (a.priorityScore !== b.priorityScore) {
-      return a.priorityScore - b.priorityScore
-    }
-    return a.roomCount - b.roomCount
-  })
-
-  console.log('[RoomAllocation] All valid combinations:', scoredCombinations.map(s => ({
-    rooms: s.combo.map(r => r.room_name).join(' + '),
-    priorityScore: s.priorityScore,
-    roomCount: s.roomCount
-  })))
-
-  return scoredCombinations[0].combo
+  console.log('[RoomAllocation] No valid combination found in any group')
+  return null
 }
 
 export async function allocateRoom(
