@@ -20,6 +20,8 @@ interface BookingRow {
   room_id: string | null
   status: string
   payment_expires_at?: string | null
+  people_count?: number
+  service_slug?: string
 }
 
 interface BookingRoomRow {
@@ -29,6 +31,10 @@ interface BookingRoomRow {
 
 const NORMAL_HOURS_START = '08:30'
 const NORMAL_HOURS_END = '17:30'
+const EVENING_START_TIME = '17:30'
+const EVENING_MAX_BOOKINGS = 2
+const EVENING_MAX_PEOPLE = 4
+const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const HHMM_RE = /^\d{2}:\d{2}$/
 
 function sanitizeHHMM(value: string): string {
@@ -53,10 +59,54 @@ function isActiveBooking(status: string, paymentExpiresAt?: string | null) {
   return status === 'confirmed' || status === 'completed'
 }
 
+async function getEveningAvailability(
+  date: string,
+  peopleCount: number,
+  supabase: typeof supabaseAdmin
+): Promise<{ availableSlots: string[]; isFullyBlocked: boolean }> {
+  const { start, end } = getUtcRangeForSastDate(date)
+
+  const { data: eveningBookingsData, error } = await supabase
+    .from('bookings')
+    .select('id, start_time, end_time, room_id, status, payment_expires_at, people_count, service_slug')
+    .gte('start_time', start)
+    .lte('start_time', end)
+    .in('service_slug', CROWNED_NIGHT_SLUGS)
+
+  if (error) {
+    console.error('[Availability] evening bookings error', error)
+    return { availableSlots: [], isFullyBlocked: true }
+  }
+
+  const activeEveningBookings = ((eveningBookingsData || []) as BookingRow[]).filter((b) =>
+    isActiveBooking(b.status, b.payment_expires_at)
+  )
+
+  const existingBookingCount = activeEveningBookings.length
+  const existingPeopleCount = activeEveningBookings.reduce(
+    (sum, b) => sum + (b.people_count || 0),
+    0
+  )
+
+  const bookingsAfter = existingBookingCount + 1
+  const peopleAfter = existingPeopleCount + peopleCount
+
+  if (
+    existingBookingCount >= EVENING_MAX_BOOKINGS ||
+    existingPeopleCount >= EVENING_MAX_PEOPLE ||
+    bookingsAfter > EVENING_MAX_BOOKINGS ||
+    peopleAfter > EVENING_MAX_PEOPLE
+  ) {
+    return { availableSlots: [], isFullyBlocked: true }
+  }
+
+  return { availableSlots: [EVENING_START_TIME], isFullyBlocked: false }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as AvailabilityRequest
-    const { date, serviceDurationMinutes, peopleCount } = body
+    const { date, serviceSlug, serviceDurationMinutes, peopleCount } = body
 
     if (!date || !serviceDurationMinutes || !peopleCount) {
       return NextResponse.json(
@@ -66,6 +116,13 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = supabaseAdmin
+
+    if (CROWNED_NIGHT_SLUGS.includes(serviceSlug)) {
+      const result = await getEveningAvailability(date, peopleCount, supabase)
+      console.log('[Availability] EVENING SLOTS', result.availableSlots)
+      return NextResponse.json(result)
+    }
+
     const { start, end } = getUtcRangeForSastDate(date)
 
     // 1. Load treatment rooms in priority order
