@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { PerPersonUpsells, MassagePressure } from '@/types/booking'
-import { generateTimeSlots, isAfterHoursSlot, getMinimumBookingDate, TimeSlotConfig, TimeBlock, ServiceTimeWindow, BOOKING_BUFFER_MINUTES } from '@/lib/timeSlots'
+import { PerPersonUpsells, PerPersonPressure } from '@/types/booking'
+import { PersonalisationStep } from '@/components/booking-steps/PersonalisationStep'
+import { isAfterHoursSlot } from '@/lib/timeSlots'
 
 interface Service {
   id: string
@@ -61,6 +62,36 @@ interface ManualBookingModalProps {
 
 type PaymentOption = 'deposit_required' | 'fully_paid' | 'no_payment'
 
+const STEPS = ['Client', 'Service', 'Date & Time', 'Personalise', 'Payment']
+
+function StepIndicator({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {STEPS.map((label, i) => {
+        const num = i + 1
+        const done = num < current
+        const active = num === current
+        return (
+          <div key={label} className="flex items-center gap-1.5">
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+              done ? 'bg-gray-900 text-white' : active ? 'bg-gray-900 text-white ring-4 ring-gray-200' : 'bg-gray-100 text-gray-400'
+            }`}>
+              {done ? (
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : num}
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={`h-0.5 w-6 rounded ${num < current ? 'bg-gray-900' : 'bg-gray-200'}`} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ManualBookingModal({
   onClose,
   onSuccess,
@@ -73,14 +104,13 @@ export function ManualBookingModal({
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [slotsLoading, setSlotsLoading] = useState(false)
 
   const [services, setServices] = useState<Service[]>([])
   const [upsells, setUpsells] = useState<Upsell[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [businessHours, setBusinessHours] = useState<Record<number, BusinessHours>>({})
-  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
-  const [existingBookings, setExistingBookings] = useState<{ start_time: string; end_time: string }[]>([])
-  const [serviceTimeWindows, setServiceTimeWindows] = useState<Record<string, ServiceTimeWindow>>({})
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
 
   const [customerSearch, setCustomerSearch] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
@@ -97,10 +127,9 @@ export function ManualBookingModal({
   const [selectedTime, setSelectedTime] = useState(prefillTime || '')
 
   const [selectedUpsellsByPerson, setSelectedUpsellsByPerson] = useState<PerPersonUpsells>({})
-  const [activePerson, setActivePerson] = useState(1)
+  const [pressureByPerson, setPressureByPerson] = useState<PerPersonPressure>({})
 
   const [allergies, setAllergies] = useState('')
-  const [massagePressure, setMassagePressure] = useState<MassagePressure>('medium')
   const [medicalHistory, setMedicalHistory] = useState('')
   const [internalNotes, setInternalNotes] = useState('')
 
@@ -122,12 +151,11 @@ export function ManualBookingModal({
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true)
-      const [servicesRes, upsellsRes, customersRes, hoursRes, timeWindowsRes] = await Promise.all([
+      const [servicesRes, upsellsRes, customersRes, hoursRes] = await Promise.all([
         supabase.from('services').select('*').eq('active', true).order('name'),
         supabase.from('upsells').select('*').eq('active', true).order('name'),
         supabase.from('customers').select('*').order('full_name'),
         supabase.from('business_hours').select('*'),
-        supabase.from('service_time_windows').select('service_slug, start_time, end_time'),
       ])
 
       if (servicesRes.data) setServices(servicesRes.data as Service[])
@@ -147,24 +175,12 @@ export function ManualBookingModal({
         setBusinessHours(hoursMap)
       }
 
-      if (timeWindowsRes.data) {
-        const windowsMap: Record<string, ServiceTimeWindow> = {}
-        timeWindowsRes.data.forEach((tw: { service_slug: string; start_time: string; end_time: string }) => {
-          windowsMap[tw.service_slug] = {
-            service_slug: tw.service_slug,
-            start_time: tw.start_time,
-            end_time: tw.end_time,
-          }
-        })
-        setServiceTimeWindows(windowsMap)
-      }
-
       if (prefillCustomerId) {
         const customer = customersRes.data?.find((c: Customer) => c.id === prefillCustomerId)
         if (customer) {
           setSelectedCustomer(customer)
+          setCustomerSearch(customer.full_name)
           setAllergies(customer.allergies || '')
-          setMassagePressure((customer.massage_pressure as MassagePressure) || 'medium')
           setMedicalHistory(customer.medical_notes || '')
         }
       }
@@ -176,25 +192,43 @@ export function ManualBookingModal({
   }, [prefillCustomerId])
 
   useEffect(() => {
-    if (!selectedDate) return
+    if (!selectedDate || !selectedService) return
+    fetchSlots()
+  }, [selectedDate, selectedService, peopleCount, selectedUpsellsByPerson])
 
-    const fetchDateData = async () => {
-      const [blocksRes, bookingsRes] = await Promise.all([
-        supabase.from('time_blocks').select('*').eq('block_date', selectedDate),
-        supabase
-          .from('bookings')
-          .select('start_time, end_time')
-          .in('status', ['confirmed', 'pending_payment'])
-          .gte('start_time', `${selectedDate}T00:00:00`)
-          .lte('start_time', `${selectedDate}T23:59:59`),
-      ])
+  const fetchSlots = async () => {
+    if (!selectedDate || !selectedService) return
+    setSlotsLoading(true)
 
-      if (blocksRes.data) setTimeBlocks(blocksRes.data)
-      if (bookingsRes.data) setExistingBookings(bookingsRes.data)
+    const maxAddonDuration = Object.values(selectedUpsellsByPerson)
+      .flat()
+      .reduce((max, upsellId) => {
+        const upsell = upsells.find((u) => u.id === upsellId)
+        const d = upsell?.duration_added_minutes || 0
+        return d > max ? d : max
+      }, 0)
+
+    const totalDuration = selectedService.duration_minutes + maxAddonDuration
+
+    try {
+      const res = await fetch('/api/admin/availability/slots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          serviceSlug: selectedService.slug,
+          serviceDurationMinutes: totalDuration,
+          roomId: prefillRoomId || null,
+        }),
+      })
+      const data = await res.json()
+      setAvailableSlots(data.availableSlots || [])
+    } catch {
+      setAvailableSlots([])
+    } finally {
+      setSlotsLoading(false)
     }
-
-    fetchDateData()
-  }, [selectedDate])
+  }
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 10)
@@ -211,73 +245,25 @@ export function ManualBookingModal({
 
   const availableUpsells = useMemo(() => {
     if (!selectedService?.allowed_upsells) return []
-    const allowed = selectedService.allowed_upsells.split(/[,\n]/).map((s) => s.trim()).filter((s) => s.length > 0)
+    const allowed = selectedService.allowed_upsells
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
     return upsells.filter((u) => allowed.includes(u.name))
   }, [selectedService, upsells])
 
-  const availableTimeSlots = useMemo(() => {
-    if (!selectedDate || !selectedService) return []
-
-    const date = new Date(selectedDate)
-    const dayOfWeek = date.getDay()
-    const hours = businessHours[dayOfWeek]
-
-    if (!hours) return []
-
-    const maxAddonDuration = Object.values(selectedUpsellsByPerson)
-      .flat()
-      .reduce((max, slug) => {
-        const upsell = upsells.find((u) => u.slug === slug)
-        const d = upsell?.duration_added_minutes || 0
-        return d > max ? d : max
-      }, 0)
-
-    const serviceTimeWindow = serviceTimeWindows[selectedService.slug] || null
-
-    const config: TimeSlotConfig = {
-      serviceSlug: selectedService.slug,
-      serviceDurationMinutes: selectedService.duration_minutes + maxAddonDuration,
-      businessHours: hours,
-      serviceTimeWindow,
-      timeBlocks,
-    }
-
-    const slots = generateTimeSlots(config)
-
-    const bufferMs = BOOKING_BUFFER_MINUTES * 60000
-    const totalDuration = selectedService.duration_minutes + maxAddonDuration
-    return slots.filter((slot) => {
-      const slotStart = new Date(`${selectedDate}T${slot}:00+02:00`)
-      const slotEnd = new Date(slotStart.getTime() + totalDuration * 60000)
-
-      for (const booking of existingBookings) {
-        const bookingStart = new Date(booking.start_time)
-        const bookingEndWithBuffer = new Date(new Date(booking.end_time).getTime() + bufferMs)
-
-        if (slotStart < bookingEndWithBuffer && slotEnd > bookingStart) {
-          return false
-        }
-      }
-
-      return true
-    })
-  }, [selectedDate, selectedService, businessHours, timeBlocks, existingBookings, selectedUpsellsByPerson, upsells, serviceTimeWindows])
-
-  const getServicePrice = useCallback(
-    (service: Service, count: number): number => {
-      const prices = [
-        0,
-        service.price_1_person,
-        service.price_2_people,
-        service.price_3_people,
-        service.price_4_people || 0,
-        service.price_5_people || 0,
-        service.price_6_people || 0,
-      ]
-      return prices[count] || 0
-    },
-    []
-  )
+  const getServicePrice = useCallback((service: Service, count: number): number => {
+    const prices = [
+      0,
+      service.price_1_person,
+      service.price_2_people,
+      service.price_3_people,
+      service.price_4_people || 0,
+      service.price_5_people || 0,
+      service.price_6_people || 0,
+    ]
+    return prices[count] || 0
+  }, [])
 
   const pricing = useMemo(() => {
     if (!selectedService || !selectedDate || !selectedTime) {
@@ -287,9 +273,9 @@ export function ManualBookingModal({
     const basePrice = getServicePrice(selectedService, peopleCount)
 
     let upsellsTotal = 0
-    Object.values(selectedUpsellsByPerson).forEach((slugs) => {
-      slugs.forEach((slug) => {
-        const upsell = upsells.find((u) => u.slug === slug)
+    Object.values(selectedUpsellsByPerson).forEach((ids) => {
+      ids.forEach((id) => {
+        const upsell = upsells.find((u) => u.id === id)
         if (upsell) upsellsTotal += upsell.price
       })
     })
@@ -330,7 +316,6 @@ export function ManualBookingModal({
     setShowCustomerDropdown(false)
     setIsNewCustomer(false)
     setAllergies(customer.allergies || '')
-    setMassagePressure((customer.massage_pressure as MassagePressure) || 'medium')
     setMedicalHistory(customer.medical_notes || '')
   }
 
@@ -338,11 +323,11 @@ export function ManualBookingModal({
     setSelectedCustomer(null)
     setIsNewCustomer(true)
     setShowCustomerDropdown(false)
+    setCustomerSearch('')
   }
 
   const handleCheckVoucher = async () => {
     if (!voucherCode.trim()) return
-
     setCheckingVoucher(true)
     setVoucherError('')
     setVoucherData(null)
@@ -353,35 +338,11 @@ export function ManualBookingModal({
       .eq('code', voucherCode.trim().toUpperCase())
       .maybeSingle()
 
-    if (error || !voucher) {
-      setVoucherError('Invalid voucher code')
-      setCheckingVoucher(false)
-      return
-    }
-
-    if (!voucher.is_active) {
-      setVoucherError('This voucher is no longer active')
-      setCheckingVoucher(false)
-      return
-    }
-
-    if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) {
-      setVoucherError('This voucher has expired')
-      setCheckingVoucher(false)
-      return
-    }
-
-    if (voucher.usage_limit && voucher.usage_count >= voucher.usage_limit) {
-      setVoucherError('This voucher has reached its usage limit')
-      setCheckingVoucher(false)
-      return
-    }
-
-    if (voucher.min_spend > pricing.subtotal) {
-      setVoucherError(`Minimum spend of R${voucher.min_spend} required`)
-      setCheckingVoucher(false)
-      return
-    }
+    if (error || !voucher) { setVoucherError('Invalid voucher code'); setCheckingVoucher(false); return }
+    if (!voucher.is_active) { setVoucherError('This voucher is no longer active'); setCheckingVoucher(false); return }
+    if (voucher.expires_at && new Date(voucher.expires_at) < new Date()) { setVoucherError('This voucher has expired'); setCheckingVoucher(false); return }
+    if (voucher.usage_limit && voucher.usage_count >= voucher.usage_limit) { setVoucherError('This voucher has reached its usage limit'); setCheckingVoucher(false); return }
+    if (voucher.min_spend > pricing.subtotal) { setVoucherError(`Minimum spend of R${voucher.min_spend} required`); setCheckingVoucher(false); return }
 
     setVoucherData({
       id: voucher.id,
@@ -394,7 +355,6 @@ export function ManualBookingModal({
 
   const handleSubmit = async () => {
     setSubmitting(true)
-
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
@@ -408,7 +368,6 @@ export function ManualBookingModal({
             email: newCustomerEmail || null,
             phone: newCustomerPhone || null,
             allergies: allergies || null,
-            massage_pressure: massagePressure,
             medical_notes: medicalHistory || null,
           })
           .select('id')
@@ -419,7 +378,6 @@ export function ManualBookingModal({
           setSubmitting(false)
           return
         }
-
         customerId = newCustomer.id
       }
 
@@ -431,13 +389,23 @@ export function ManualBookingModal({
 
       const maxAddonDuration = Object.values(selectedUpsellsByPerson)
         .flat()
-        .reduce((max, slug) => {
-          const upsell = upsells.find((u) => u.slug === slug)
+        .reduce((max, upsellId) => {
+          const upsell = upsells.find((u) => u.id === upsellId)
           const d = upsell?.duration_added_minutes || 0
           return d > max ? d : max
         }, 0)
 
       const totalDuration = selectedService.duration_minutes + maxAddonDuration
+
+      const upsellsByPersonWithSlugs: PerPersonUpsells = {}
+      for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson)) {
+        upsellsByPersonWithSlugs[Number(personKey)] = (ids as string[]).map((id) => {
+          const u = upsells.find((u) => u.id === id)
+          return u?.slug || id
+        })
+      }
+
+      const primaryPressure = pressureByPerson[1] || 'medium'
 
       const response = await fetch('/api/admin/bookings/create', {
         method: 'POST',
@@ -451,7 +419,8 @@ export function ManualBookingModal({
           totalDuration,
           pricing,
           allergies,
-          massagePressure,
+          massagePressure: primaryPressure,
+          pressureByPerson,
           medicalHistory,
           internalNotes,
           voucherCode: voucherData ? voucherCode.trim().toUpperCase() : null,
@@ -460,7 +429,7 @@ export function ManualBookingModal({
           manualPaymentMethod,
           depositPaid,
           fullyPaid,
-          selectedUpsellsByPerson,
+          selectedUpsellsByPerson: upsellsByPersonWithSlugs,
           prefillRoomId: prefillRoomId || null,
         }),
       })
@@ -479,10 +448,7 @@ export function ManualBookingModal({
       fetch('/api/bookings/send-emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId,
-          sendConfirmation: bookingStatus === 'confirmed',
-        }),
+        body: JSON.stringify({ bookingId, sendConfirmation: bookingStatus === 'confirmed' }),
       }).catch((err) => console.error('Email sending error:', err))
 
       onSuccess()
@@ -495,16 +461,23 @@ export function ManualBookingModal({
     }
   }
 
+  const allPressuresSet = useMemo(() => {
+    for (let i = 1; i <= peopleCount; i++) {
+      if (!pressureByPerson[i]) return false
+    }
+    return true
+  }, [pressureByPerson, peopleCount])
+
   const canProceed = (currentStep: number): boolean => {
     switch (currentStep) {
       case 1:
-        return (selectedCustomer !== null || (isNewCustomer && newCustomerName.trim() !== ''))
+        return selectedCustomer !== null || (isNewCustomer && newCustomerName.trim() !== '')
       case 2:
         return selectedService !== null && peopleCount > 0
       case 3:
         return selectedDate !== '' && selectedTime !== ''
       case 4:
-        return true
+        return allPressuresSet
       case 5:
         return true
       default:
@@ -512,22 +485,10 @@ export function ManualBookingModal({
     }
   }
 
-  const toggleUpsell = (slug: string) => {
-    const current = selectedUpsellsByPerson[activePerson] || []
-    const newUpsells = current.includes(slug)
-      ? current.filter((s) => s !== slug)
-      : [...current, slug]
-
-    setSelectedUpsellsByPerson({
-      ...selectedUpsellsByPerson,
-      [activePerson]: newUpsells,
-    })
-  }
-
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-8 max-w-2xl w-full mx-4">
+        <div className="bg-white rounded-2xl p-8 max-w-2xl w-full mx-4">
           <p className="text-gray-600 text-center">Loading...</p>
         </div>
       </div>
@@ -535,26 +496,41 @@ export function ManualBookingModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl">
+
+        <div className="px-8 py-5 border-b flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">New Manual Booking</h2>
-            <p className="text-sm text-gray-600 mt-1">Step {step} of 5</p>
+            {prefillRoomName && (
+              <p className="text-sm text-gray-500 mt-0.5">Room: <span className="font-medium text-gray-700">{prefillRoomName}</span></p>
+            )}
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-4 mt-0.5">
+            <StepIndicator current={step} total={5} />
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors ml-2">
+              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+
           {step === 1 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900">Select Client</h3>
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Select Client</h3>
+                <p className="text-sm text-gray-500">Search existing clients or create a new one</p>
+              </div>
 
               <div className="relative">
+                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
                 <input
                   type="text"
                   value={customerSearch}
@@ -567,29 +543,37 @@ export function ManualBookingModal({
                   }}
                   onFocus={() => setShowCustomerDropdown(true)}
                   placeholder="Search by name, email, or phone..."
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3.5 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent text-base"
                 />
                 {showCustomerDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-y-auto">
                     <button
                       onClick={handleNewCustomer}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b flex items-center gap-2 text-gray-900"
+                      className="w-full px-5 py-4 text-left hover:bg-gray-50 border-b flex items-center gap-3 text-gray-900 transition-colors"
                     >
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      Create new client
+                      <div className="w-8 h-8 rounded-full bg-gray-900 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="font-medium">Create new client</p>
+                        <p className="text-sm text-gray-500">Add a brand new client to the system</p>
+                      </div>
                     </button>
                     {filteredCustomers.map((customer) => (
                       <button
                         key={customer.id}
                         onClick={() => handleSelectCustomer(customer)}
-                        className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0"
+                        className="w-full px-5 py-3.5 text-left hover:bg-gray-50 border-b last:border-b-0 flex items-center gap-3"
                       >
-                        <p className="font-medium text-gray-900">{customer.full_name}</p>
-                        <p className="text-sm text-gray-600">
-                          {customer.email || customer.phone || 'No contact info'}
-                        </p>
+                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 text-sm font-bold text-gray-600">
+                          {customer.full_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{customer.full_name}</p>
+                          <p className="text-sm text-gray-500">{customer.email || customer.phone || 'No contact info'}</p>
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -597,48 +581,50 @@ export function ManualBookingModal({
               </div>
 
               {selectedCustomer && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
                     <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span className="font-medium text-green-800">Selected: {selectedCustomer.full_name}</span>
                   </div>
-                  <p className="text-sm text-green-700">{selectedCustomer.email || selectedCustomer.phone}</p>
+                  <div>
+                    <p className="font-semibold text-green-900">{selectedCustomer.full_name}</p>
+                    <p className="text-sm text-green-700">{selectedCustomer.email || selectedCustomer.phone || 'No contact info'}</p>
+                  </div>
                 </div>
               )}
 
               {isNewCustomer && (
-                <div className="space-y-4 border-t pt-4">
-                  <h4 className="font-medium text-gray-900">New Client Details</h4>
+                <div className="space-y-4 border border-gray-200 rounded-xl p-5 bg-gray-50">
+                  <h4 className="font-semibold text-gray-900">New Client Details</h4>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name *</label>
                     <input
                       type="text"
                       value={newCustomerName}
                       onChange={(e) => setNewCustomerName(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                       placeholder="Client's full name"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
                       <input
                         type="email"
                         value={newCustomerEmail}
                         onChange={(e) => setNewCustomerEmail(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         placeholder="email@example.com"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
                       <input
                         type="tel"
                         value={newCustomerPhone}
                         onChange={(e) => setNewCustomerPhone(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         placeholder="082 123 4567"
                       />
                     </div>
@@ -651,48 +637,57 @@ export function ManualBookingModal({
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Service</h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {services.map((service) => (
-                    <button
-                      key={service.id}
-                      onClick={() => {
-                        setSelectedService(service)
-                        if (peopleCount > service.max_people) {
-                          setPeopleCount(service.max_people)
-                        }
-                      }}
-                      className={`w-full p-4 text-left border rounded-lg transition-colors ${
-                        selectedService?.id === service.id
-                          ? 'border-gray-900 bg-gray-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-gray-900">{service.name}</p>
-                          <p className="text-sm text-gray-600">
-                            {service.duration_minutes} min - Up to {service.max_people} people
-                          </p>
-                        </div>
-                        <p className="font-medium text-gray-900">From R{service.price_1_person}</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Select Service</h3>
+                <p className="text-sm text-gray-500">Choose the service for this booking</p>
+              </div>
+
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {services.map((service) => (
+                  <button
+                    key={service.id}
+                    onClick={() => {
+                      setSelectedService(service)
+                      if (peopleCount > service.max_people) setPeopleCount(service.max_people)
+                      setSelectedTime('')
+                    }}
+                    className={`w-full p-4 text-left border-2 rounded-xl transition-all ${
+                      selectedService?.id === service.id
+                        ? 'border-gray-900 bg-gray-50 shadow-sm'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div>
+                        <p className="font-semibold text-gray-900">{service.name}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {service.duration_minutes} min · Up to {service.max_people} people
+                        </p>
                       </div>
-                    </button>
-                  ))}
-                </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-semibold text-gray-900">From R{service.price_1_person}</p>
+                        {selectedService?.id === service.id && (
+                          <p className="text-xs text-gray-500 mt-0.5">R{getServicePrice(service, peopleCount)} for {peopleCount}</p>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
 
               {selectedService && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-3">Number of People</h4>
-                  <div className="flex gap-2">
+                <div className="border border-gray-200 rounded-xl p-5 space-y-3">
+                  <h4 className="font-semibold text-gray-900">Number of People</h4>
+                  <div className="flex flex-wrap gap-2">
                     {Array.from({ length: selectedService.max_people }, (_, i) => i + 1).map((num) => (
                       <button
                         key={num}
-                        onClick={() => setPeopleCount(num)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        onClick={() => {
+                          setPeopleCount(num)
+                          setSelectedTime('')
+                        }}
+                        className={`w-12 h-12 rounded-xl font-semibold text-base transition-colors ${
                           peopleCount === num
-                            ? 'bg-gray-900 text-white'
+                            ? 'bg-gray-900 text-white shadow-sm'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >
@@ -700,8 +695,8 @@ export function ManualBookingModal({
                       </button>
                     ))}
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Price for {peopleCount}: R{getServicePrice(selectedService, peopleCount)}
+                  <p className="text-sm text-gray-600">
+                    Price for {peopleCount} {peopleCount === 1 ? 'person' : 'people'}: <span className="font-semibold">R{getServicePrice(selectedService, peopleCount)}</span>
                   </p>
                 </div>
               )}
@@ -711,36 +706,53 @@ export function ManualBookingModal({
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Select Date & Time</h3>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value)
-                      setSelectedTime('')
-                    }}
-                    min={getMinimumBookingDate()}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
-                  />
-                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Date & Time</h3>
+                <p className="text-sm text-gray-500">
+                  {prefillRoomName ? `Showing availability for ${prefillRoomName}` : 'Pick a date and available time slot'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value)
+                    setSelectedTime('')
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                />
               </div>
 
               {selectedDate && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Available Times</label>
-                  {availableTimeSlots.length === 0 ? (
-                    <p className="text-gray-600">No available time slots for this date.</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-gray-700">Available Times</label>
+                    {slotsLoading && (
+                      <span className="text-xs text-gray-400 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Loading slots...
+                      </span>
+                    )}
+                  </div>
+                  {!slotsLoading && availableSlots.length === 0 ? (
+                    <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-200">
+                      <p className="text-gray-600 font-medium">No available time slots for this date</p>
+                      <p className="text-sm text-gray-400 mt-1">Try a different date or check existing bookings</p>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                      {availableTimeSlots.map((time) => (
+                    <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-52 overflow-y-auto">
+                      {availableSlots.map((time) => (
                         <button
                           key={time}
                           onClick={() => setSelectedTime(time)}
-                          className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
+                          className={`py-2.5 text-sm rounded-lg font-medium transition-colors ${
                             selectedTime === time
-                              ? 'bg-gray-900 text-white'
+                              ? 'bg-gray-900 text-white shadow-sm'
                               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                           }`}
                         >
@@ -751,296 +763,183 @@ export function ManualBookingModal({
                   )}
                 </div>
               )}
-
-              {availableUpsells.length > 0 && selectedTime && (
-                <div className="border-t pt-4">
-                  <h4 className="font-medium text-gray-900 mb-3">Add-ons (Optional)</h4>
-
-                  {peopleCount > 1 && (
-                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
-                      {Array.from({ length: peopleCount }, (_, i) => i + 1).map((person) => (
-                        <button
-                          key={person}
-                          onClick={() => setActivePerson(person)}
-                          className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
-                            activePerson === person
-                              ? 'bg-gray-900 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          Person {person}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    {availableUpsells.map((upsell) => {
-                      const isSelected = (selectedUpsellsByPerson[activePerson] || []).includes(upsell.slug)
-                      return (
-                        <button
-                          key={upsell.id}
-                          onClick={() => toggleUpsell(upsell.slug)}
-                          className={`w-full p-3 text-left border rounded-lg transition-colors ${
-                            isSelected ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                                  isSelected ? 'bg-gray-900 border-gray-900' : 'border-gray-400'
-                                }`}
-                              >
-                                {isSelected && (
-                                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span className="font-medium text-gray-900">{upsell.name}</span>
-                            </div>
-                            <span className="text-gray-900">R{upsell.price}</span>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {step === 4 && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Client Details</h3>
+            <PersonalisationStep
+              availableUpsells={availableUpsells as import('@/types/service').Upsell[]}
+              peopleCount={peopleCount}
+              selectedUpsellsByPerson={selectedUpsellsByPerson}
+              pressureByPerson={pressureByPerson}
+              onUpdateUpsellsByPerson={setSelectedUpsellsByPerson}
+              onUpdatePressureByPerson={setPressureByPerson}
+            />
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {step === 5 && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Health Notes & Payment</h3>
+                <p className="text-sm text-gray-500">Add any health notes and confirm payment handling</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Allergies</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Allergies</label>
                   <textarea
                     value={allergies}
                     onChange={(e) => setAllergies(e.target.value)}
-                    rows={2}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
                     placeholder="Any known allergies..."
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Massage Pressure</label>
-                  <select
-                    value={massagePressure}
-                    onChange={(e) => setMassagePressure(e.target.value as MassagePressure)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
-                  >
-                    <option value="soft">Soft</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Medical History</label>
+                  <textarea
+                    value={medicalHistory}
+                    onChange={(e) => setMedicalHistory(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
+                    placeholder="Any medical conditions..."
+                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Medical History</label>
-                <textarea
-                  value={medicalHistory}
-                  onChange={(e) => setMedicalHistory(e.target.value)}
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
-                  placeholder="Any medical conditions or concerns..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Internal Notes (Staff Only)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Internal Notes (Staff Only)</label>
                 <textarea
                   value={internalNotes}
                   onChange={(e) => setInternalNotes(e.target.value)}
                   rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
-                  placeholder="Notes about this booking..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent resize-none"
+                  placeholder="Notes visible only to staff..."
                 />
               </div>
 
               <div className="border-t pt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Voucher Code (Optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Voucher Code (Optional)</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={voucherCode}
-                    onChange={(e) => {
-                      setVoucherCode(e.target.value)
-                      setVoucherData(null)
-                      setVoucherError('')
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                    onChange={(e) => { setVoucherCode(e.target.value); setVoucherData(null); setVoucherError('') }}
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     placeholder="Enter voucher code"
                   />
                   <button
                     onClick={handleCheckVoucher}
                     disabled={checkingVoucher || !voucherCode.trim()}
-                    className="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50"
+                    className="px-5 py-3 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
                   >
                     {checkingVoucher ? 'Checking...' : 'Apply'}
                   </button>
                 </div>
-                {voucherError && <p className="text-sm text-red-600 mt-1">{voucherError}</p>}
-                {voucherData && (
-                  <p className="text-sm text-green-600 mt-1">
-                    Voucher applied! Discount: R{pricing.discount}
-                  </p>
-                )}
+                {voucherError && <p className="text-sm text-red-600 mt-2">{voucherError}</p>}
+                {voucherData && <p className="text-sm text-green-600 mt-2">Voucher applied! Saving R{pricing.discount}</p>}
               </div>
-            </div>
-          )}
 
-          {step === 5 && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-900">Payment & Confirm</h3>
-
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Service</span>
-                  <span className="text-gray-900">R{pricing.basePrice}</span>
+                  <span className="text-gray-600">Service ({peopleCount} {peopleCount === 1 ? 'person' : 'people'})</span>
+                  <span className="text-gray-900 font-medium">R{pricing.basePrice}</span>
                 </div>
                 {pricing.upsellsTotal > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Add-ons</span>
-                    <span className="text-gray-900">R{pricing.upsellsTotal}</span>
+                    <span className="text-gray-900 font-medium">R{pricing.upsellsTotal}</span>
                   </div>
                 )}
                 {pricing.surcharge > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Surcharge</span>
-                    <span className="text-gray-900">R{pricing.surcharge}</span>
+                    <span className="text-gray-900 font-medium">R{pricing.surcharge}</span>
                   </div>
                 )}
                 {pricing.discount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Discount</span>
-                    <span className="text-green-600">-R{pricing.discount}</span>
+                    <span className="text-green-600 font-medium">-R{pricing.discount}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-semibold text-lg border-t pt-2">
+                <div className="flex justify-between font-bold text-lg border-t border-gray-300 pt-3 mt-1">
                   <span className="text-gray-900">Total</span>
                   <span className="text-gray-900">R{pricing.total}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Deposit (50%)</span>
-                  <span className="text-gray-900">R{pricing.deposit}</span>
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>50% Deposit</span>
+                  <span>R{pricing.deposit}</span>
                 </div>
               </div>
 
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Payment Handling</h4>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={paymentOption === 'deposit_required'}
-                      onChange={() => setPaymentOption('deposit_required')}
-                      className="w-4 h-4 text-gray-900"
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">Deposit Required</p>
-                      <p className="text-sm text-gray-600">Client pays R{pricing.deposit} deposit</p>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={paymentOption === 'fully_paid'}
-                      onChange={() => setPaymentOption('fully_paid')}
-                      className="w-4 h-4 text-gray-900"
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">Full Payment</p>
-                      <p className="text-sm text-gray-600">Client pays R{pricing.total} upfront</p>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={paymentOption === 'no_payment'}
-                      onChange={() => setPaymentOption('no_payment')}
-                      className="w-4 h-4 text-gray-900"
-                    />
-                    <div>
-                      <p className="font-medium text-gray-900">No Payment Required</p>
-                      <p className="text-sm text-gray-600">Complimentary or pay later</p>
-                    </div>
-                  </label>
-                </div>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-gray-900">Payment Handling</h4>
+                {(['deposit_required', 'fully_paid', 'no_payment'] as PaymentOption[]).map((option) => {
+                  const labels = {
+                    deposit_required: { title: 'Deposit Required', sub: `Client pays R${pricing.deposit} deposit` },
+                    fully_paid: { title: 'Full Payment', sub: `Client pays R${pricing.total} upfront` },
+                    no_payment: { title: 'No Payment Required', sub: 'Complimentary or pay later' },
+                  }
+                  return (
+                    <label key={option} className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                      paymentOption === option ? 'border-gray-900 bg-gray-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="payment"
+                        checked={paymentOption === option}
+                        onChange={() => setPaymentOption(option)}
+                        className="w-4 h-4 text-gray-900"
+                      />
+                      <div>
+                        <p className="font-medium text-gray-900">{labels[option].title}</p>
+                        <p className="text-sm text-gray-500">{labels[option].sub}</p>
+                      </div>
+                    </label>
+                  )
+                })}
               </div>
 
               {paymentOption !== 'no_payment' && (
-                <>
+                <div className="space-y-3">
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-3">Payment Method</h4>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Method</label>
                     <select
                       value={manualPaymentMethod}
                       onChange={(e) => setManualPaymentMethod(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                     >
                       <option value="cash">Cash</option>
                       <option value="card">Card</option>
                       <option value="eft">EFT / Bank Transfer</option>
                     </select>
                   </div>
-
-                  <div className="space-y-2">
-                    {paymentOption === 'deposit_required' && (
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={depositPaid}
-                          onChange={(e) => setDepositPaid(e.target.checked)}
-                          className="w-4 h-4 text-gray-900"
-                        />
-                        <span className="text-gray-900">Mark deposit as paid (R{pricing.deposit})</span>
-                      </label>
-                    )}
-                    {paymentOption === 'fully_paid' && (
-                      <label className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={fullyPaid}
-                          onChange={(e) => setFullyPaid(e.target.checked)}
-                          className="w-4 h-4 text-gray-900"
-                        />
-                        <span className="text-gray-900">Mark as fully paid (R{pricing.total})</span>
-                      </label>
-                    )}
-                  </div>
-                </>
+                  {paymentOption === 'deposit_required' && (
+                    <label className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer">
+                      <input type="checkbox" checked={depositPaid} onChange={(e) => setDepositPaid(e.target.checked)} className="w-4 h-4 text-gray-900" />
+                      <span className="text-gray-900 font-medium">Mark deposit as paid (R{pricing.deposit})</span>
+                    </label>
+                  )}
+                  {paymentOption === 'fully_paid' && (
+                    <label className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer">
+                      <input type="checkbox" checked={fullyPaid} onChange={(e) => setFullyPaid(e.target.checked)} className="w-4 h-4 text-gray-900" />
+                      <span className="text-gray-900 font-medium">Mark as fully paid (R{pricing.total})</span>
+                    </label>
+                  )}
+                </div>
               )}
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 mb-2">Booking Summary</h4>
-                <div className="text-sm text-blue-800 space-y-1">
-                  <p>
-                    <strong>Client:</strong> {selectedCustomer?.full_name || newCustomerName}
-                  </p>
-                  <p>
-                    <strong>Service:</strong> {selectedService?.name} ({peopleCount} people)
-                  </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                <h4 className="font-semibold text-blue-900 mb-3">Booking Summary</h4>
+                <div className="text-sm text-blue-800 space-y-1.5">
+                  <p><strong>Client:</strong> {selectedCustomer?.full_name || newCustomerName}</p>
+                  <p><strong>Service:</strong> {selectedService?.name} ({peopleCount} {peopleCount === 1 ? 'person' : 'people'})</p>
                   <p>
                     <strong>Date:</strong>{' '}
-                    {new Date(selectedDate).toLocaleDateString('en-ZA', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                    })}{' '}
-                    at {selectedTime}
+                    {new Date(selectedDate).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedTime}
                   </p>
-                  {prefillRoomName && (
-                    <p>
-                      <strong>Preferred Room:</strong> {prefillRoomName}
-                    </p>
-                  )}
+                  {prefillRoomName && <p><strong>Preferred Room:</strong> {prefillRoomName}</p>}
                   <p>
                     <strong>Status:</strong>{' '}
                     {paymentOption === 'no_payment' || fullyPaid || depositPaid ? 'Confirmed' : 'Pending Payment'}
@@ -1051,11 +950,11 @@ export function ManualBookingModal({
           )}
         </div>
 
-        <div className="p-6 border-t flex items-center justify-between">
+        <div className="px-8 py-5 border-t bg-gray-50 flex items-center justify-between gap-4">
           {step > 1 ? (
             <button
               onClick={() => setStep(step - 1)}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+              className="px-5 py-2.5 text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-xl font-medium transition-colors"
             >
               Back
             </button>
@@ -1063,23 +962,26 @@ export function ManualBookingModal({
             <div />
           )}
 
-          {step < 5 ? (
-            <button
-              onClick={() => setStep(step + 1)}
-              disabled={!canProceed(step)}
-              className="px-6 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Continue
-            </button>
-          ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="px-6 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
-            >
-              {submitting ? 'Creating...' : 'Create Booking'}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-400">{STEPS[step - 1]}</span>
+            {step < 5 ? (
+              <button
+                onClick={() => setStep(step + 1)}
+                disabled={!canProceed(step)}
+                className="px-7 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="px-7 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+              >
+                {submitting ? 'Creating...' : 'Create Booking'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
