@@ -173,13 +173,19 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const businessStartTime = businessHoursData.open_time || '08:00'
+    const businessEndTime = businessHoursData.after_hours_enabled
+      ? (businessHoursData.after_hours_end_time || businessHoursData.close_time)
+      : businessHoursData.close_time
+
     const result = findAllAvailableSlotsInActiveGroup(
       date,
       serviceDurationMinutes,
       peopleCount || 1,
       allRooms,
       allBookings,
-      allPossibleSlots
+      businessStartTime,
+      businessEndTime
     )
 
     if (!result) {

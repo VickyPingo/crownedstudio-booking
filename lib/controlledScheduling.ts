@@ -111,13 +111,62 @@ export function checkSlotAvailableForRooms(
   return true
 }
 
+function calculateNextAvailableTime(
+  room: Room,
+  date: string,
+  serviceDurationMinutes: number,
+  allBookings: RoomBooking[],
+  businessStartTime: string,
+  businessEndTime: string
+): string[] {
+  const bufferMs = BOOKING_BUFFER_MINUTES * 60000
+  const serviceDurationMs = serviceDurationMinutes * 60000
+  const roomBookings = allBookings.filter(b => b.room_id === room.id)
+
+  const validSlots: string[] = []
+
+  const startOfDay = new Date(`${date}T${businessStartTime}:00+02:00`).getTime()
+  const endOfDay = new Date(`${date}T${businessEndTime}:00+02:00`).getTime()
+
+  const timeIncrement = 10 * 60000
+
+  for (let currentMs = startOfDay; currentMs <= endOfDay; currentMs += timeIncrement) {
+    const slotEndMs = currentMs + serviceDurationMs
+
+    if (slotEndMs > endOfDay) break
+
+    let hasConflict = false
+    for (const booking of roomBookings) {
+      const bookingStart = new Date(booking.start_time).getTime()
+      const bookingEnd = new Date(booking.end_time).getTime()
+      const bookingEndWithBuffer = bookingEnd + bufferMs
+
+      if (currentMs < bookingEndWithBuffer && slotEndMs > bookingStart) {
+        hasConflict = true
+        currentMs = bookingEndWithBuffer - timeIncrement
+        break
+      }
+    }
+
+    if (!hasConflict) {
+      const hours = new Date(currentMs).getHours()
+      const minutes = new Date(currentMs).getMinutes()
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+      validSlots.push(timeStr)
+    }
+  }
+
+  return validSlots
+}
+
 export function findAllAvailableSlotsInActiveGroup(
   date: string,
   serviceDurationMinutes: number,
   peopleCount: number,
   allRooms: Room[],
   allBookings: RoomBooking[],
-  allPossibleSlots: string[]
+  businessStartTime: string = '08:00',
+  businessEndTime: string = '18:00'
 ): { slots: string[]; groupNumber: number } | null {
   const bufferMs = BOOKING_BUFFER_MINUTES * 60000
   const roomGroups = groupRoomsByPriority(allRooms)
@@ -126,37 +175,49 @@ export function findAllAvailableSlotsInActiveGroup(
     const groupRooms = roomGroups.get(groupNum)
     if (!groupRooms || groupRooms.length === 0) continue
 
-    const validSlotsInGroup: string[] = []
+    const allValidSlotsSet = new Set<string>()
 
-    for (const slot of allPossibleSlots) {
-      const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
-      const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
+    for (const room of groupRooms) {
+      const roomValidSlots = calculateNextAvailableTime(
+        room,
+        date,
+        serviceDurationMinutes,
+        allBookings,
+        businessStartTime,
+        businessEndTime
+      )
 
-      const availableRoomsInGroup = groupRooms.filter(room => {
-        const roomBookings = allBookings.filter(b => b.room_id === room.id)
-        return checkSlotAvailableForRooms(slotStartMs, slotEndMs, [room], roomBookings, bufferMs)
-      })
+      for (const slot of roomValidSlots) {
+        const slotStartMs = new Date(`${date}T${slot}:00+02:00`).getTime()
+        const slotEndMs = slotStartMs + serviceDurationMinutes * 60000
 
-      const roomCombination = findRoomCombinationInGroup(availableRoomsInGroup, peopleCount)
+        const availableRoomsInGroup = groupRooms.filter(r => {
+          const roomBookings = allBookings.filter(b => b.room_id === r.id)
+          return checkSlotAvailableForRooms(slotStartMs, slotEndMs, [r], roomBookings, bufferMs)
+        })
 
-      if (roomCombination && roomCombination.length > 0) {
-        const allRoomsAvailable = checkSlotAvailableForRooms(
-          slotStartMs,
-          slotEndMs,
-          roomCombination,
-          allBookings,
-          bufferMs
-        )
+        const roomCombination = findRoomCombinationInGroup(availableRoomsInGroup, peopleCount)
 
-        if (allRoomsAvailable) {
-          validSlotsInGroup.push(slot)
+        if (roomCombination && roomCombination.length > 0) {
+          const allRoomsAvailable = checkSlotAvailableForRooms(
+            slotStartMs,
+            slotEndMs,
+            roomCombination,
+            allBookings,
+            bufferMs
+          )
+
+          if (allRoomsAvailable) {
+            allValidSlotsSet.add(slot)
+          }
         }
       }
     }
 
-    if (validSlotsInGroup.length > 0) {
+    if (allValidSlotsSet.size > 0) {
+      const sortedSlots = Array.from(allValidSlotsSet).sort()
       return {
-        slots: validSlotsInGroup,
+        slots: sortedSlots,
         groupNumber: groupNum
       }
     }
