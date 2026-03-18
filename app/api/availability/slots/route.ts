@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = supabaseAdmin()
+    const supabase = supabaseAdmin
     const { start, end } = getUtcRangeForSastDate(date)
 
     // 1. Load treatment rooms in priority order
