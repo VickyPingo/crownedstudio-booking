@@ -54,6 +54,9 @@ interface ManualBookingModalProps {
   onSuccess: () => void
   prefillCustomerId?: string | null
   prefillDate?: string | null
+  prefillTime?: string | null
+  prefillRoomId?: string | null
+  prefillRoomName?: string | null
 }
 
 type PaymentOption = 'deposit_required' | 'fully_paid' | 'no_payment'
@@ -63,6 +66,9 @@ export function ManualBookingModal({
   onSuccess,
   prefillCustomerId,
   prefillDate,
+  prefillTime,
+  prefillRoomId,
+  prefillRoomName,
 }: ManualBookingModalProps) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -88,7 +94,7 @@ export function ManualBookingModal({
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [peopleCount, setPeopleCount] = useState(1)
   const [selectedDate, setSelectedDate] = useState(prefillDate || '')
-  const [selectedTime, setSelectedTime] = useState('')
+  const [selectedTime, setSelectedTime] = useState(prefillTime || '')
 
   const [selectedUpsellsByPerson, setSelectedUpsellsByPerson] = useState<PerPersonUpsells>({})
   const [activePerson, setActivePerson] = useState(1)
@@ -455,6 +461,7 @@ export function ManualBookingModal({
           depositPaid,
           fullyPaid,
           selectedUpsellsByPerson,
+          prefillRoomId: prefillRoomId || null,
         }),
       })
 
@@ -1029,6 +1036,11 @@ export function ManualBookingModal({
                     })}{' '}
                     at {selectedTime}
                   </p>
+                  {prefillRoomName && (
+                    <p>
+                      <strong>Preferred Room:</strong> {prefillRoomName}
+                    </p>
+                  )}
                   <p>
                     <strong>Status:</strong>{' '}
                     {paymentOption === 'no_payment' || fullyPaid || depositPaid ? 'Confirmed' : 'Pending Payment'}

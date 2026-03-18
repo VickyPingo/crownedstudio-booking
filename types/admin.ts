@@ -91,6 +91,7 @@ export interface TimeBlock {
   reason: string | null
   created_by: string | null
   created_at: string
+  room_id?: string | null
 }
 
 export interface CustomerProfile {

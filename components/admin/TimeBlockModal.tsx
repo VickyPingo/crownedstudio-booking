@@ -9,14 +9,19 @@ interface TimeBlockModalProps {
   existingBlock?: TimeBlock | null
   onClose: () => void
   onSave: () => void
+  prefillRoomId?: string | null
+  prefillRoomName?: string | null
+  prefillStartTime?: string | null
 }
 
-export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }: TimeBlockModalProps) {
+export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave, prefillRoomId, prefillRoomName, prefillStartTime }: TimeBlockModalProps) {
   const [blockDate, setBlockDate] = useState(selectedDate)
-  const [isFullDay, setIsFullDay] = useState(true)
-  const [startTime, setStartTime] = useState('09:00')
+  const [isFullDay, setIsFullDay] = useState(!prefillStartTime)
+  const [startTime, setStartTime] = useState(prefillStartTime || '09:00')
   const [endTime, setEndTime] = useState('17:00')
   const [reason, setReason] = useState('')
+  const [roomId] = useState<string | null>(prefillRoomId || null)
+  const [roomName] = useState<string | null>(prefillRoomName || null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -49,13 +54,16 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    const blockData = {
+    const blockData: Record<string, unknown> = {
       block_date: blockDate,
       is_full_day: isFullDay,
       start_time: isFullDay ? null : startTime,
       end_time: isFullDay ? null : endTime,
       reason: reason || null,
       created_by: user?.id || null,
+    }
+    if (roomId) {
+      blockData.room_id = roomId
     }
 
     let queryError
@@ -124,6 +132,14 @@ export function TimeBlockModal({ selectedDate, existingBlock, onClose, onSave }:
         )}
 
         <div className="space-y-4">
+          {roomName && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+              <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <span>Room-specific block: <strong>{roomName}</strong></span>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input

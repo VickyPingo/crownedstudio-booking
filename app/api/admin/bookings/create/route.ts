@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       depositPaid,
       fullyPaid,
       selectedUpsellsByPerson,
+      prefillRoomId,
     } = payload
 
     if (isSameDayBooking(selectedDate)) {
@@ -48,19 +49,35 @@ export async function POST(request: NextRequest) {
     const serviceArea = serviceData?.service_area || 'treatment'
 
     let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }
-    try {
-      roomAllocation = await allocateRoom(
-        serviceArea,
-        startDateTime,
-        endDateTime,
-        peopleCount
-      )
-    } catch (err) {
-      console.error('Room allocation error:', err)
-      return NextResponse.json(
-        { error: 'Room allocation failed' },
-        { status: 500 }
-      )
+
+    if (prefillRoomId) {
+      const { checkRoomAvailability } = await import('@/lib/roomAllocation')
+      const isAvailable = await checkRoomAvailability(prefillRoomId, startDateTime, endDateTime)
+      if (isAvailable) {
+        const { data: roomRow } = await supabase
+          .from('rooms')
+          .select('room_name')
+          .eq('id', prefillRoomId)
+          .maybeSingle()
+        roomAllocation = {
+          room_ids: [prefillRoomId],
+          room_names: [roomRow?.room_name || ''],
+        }
+      } else {
+        try {
+          roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, peopleCount)
+        } catch (err) {
+          console.error('Room allocation error:', err)
+          return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
+        }
+      }
+    } else {
+      try {
+        roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, peopleCount)
+      } catch (err) {
+        console.error('Room allocation error:', err)
+        return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
+      }
     }
 
     if (roomAllocation.error || roomAllocation.room_ids.length === 0) {
