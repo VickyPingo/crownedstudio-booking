@@ -190,8 +190,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-
-export async function POST(request: NextRequest) {
   try {
     const body: AvailabilityRequest = await request.json()
     const { date, serviceSlug, serviceDurationMinutes, peopleCount } = body
