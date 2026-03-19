@@ -104,6 +104,7 @@ export default function RoomsCalendarPage() {
   const [showTimeBlock, setShowTimeBlock] = useState(false)
   const [prefillRoom, setPrefillRoom] = useState<{ id: string; name: string } | null>(null)
   const [prefillTime, setPrefillTime] = useState<string | null>(null)
+  const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null)
 
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null)
@@ -280,6 +281,14 @@ export default function RoomsCalendarPage() {
     setPrefillRoom({ id: slotActionMenu.roomId, name: slotActionMenu.roomName })
     setPrefillTime(slotActionMenu.time)
     setSlotActionMenu(null)
+    setEditingBlock(null)
+    setShowTimeBlock(true)
+  }
+
+  const handleEditBlock = (block: TimeBlock, room: Room) => {
+    setEditingBlock(block)
+    setPrefillRoom({ id: room.id, name: room.room_name })
+    setPrefillTime(null)
     setShowTimeBlock(true)
   }
 
@@ -528,12 +537,23 @@ export default function RoomsCalendarPage() {
                             return (
                               <div
                                 key={block.id}
-                                className="absolute left-0 right-0 bg-red-50 border-l-2 border-red-400 pointer-events-none"
+                                data-booking="true"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleEditBlock(block, room)
+                                }}
+                                className="absolute left-0 right-0 bg-red-50 border-l-2 border-red-400 cursor-pointer hover:bg-red-100 transition-colors group"
                                 style={{ top: `${pos.top}px`, height: `${pos.height}px`, zIndex: 5 }}
+                                title="Click to edit block"
                               >
-                                <p className="text-xs text-red-700 font-medium px-2 pt-1 truncate">
-                                  {block.reason || 'Blocked'}
-                                </p>
+                                <div className="flex items-center justify-between px-2 pt-1">
+                                  <p className="text-xs text-red-700 font-medium truncate">
+                                    {block.reason || 'Blocked'}
+                                  </p>
+                                  <svg className="w-3 h-3 text-red-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </div>
                               </div>
                             )
                           })}
@@ -605,6 +625,7 @@ export default function RoomsCalendarPage() {
             <div className="lg:hidden space-y-4">
               {rooms.map((room) => {
                 const roomBookings = getBookingsForRoom(room.id)
+                const roomBlocks = getTimeBlocksForRoom(room.id)
                 return (
                   <div key={room.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
                     <div className="bg-gray-900 text-white px-4 py-3 flex items-center justify-between">
@@ -634,6 +655,33 @@ export default function RoomsCalendarPage() {
                       </div>
                     </div>
 
+                    {roomBlocks.length > 0 && (
+                      <div className="px-4 pt-3 pb-1 space-y-1.5">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Time Blocks</p>
+                        {roomBlocks.map((block) => (
+                          <button
+                            key={block.id}
+                            onClick={() => handleEditBlock(block, room)}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-left hover:bg-red-100 transition-colors"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-red-800">
+                                {block.is_full_day
+                                  ? 'Full day blocked'
+                                  : `${block.start_time?.slice(0, 5)} – ${block.end_time?.slice(0, 5)}`}
+                              </p>
+                              {block.reason && (
+                                <p className="text-xs text-red-600">{block.reason}</p>
+                              )}
+                            </div>
+                            <svg className="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {roomBookings.length === 0 ? (
                       <div className="p-4 text-center">
                         <p className="text-gray-500 text-sm mb-3">No bookings for this room today</p>
@@ -652,6 +700,7 @@ export default function RoomsCalendarPage() {
                             onClick={() => {
                               setPrefillRoom({ id: room.id, name: room.room_name })
                               setPrefillTime(null)
+                              setEditingBlock(null)
                               setShowTimeBlock(true)
                             }}
                             className="px-3 py-1.5 text-xs bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
@@ -780,20 +829,24 @@ export default function RoomsCalendarPage() {
 
       {showTimeBlock && (
         <TimeBlockModal
-          selectedDate={selectedDate}
+          selectedDate={editingBlock ? editingBlock.block_date : selectedDate}
+          existingBlock={editingBlock}
+          isRoomContext={true}
           onClose={() => {
             setShowTimeBlock(false)
             setPrefillRoom(null)
             setPrefillTime(null)
+            setEditingBlock(null)
           }}
           onSave={() => {
             setShowTimeBlock(false)
             setPrefillRoom(null)
             setPrefillTime(null)
+            setEditingBlock(null)
             fetchData()
           }}
-          prefillRoomId={prefillRoom?.id}
-          prefillRoomName={prefillRoom?.name}
+          prefillRoomId={editingBlock ? editingBlock.room_id : prefillRoom?.id}
+          prefillRoomName={editingBlock ? rooms.find(r => r.id === editingBlock.room_id)?.room_name : prefillRoom?.name}
           prefillStartTime={prefillTime}
         />
       )}

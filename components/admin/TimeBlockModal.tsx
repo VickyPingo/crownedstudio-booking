@@ -18,6 +18,7 @@ interface TimeBlockModalProps {
   prefillRoomName?: string | null
   prefillStartTime?: string | null
   rooms?: Room[]
+  isRoomContext?: boolean
 }
 
 export function TimeBlockModal({
@@ -29,6 +30,7 @@ export function TimeBlockModal({
   prefillRoomName,
   prefillStartTime,
   rooms = [],
+  isRoomContext = false,
 }: TimeBlockModalProps) {
   const [blockDate, setBlockDate] = useState(selectedDate)
   const [isFullDay, setIsFullDay] = useState(!prefillStartTime)
@@ -222,19 +224,21 @@ export function TimeBlockModal({
                 <p className="text-xs text-gray-500 mt-1">{formattedDate}</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                <select
-                  value={roomId || ''}
-                  onChange={(e) => setRoomId(e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
-                >
-                  <option value="">Global (all rooms)</option>
-                  {rooms.map(room => (
-                    <option key={room.id} value={room.id}>{room.room_name}</option>
-                  ))}
-                </select>
-              </div>
+              {!isRoomContext && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                  <select
+                    value={roomId || ''}
+                    onChange={(e) => setRoomId(e.target.value || null)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent bg-white"
+                  >
+                    <option value="">Global (all rooms)</option>
+                    {rooms.map(room => (
+                      <option key={room.id} value={room.id}>{room.room_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="flex items-center gap-3 cursor-pointer">
