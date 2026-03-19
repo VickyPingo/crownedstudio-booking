@@ -50,13 +50,17 @@ function getUtcRangeForSastDate(date: string) {
   }
 }
 
-function isActiveBooking(status: string, paymentExpiresAt?: string | null) {
+function isActiveBooking(status: string, paymentExpiresAt?: string | null): boolean {
+  if (status === 'confirmed' || status === 'completed') return true
   if (status === 'pending_payment') {
-    if (!paymentExpiresAt) return true
-    return new Date(paymentExpiresAt).getTime() > Date.now()
+    if (!paymentExpiresAt) return false
+    const isStillActive = new Date(paymentExpiresAt).getTime() > Date.now()
+    if (!isStillActive) {
+      console.log('[Availability] Ignoring stale pending_payment booking (expired payment window)')
+    }
+    return isStillActive
   }
-
-  return status === 'confirmed' || status === 'completed'
+  return false
 }
 
 async function getEveningAvailability(

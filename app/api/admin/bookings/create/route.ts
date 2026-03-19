@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     const adminUserId: string | null = user?.id ?? null
 
-    let bookingStatus = 'pending_payment'
+    let bookingStatus = 'confirmed'
     if (paymentOption === 'no_payment') {
       bookingStatus = 'confirmed'
     } else if (fullyPaid === true) {
@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
     } else if (depositPaid === true && paymentOption === 'deposit_required') {
       bookingStatus = 'confirmed'
     }
+
+    console.log('[AdminBookingCreate] bookingStatus:', bookingStatus, '| paymentOption:', paymentOption, '| depositPaid:', depositPaid, '| fullyPaid:', fullyPaid)
 
     const insertPayload = {
       customer_id: customerId,

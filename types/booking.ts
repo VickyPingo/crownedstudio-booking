@@ -75,7 +75,7 @@ export interface CreateBookingPayload {
 export interface SavedBooking {
   id: string
   customerId: string
-  status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'cancelled_expired'
+  status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'expired' | 'cancelled_expired'
   depositDue: number
   discountAmount: number
   discountType: 'repeat_customer' | 'voucher' | null

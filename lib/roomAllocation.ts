@@ -33,6 +33,30 @@ export interface MultiRoomAllocationResult {
 
 export const CLEANUP_BUFFER_MINUTES = 10
 
+/**
+ * Determines whether a booking should block room availability.
+ * - confirmed → always blocks
+ * - completed → always blocks (handled at query level, not needed here)
+ * - pending_payment with null expiry → does NOT block (admin bookings set confirmed directly; a null expiry on pending is a data anomaly)
+ * - pending_payment with future expiry → blocks
+ * - pending_payment with past expiry → does NOT block (treat as expired even if cleanup hasn't run)
+ * - expired / cancelled / cancelled_expired → never blocks
+ */
+function isBlockingStatus(
+  status: string,
+  paymentExpiresAt: string | null | undefined,
+  now: string
+): boolean {
+  if (status === 'confirmed' || status === 'completed') return true
+  if (status === 'pending_payment') {
+    if (!paymentExpiresAt) {
+      return false
+    }
+    return paymentExpiresAt > now
+  }
+  return false
+}
+
 function doTimesOverlapWithBuffer(
   newStart: Date,
   newEnd: Date,
@@ -80,10 +104,10 @@ async function getOccupiedRoomIds(
       if (excludeBookingId && br.booking_id === excludeBookingId) continue
 
       const booking = (br as any).bookings
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      const isActive = isBlockingStatus(booking.status, booking.payment_expires_at, now)
+
+      if (!isActive) {
+        console.log(`[RoomAllocation] Ignoring expired/stale pending_payment booking ${booking.id} from room blocking`)
       }
 
       if (isActive) {
@@ -111,10 +135,10 @@ async function getOccupiedRoomIds(
       if (excludeBookingId && booking.id === excludeBookingId) continue
       if (bookingIdsInBookingRooms.has(booking.id)) continue
 
-      let isActive = false
-      if (booking.status === 'confirmed') isActive = true
-      if (booking.status === 'pending_payment') {
-        isActive = !booking.payment_expires_at || booking.payment_expires_at > now
+      const isActive = isBlockingStatus(booking.status, booking.payment_expires_at, now)
+
+      if (!isActive) {
+        console.log(`[RoomAllocation] Ignoring expired/stale pending_payment booking ${booking.id} (legacy) from room blocking`)
       }
 
       if (isActive && booking.room_id) {

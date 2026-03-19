@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       } | null
       const booking = bookingData
 
-      if (!booking || booking.status === 'cancelled' || booking.status === 'cancelled_expired') {
+      if (!booking || booking.status === 'cancelled' || booking.status === 'cancelled_expired' || booking.status === 'expired') {
         await supabase
           .from('scheduled_reminders')
           .update({ status: 'cancelled' })

@@ -24,7 +24,7 @@ interface Booking {
   total_paid: number
 }
 
-type FilterStatus = 'all' | 'pending_payment' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
+type FilterStatus = 'all' | 'pending_payment' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired'
 
 const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -32,6 +32,7 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'expired', label: 'Expired' },
   { value: 'no_show', label: 'No-show' },
 ]
 
@@ -158,11 +159,17 @@ export default function AdminBookingsPage() {
       confirmed: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',
-      cancelled_expired: 'bg-gray-100 text-gray-800',
-      expired: 'bg-gray-100 text-gray-800',
+      cancelled_expired: 'bg-orange-100 text-orange-800',
+      expired: 'bg-orange-100 text-orange-800',
       no_show: 'bg-gray-200 text-gray-700',
     }
     return styles[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  const formatStatus = (status: string) => {
+    if (status === 'expired') return 'Expired'
+    if (status === 'cancelled_expired') return 'Expired (Legacy)'
+    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   const getPaymentStatus = (booking: Booking) => {
@@ -174,9 +181,6 @@ export default function AdminBookingsPage() {
     return { label: 'Pending', style: 'bg-amber-100 text-amber-800' }
   }
 
-  const formatStatus = (status: string) => {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-  }
 
   return (
     <AdminLayout>

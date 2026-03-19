@@ -73,6 +73,8 @@ const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] =
   { value: 'no_show', label: 'No-show', color: 'bg-gray-100 text-gray-800' },
 ]
 
+const NON_EDITABLE_STATUSES: BookingStatus[] = ['expired', 'cancelled_expired']
+
 export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDetailDrawerProps) {
   const [booking, setBooking] = useState<BookingData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -812,22 +814,35 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Status</h3>
-              <div className="flex flex-wrap gap-2">
-                {STATUS_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleStatusChange(opt.value)}
-                    disabled={updatingStatus || booking.status === opt.value}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      booking.status === opt.value
-                        ? `${opt.color} ring-2 ring-offset-1 ring-gray-400`
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    } disabled:opacity-50`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              {NON_EDITABLE_STATUSES.includes(booking.status as BookingStatus) ? (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    booking.status === 'expired' || booking.status === 'cancelled_expired'
+                      ? 'bg-orange-100 text-orange-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {booking.status === 'expired' ? 'Expired' : 'Expired (Legacy)'}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-2">Payment window lapsed. This booking is kept for audit purposes and does not block any rooms.</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {STATUS_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleStatusChange(opt.value)}
+                      disabled={updatingStatus || booking.status === opt.value}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        booking.status === opt.value
+                          ? `${opt.color} ring-2 ring-offset-1 ring-gray-400`
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      } disabled:opacity-50`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section>

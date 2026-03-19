@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const { error: bookingUpdateError } = await supabase
       .from('bookings')
       .update({
-        status: 'cancelled_expired',
+        status: 'expired',
         payment_expires_at: null,
       })
       .in('id', bookingIds)
@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
       console.error('Error updating expired bookings:', bookingUpdateError)
       return NextResponse.json({ error: 'Failed to update bookings' }, { status: 500 })
     }
+
+    console.log(`[CleanupExpired] Transitioned ${bookingIds.length} booking(s) from pending_payment → expired:`, bookingIds)
 
     const { error: transactionUpdateError } = await supabase
       .from('payment_transactions')
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Cancelled ${bookingIds.length} expired booking(s)`,
+      message: `Expired ${bookingIds.length} booking(s)`,
       count: bookingIds.length,
       bookingIds,
     })
