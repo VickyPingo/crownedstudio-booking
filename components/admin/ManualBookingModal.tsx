@@ -497,7 +497,7 @@ export function ManualBookingModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl">
+      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
 
         <div className="px-8 py-5 border-b flex items-start justify-between gap-4">
           <div>
@@ -546,7 +546,7 @@ export function ManualBookingModal({
                   className="w-full pl-10 pr-4 py-3.5 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent text-base"
                 />
                 {showCustomerDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-[28rem] overflow-y-auto">
                     <button
                       onClick={handleNewCustomer}
                       className="w-full px-5 py-4 text-left hover:bg-gray-50 border-b flex items-center gap-3 text-gray-900 transition-colors"
@@ -641,7 +641,7 @@ export function ManualBookingModal({
                 <p className="text-sm text-gray-500">Choose the service for this booking</p>
               </div>
 
-              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                 {services.map((service) => (
                   <button
                     key={service.id}
@@ -745,7 +745,7 @@ export function ManualBookingModal({
                       <p className="text-sm text-gray-400 mt-1">Try a different date or check existing bookings</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-52 overflow-y-auto">
+                    <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
                       {availableSlots.map((time) => (
                         <button
                           key={time}
