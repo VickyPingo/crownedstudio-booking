@@ -96,7 +96,9 @@ async function loadTimeBlocksForWindow(
   endTime: Date
 ): Promise<{ globalBlocks: TimeBlock[]; roomBlocks: Map<string, TimeBlock[]> }> {
   const supabase = supabaseAdmin
-  const dateStr = startTime.toISOString().slice(0, 10)
+  const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
+  const sastStartMs = startTime.getTime() + SAST_OFFSET_MS
+  const dateStr = new Date(sastStartMs).toISOString().slice(0, 10)
 
   const { data: rawBlocks, error } = await supabase
     .from('time_blocks')
@@ -125,8 +127,15 @@ async function loadTimeBlocksForWindow(
 
     if (!tb.start_time || !tb.end_time) continue
 
-    const blockStart = new Date(`${dateStr}T${tb.start_time.slice(0, 5)}:00`)
-    const blockEnd = new Date(`${dateStr}T${tb.end_time.slice(0, 5)}:00`)
+    const blockStart = new Date(`${dateStr}T${tb.start_time.slice(0, 5)}:00+02:00`)
+    const blockEnd = new Date(`${dateStr}T${tb.end_time.slice(0, 5)}:00+02:00`)
+
+    console.log(
+      `[RoomAllocation][TimeBlock] Overlap check` +
+      ` | bookingStart=${startTime.toISOString()} bookingEnd=${endTime.toISOString()}` +
+      ` | blockStart=${blockStart.toISOString()} blockEnd=${blockEnd.toISOString()}` +
+      ` | block id=${tb.id} room_id=${tb.room_id ?? 'global'}`
+    )
 
     if (!doesOverlapTimeBlock(startTime, endTime, blockStart, blockEnd)) continue
 
