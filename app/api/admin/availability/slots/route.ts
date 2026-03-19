@@ -7,21 +7,12 @@ import {
   BusinessHours,
   TimeSlotConfig,
   TimeBlock,
+  overlapsBooking,
 } from '@/lib/timeSlots'
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return h * 60 + m
-}
-
-function doOverlapWithBuffer(
-  newStartMin: number,
-  newEndMin: number,
-  existingStartMin: number,
-  existingEndMin: number
-): boolean {
-  const bufferedEnd = existingEndMin + BOOKING_BUFFER_MINUTES
-  return newStartMin < bufferedEnd && newEndMin > existingStartMin
 }
 
 export async function POST(request: NextRequest) {
@@ -171,7 +162,13 @@ export async function POST(request: NextRequest) {
       const slotEndMin = slotStartMin + serviceDurationMinutes
 
       for (const booking of existingBookingTimes) {
-        if (doOverlapWithBuffer(slotStartMin, slotEndMin, booking.startMin, booking.endMin)) {
+        if (overlapsBooking(slotStartMin, slotEndMin, booking.startMin, booking.endMin)) {
+          console.log(
+            `[AdminAvailability] Slot ${slot} rejected — overlaps booking ` +
+            `${String(Math.floor(booking.startMin / 60)).padStart(2,'0')}:${String(booking.startMin % 60).padStart(2,'0')}` +
+            `-${String(Math.floor(booking.endMin / 60)).padStart(2,'0')}:${String(booking.endMin % 60).padStart(2,'0')}` +
+            ` (buffer: ${BOOKING_BUFFER_MINUTES}min applied)`
+          )
           return false
         }
       }

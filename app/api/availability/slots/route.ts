@@ -5,6 +5,7 @@ import {
   Room,
   RoomBooking
 } from '@/lib/controlledScheduling'
+import { filterBlockedSlots, TimeBlock } from '@/lib/timeSlots'
 
 interface AvailabilityRequest {
   date: string
@@ -231,8 +232,26 @@ export async function POST(request: NextRequest) {
 
     console.log('[Availability] RAW SLOTS', rawSlots)
 
-    // 6. Final safety filter
-    const availableSlots = rawSlots.filter(
+    // 6. Filter against time blocks (no buffer — strict interval overlap only)
+    const { data: timeBlocksRaw } = await supabase
+      .from('time_blocks')
+      .select('*')
+      .eq('block_date', date)
+
+    const timeBlocks: TimeBlock[] = ((timeBlocksRaw || []) as TimeBlock[]).filter(
+      (tb) => tb.is_full_day || !tb.room_id
+    )
+
+    const slotsAfterTimeBlocks = timeBlocks.length > 0
+      ? filterBlockedSlots(rawSlots, timeBlocks, serviceDurationMinutes)
+      : rawSlots
+
+    if (timeBlocks.length > 0) {
+      console.log('[Availability] Time blocks applied:', timeBlocks.length, '— slots before:', rawSlots.length, '— slots after:', slotsAfterTimeBlocks.length)
+    }
+
+    // 7. Final safety filter
+    const availableSlots = slotsAfterTimeBlocks.filter(
       (slot) => typeof slot === 'string' && HHMM_RE.test(slot)
     )
 

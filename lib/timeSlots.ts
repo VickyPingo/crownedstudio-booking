@@ -18,6 +18,7 @@ export interface TimeBlock {
   end_time: string | null
   is_full_day: boolean
   reason: string | null
+  room_id?: string | null
 }
 
 export interface TimeSlotConfig {
@@ -119,13 +120,42 @@ export function generateTimeSlots(config: TimeSlotConfig): string[] {
   return slots
 }
 
+/**
+ * Strict interval overlap — NO buffer applied.
+ * A slot starting exactly when a block ends is NOT blocked.
+ * Use this for time block checks only.
+ */
+export function overlapsTimeBlock(
+  slotStartMin: number,
+  slotEndMin: number,
+  blockStartMin: number,
+  blockEndMin: number
+): boolean {
+  return slotStartMin < blockEndMin && slotEndMin > blockStartMin
+}
+
+/**
+ * Buffered overlap — applies BOOKING_BUFFER_MINUTES after existing booking end.
+ * Use this for booking-vs-booking checks only.
+ */
+export function overlapsBooking(
+  slotStartMin: number,
+  slotEndMin: number,
+  bookingStartMin: number,
+  bookingEndMin: number
+): boolean {
+  const bufferedEnd = bookingEndMin + BOOKING_BUFFER_MINUTES
+  return slotStartMin < bufferedEnd && slotEndMin > bookingStartMin
+}
+
 export function filterBlockedSlots(
   slots: string[],
   timeBlocks: TimeBlock[],
   serviceDurationMinutes: number
 ): string[] {
-  const hasFullDayBlock = timeBlocks.some(block => block.is_full_day)
-  if (hasFullDayBlock) {
+  const globalFullDayBlock = timeBlocks.find(block => block.is_full_day && !block.room_id)
+  if (globalFullDayBlock) {
+    console.log('[TimeSlots] Full-day global block — all slots removed. Reason:', globalFullDayBlock.reason)
     return []
   }
 
@@ -139,7 +169,11 @@ export function filterBlockedSlots(
       const blockStart = timeToMinutes(block.start_time!)
       const blockEnd = timeToMinutes(block.end_time!)
 
-      if (slotStart < blockEnd && slotEnd > blockStart) {
+      if (overlapsTimeBlock(slotStart, slotEnd, blockStart, blockEnd)) {
+        console.log(
+          `[TimeSlots] Slot ${slot} rejected — overlaps time block ${block.start_time?.slice(0,5)}-${block.end_time?.slice(0,5)}` +
+          ` (NO buffer applied). Reason: ${block.reason || 'none'}`
+        )
         return false
       }
     }
