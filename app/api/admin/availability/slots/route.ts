@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
       if (brBookings) {
         for (const br of brBookings) {
           const booking = (br as any).bookings
-          if (booking.status === 'pending_payment' && booking.payment_expires_at && booking.payment_expires_at <= now) {
-            continue
+          if (booking.status === 'pending_payment') {
+            if (!booking.payment_expires_at || booking.payment_expires_at <= now) continue
           }
           const startLocal = new Date(booking.start_time)
           const endLocal = new Date(booking.end_time)
@@ -130,8 +130,10 @@ export async function POST(request: NextRequest) {
 
       if (directBookings) {
         for (const b of directBookings) {
-          if (seenViaBookingRooms.has(b.id)) continue // already handled via booking_rooms
-          if (b.status === 'pending_payment' && b.payment_expires_at && b.payment_expires_at <= now) continue
+          if (seenViaBookingRooms.has(b.id)) continue
+          if (b.status === 'pending_payment') {
+            if (!b.payment_expires_at || b.payment_expires_at <= now) continue
+          }
           const startLocal = new Date(b.start_time)
           const endLocal = new Date(b.end_time)
           existingBookingTimes.push({
@@ -151,7 +153,9 @@ export async function POST(request: NextRequest) {
 
       if (allBookings) {
         for (const b of allBookings) {
-          if (b.status === 'pending_payment' && b.payment_expires_at && b.payment_expires_at <= now) continue
+          if (b.status === 'pending_payment') {
+            if (!b.payment_expires_at || b.payment_expires_at <= now) continue
+          }
           const startLocal = new Date(b.start_time)
           const endLocal = new Date(b.end_time)
           existingBookingTimes.push({

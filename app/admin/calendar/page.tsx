@@ -150,7 +150,7 @@ export default function AdminCalendarPage() {
 
   const isDateBlocked = (day: number) => {
     const blocks = getBlocksForDate(day)
-    return blocks.some(b => b.is_full_day)
+    return blocks.some(b => b.is_full_day && !b.room_id)
   }
 
   const goToPrevMonth = () => {
@@ -300,8 +300,8 @@ export default function AdminCalendarPage() {
 
                   const dayBookings = getBookingsForDate(day)
                   const dayBlocks = getBlocksForDate(day)
-                  const hasFullDayBlock = dayBlocks.some(b => b.is_full_day)
-                  const hasPartialBlock = dayBlocks.some(b => !b.is_full_day)
+                  const hasFullDayBlock = dayBlocks.some(b => b.is_full_day && !b.room_id)
+                  const hasPartialBlock = dayBlocks.some(b => !b.is_full_day || b.room_id)
                   const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
                   return (
@@ -409,6 +409,9 @@ export default function AdminCalendarPage() {
                         {block.is_full_day
                           ? 'Full day blocked'
                           : `${block.start_time?.slice(0, 5)} - ${block.end_time?.slice(0, 5)}`}
+                        {block.room_id && (
+                          <span className="ml-2 text-xs font-normal text-blue-600">(room-specific)</span>
+                        )}
                       </p>
                       {block.reason && (
                         <p className="text-xs text-gray-600">{block.reason}</p>
