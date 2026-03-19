@@ -43,6 +43,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (process.env.SEND_BOOKING_REMINDERS !== 'true') {
+    console.log('Cron send-reminders: Reminders disabled via SEND_BOOKING_REMINDERS env flag')
+    return NextResponse.json({ message: 'Reminders disabled', count: 0 })
+  }
+
   console.log('Cron send-reminders: Starting execution')
 
   const supabase = getSupabaseAdmin()
