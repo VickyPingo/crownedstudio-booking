@@ -30,6 +30,7 @@ export default function AdminCalendarPage() {
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [rooms, setRooms] = useState<{ id: string; room_name: string }[]>([])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
   const [showBlockModal, setShowBlockModal] = useState(false)
@@ -121,6 +122,17 @@ export default function AdminCalendarPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    supabase
+      .from('rooms')
+      .select('id, room_name')
+      .eq('active', true)
+      .order('room_name')
+      .then(({ data }) => {
+        if (data) setRooms(data)
+      })
+  }, [])
 
   const getDaysInMonth = () => {
     const firstDay = new Date(year, month, 1).getDay()
@@ -473,6 +485,7 @@ export default function AdminCalendarPage() {
           existingBlock={editingBlock}
           onClose={handleCloseBlockModal}
           onSave={fetchData}
+          rooms={rooms}
         />
       )}
 
