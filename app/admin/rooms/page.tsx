@@ -201,10 +201,12 @@ export default function RoomsCalendarPage() {
   }
 
   const getBookingPosition = (booking: RoomBooking): { top: number; height: number } => {
-    const startTime = new Date(booking.start_time)
-    const endTime = new Date(booking.end_time)
-    const startMinutes = (startTime.getHours() - CALENDAR_START_HOUR) * 60 + startTime.getMinutes()
-    const durationMinutes = (endTime.getTime() - startTime.getTime()) / 60000
+    const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
+    const startMs = new Date(booking.start_time).getTime() + SAST_OFFSET_MS
+    const endMs = new Date(booking.end_time).getTime() + SAST_OFFSET_MS
+    const startTotalMinutes = Math.floor(startMs / 60000) % (24 * 60)
+    const startMinutes = startTotalMinutes - CALENDAR_START_HOUR * 60
+    const durationMinutes = (endMs - startMs) / 60000
     return {
       top: (startMinutes / 30) * SLOT_HEIGHT_PX,
       height: (durationMinutes / 30) * SLOT_HEIGHT_PX,
@@ -214,7 +216,7 @@ export default function RoomsCalendarPage() {
   const getTimeBlocksForRoom = useCallback((roomId: string): TimeBlock[] => {
     return timeBlocks.filter(tb => {
       if (tb.room_id) return tb.room_id === roomId
-      return tb.is_full_day
+      return true
     })
   }, [timeBlocks])
 
@@ -315,8 +317,15 @@ export default function RoomsCalendarPage() {
     setDragOverRoomId(roomId)
   }
 
-  const handleDragLeaveRoom = () => {
-    setDragOverRoomId(null)
+  const handleDragLeaveRoom = (e: React.DragEvent, roomId: string) => {
+    // Only clear when the pointer genuinely leaves the column, not when it
+    // moves over a child element (booking card, time-block overlay, etc.).
+    // relatedTarget is the element being entered — if it's still inside the
+    // column we should keep the drop highlight active.
+    const relatedTarget = e.relatedTarget as Node | null
+    const currentTarget = e.currentTarget as HTMLElement
+    if (relatedTarget && currentTarget.contains(relatedTarget)) return
+    if (dragOverRoomId === roomId) setDragOverRoomId(null)
   }
 
   const handleDropOnRoom = async (e: React.DragEvent, targetRoom: Room) => {
@@ -497,7 +506,7 @@ export default function RoomsCalendarPage() {
                           roomIndex < rooms.length - 1 ? 'border-r border-gray-200' : ''
                         } ${isDropTarget ? 'bg-blue-50' : ''}`}
                         onDragOver={(e) => handleDragOverRoom(e, room.id)}
-                        onDragLeave={handleDragLeaveRoom}
+                        onDragLeave={(e) => handleDragLeaveRoom(e, room.id)}
                         onDrop={(e) => handleDropOnRoom(e, room)}
                       >
                         <div className={`h-14 border-b border-gray-200 px-3 py-2 transition-colors ${
