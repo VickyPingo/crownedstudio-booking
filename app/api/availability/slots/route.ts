@@ -3,9 +3,9 @@ import { supabaseAdmin } from '@/lib/supabase/server'
 import {
   findAllAvailableSlotsInActiveGroup,
   Room,
-  RoomBooking
+  RoomBooking,
+  SchedulingTimeBlock
 } from '@/lib/controlledScheduling'
-import { filterBlockedSlots, TimeBlock } from '@/lib/timeSlots'
 
 interface AvailabilityRequest {
   date: string
@@ -219,7 +219,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Controlled scheduling
+    // 5. Load time blocks for this date — passed into scheduling so room-specific
+    //    blocks correctly restrict the group that owns those rooms, preventing
+    //    spillover into unrelated groups.
+    const { data: timeBlocksRaw } = await supabase
+      .from('time_blocks')
+      .select('id, block_date, start_time, end_time, is_full_day, reason, room_id')
+      .eq('block_date', date)
+
+    const timeBlocks: SchedulingTimeBlock[] = (timeBlocksRaw || []) as SchedulingTimeBlock[]
+
+    if (timeBlocks.length > 0) {
+      console.log('[Availability] Passing', timeBlocks.length, 'time block(s) into slot scheduler for date', date)
+    }
+
+    // 6. Controlled scheduling — time blocks are fed in so room-specific blocks
+    //    are treated as room occupancy within their group. No group spillover.
     const rawSlots = findAllAvailableSlotsInActiveGroup(
       date,
       rooms,
@@ -227,31 +242,14 @@ export async function POST(request: NextRequest) {
       serviceDurationMinutes,
       peopleCount,
       sanitizeHHMM(NORMAL_HOURS_START),
-      sanitizeHHMM(NORMAL_HOURS_END)
+      sanitizeHHMM(NORMAL_HOURS_END),
+      timeBlocks
     )
 
-    console.log('[Availability] RAW SLOTS', rawSlots)
-
-    // 6. Filter against time blocks (no buffer — strict interval overlap only)
-    const { data: timeBlocksRaw } = await supabase
-      .from('time_blocks')
-      .select('*')
-      .eq('block_date', date)
-
-    const timeBlocks: TimeBlock[] = ((timeBlocksRaw || []) as TimeBlock[]).filter(
-      (tb) => tb.is_full_day || !tb.room_id
-    )
-
-    const slotsAfterTimeBlocks = timeBlocks.length > 0
-      ? filterBlockedSlots(rawSlots, timeBlocks, serviceDurationMinutes)
-      : rawSlots
-
-    if (timeBlocks.length > 0) {
-      console.log('[Availability] Time blocks applied:', timeBlocks.length, '— slots before:', rawSlots.length, '— slots after:', slotsAfterTimeBlocks.length)
-    }
+    console.log('[Availability] RAW SLOTS (after group+time-block scheduling)', rawSlots)
 
     // 7. Final safety filter
-    const availableSlots = slotsAfterTimeBlocks.filter(
+    const availableSlots = rawSlots.filter(
       (slot) => typeof slot === 'string' && HHMM_RE.test(slot)
     )
 

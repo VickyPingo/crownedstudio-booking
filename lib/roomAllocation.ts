@@ -402,7 +402,20 @@ export async function allocateRoom(
   const room_ids = combination.map(r => r.id)
   const room_names = combination.map(r => r.room_name)
 
-  console.log(`[RoomAllocation] Allocated rooms: ${room_names.join(', ')} (${room_ids.length} rooms)`)
+  const invalidRooms = combination.filter(r => r.room_area !== serviceRoomArea)
+  if (invalidRooms.length > 0) {
+    console.error(
+      `[RoomAllocation] DEFENSIVE REJECTION — allocated room(s) [${invalidRooms.map(r => r.room_name).join(', ')}]` +
+      ` do not belong to service area "${serviceRoomArea}". This should never happen.`
+    )
+    return {
+      room_ids: [],
+      room_names: [],
+      error: `Room allocation produced rooms outside the allowed area "${serviceRoomArea}". Please try again.`
+    }
+  }
+
+  console.log(`[RoomAllocation] Allocated rooms: ${room_names.join(', ')} (${room_ids.length} rooms) area="${serviceRoomArea}"`)
 
   return { room_ids, room_names }
 }
