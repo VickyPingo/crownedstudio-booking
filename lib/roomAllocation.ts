@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { groupRoomsByPriority, findRoomCombinationInGroup } from './controlledScheduling'
+import type { TimeBlock } from './timeSlots'
 
 export interface Room {
   id: string
@@ -68,12 +69,127 @@ function doTimesOverlapWithBuffer(
 }
 
 /**
+ * Strict time block overlap — NO buffer.
+ * requestedStart < blockEnd && requestedEnd > blockStart
+ * A booking starting exactly when a block ends is NOT blocked.
+ */
+function doesOverlapTimeBlock(
+  requestedStart: Date,
+  requestedEnd: Date,
+  blockStart: Date,
+  blockEnd: Date
+): boolean {
+  return requestedStart < blockEnd && requestedEnd > blockStart
+}
+
+/**
+ * Loads time blocks for a given date and returns only those that
+ * affect the requested time window.
+ *
+ * - global blocks (room_id IS NULL): affect all rooms
+ * - room-specific blocks (room_id IS NOT NULL): affect only that room
+ *
+ * Returns a tuple of [globalBlocks, roomSpecificBlocks]
+ */
+async function loadTimeBlocksForWindow(
+  startTime: Date,
+  endTime: Date
+): Promise<{ globalBlocks: TimeBlock[]; roomBlocks: Map<string, TimeBlock[]> }> {
+  const supabase = supabaseAdmin
+  const dateStr = startTime.toISOString().slice(0, 10)
+
+  const { data: rawBlocks, error } = await supabase
+    .from('time_blocks')
+    .select('id, block_date, start_time, end_time, is_full_day, reason, room_id')
+    .eq('block_date', dateStr)
+
+  if (error || !rawBlocks) {
+    console.error('[RoomAllocation] Failed to load time_blocks:', error)
+    return { globalBlocks: [], roomBlocks: new Map() }
+  }
+
+  const globalBlocks: TimeBlock[] = []
+  const roomBlocks = new Map<string, TimeBlock[]>()
+
+  for (const tb of rawBlocks as TimeBlock[]) {
+    if (tb.is_full_day) {
+      if (!tb.room_id) {
+        globalBlocks.push(tb)
+      } else {
+        const list = roomBlocks.get(tb.room_id) || []
+        list.push(tb)
+        roomBlocks.set(tb.room_id, list)
+      }
+      continue
+    }
+
+    if (!tb.start_time || !tb.end_time) continue
+
+    const blockStart = new Date(`${dateStr}T${tb.start_time.slice(0, 5)}:00`)
+    const blockEnd = new Date(`${dateStr}T${tb.end_time.slice(0, 5)}:00`)
+
+    if (!doesOverlapTimeBlock(startTime, endTime, blockStart, blockEnd)) continue
+
+    if (!tb.room_id) {
+      globalBlocks.push(tb)
+    } else {
+      const list = roomBlocks.get(tb.room_id) || []
+      list.push(tb)
+      roomBlocks.set(tb.room_id, list)
+    }
+  }
+
+  return { globalBlocks, roomBlocks }
+}
+
+/**
+ * Returns a blocking TimeBlock if the given room is blocked during the requested window,
+ * or null if the room is free. Checks both global blocks (affect all rooms) and
+ * room-specific blocks.
+ */
+export async function getBlockingTimeBlock(
+  roomId: string,
+  startTime: Date,
+  endTime: Date
+): Promise<TimeBlock | null> {
+  const { globalBlocks, roomBlocks } = await loadTimeBlocksForWindow(startTime, endTime)
+
+  if (globalBlocks.length > 0) {
+    const block = globalBlocks[0]
+    console.log(
+      `[RoomAllocation][TimeBlock] Room ${roomId} blocked by GLOBAL time block id=${block.id}` +
+      ` start=${block.start_time || 'full-day'} end=${block.end_time || 'full-day'}` +
+      ` reason=${block.reason || 'none'}` +
+      ` | requested ${startTime.toISOString()} – ${endTime.toISOString()}`
+    )
+    return block
+  }
+
+  const blocks = roomBlocks.get(roomId)
+  if (blocks && blocks.length > 0) {
+    const block = blocks[0]
+    console.log(
+      `[RoomAllocation][TimeBlock] Room ${roomId} blocked by ROOM-SPECIFIC time block id=${block.id}` +
+      ` start=${block.start_time || 'full-day'} end=${block.end_time || 'full-day'}` +
+      ` reason=${block.reason || 'none'}` +
+      ` | requested ${startTime.toISOString()} – ${endTime.toISOString()}`
+    )
+    return block
+  }
+
+  return null
+}
+
+/**
  * Returns the set of room IDs that are occupied during the given time window.
  *
  * SOURCE OF TRUTH: booking_rooms is always the authoritative assignment.
  * bookings.room_id is the legacy column — it is only consulted when a booking
  * has NO booking_rooms entries at all (pre-migration legacy record).
  * This prevents ghost-blocking from stale room_id values.
+ *
+ * Also enforces time_blocks: rooms with an active time block are added to
+ * the occupied set without any buffer.
  */
 async function getOccupiedRoomIds(
   startTime: Date,
@@ -147,6 +263,37 @@ async function getOccupiedRoomIds(
         if (doTimesOverlapWithBuffer(startTime, endTime, bookingStart, bookingEnd)) {
           occupied.add(booking.room_id)
         }
+      }
+    }
+  }
+
+  // Enforce time blocks — no buffer applied (strict interval overlap)
+  const { globalBlocks, roomBlocks } = await loadTimeBlocksForWindow(startTime, endTime)
+
+  if (globalBlocks.length > 0) {
+    // A global block means ALL rooms are occupied — load all active room IDs and mark them
+    const { data: allRooms } = await supabase
+      .from('rooms')
+      .select('id')
+      .eq('active', true)
+
+    if (allRooms) {
+      for (const room of allRooms) {
+        console.log(
+          `[RoomAllocation][TimeBlock] Room ${room.id} marked occupied by GLOBAL block` +
+          ` id=${globalBlocks[0].id} reason=${globalBlocks[0].reason || 'none'}`
+        )
+        occupied.add(room.id)
+      }
+    }
+  } else {
+    for (const [roomId, blocks] of roomBlocks.entries()) {
+      if (blocks.length > 0) {
+        console.log(
+          `[RoomAllocation][TimeBlock] Room ${roomId} marked occupied by ROOM-SPECIFIC block` +
+          ` id=${blocks[0].id} reason=${blocks[0].reason || 'none'}`
+        )
+        occupied.add(roomId)
       }
     }
   }

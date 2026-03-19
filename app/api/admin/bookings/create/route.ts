@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { allocateRoom, assignRoomsToBooking } from '@/lib/roomAllocation'
+import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock } from '@/lib/roomAllocation'
 
 const safeNum = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v)
@@ -107,6 +107,27 @@ export async function POST(request: NextRequest) {
         { error: roomAllocation.error || 'No rooms available for this time slot' },
         { status: 409 }
       )
+    }
+
+    // Final defensive guard: re-check all allocated rooms against time blocks
+    // before inserting. Catches race conditions and direct API calls that bypass
+    // the availability slot filter.
+    for (const roomId of roomAllocation.room_ids) {
+      const blockingBlock = await getBlockingTimeBlock(roomId, startDateTime, endDateTime)
+      if (blockingBlock) {
+        const blockDesc = blockingBlock.is_full_day
+          ? 'all day'
+          : `${blockingBlock.start_time?.slice(0, 5)} to ${blockingBlock.end_time?.slice(0, 5)}`
+        console.error(
+          `[AdminBookingCreate] Rejected — room ${roomId} is blocked by time block id=${blockingBlock.id}` +
+          ` (${blockingBlock.room_id ? 'room-specific' : 'global'}) ${blockDesc}` +
+          ` | requested ${startDateTime.toISOString()} – ${endDateTime.toISOString()}`
+        )
+        return NextResponse.json(
+          { error: `Room is blocked from ${blockDesc} and cannot be booked during this time` },
+          { status: 409 }
+        )
+      }
     }
 
     const { data: { user } } = await supabase.auth.getUser()
