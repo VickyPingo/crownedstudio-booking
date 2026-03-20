@@ -92,20 +92,30 @@ export function DateTimeStep({
 
   const hasAfterHoursSlots = availableSlots.some(slot => isAfterHoursSlot(slot, serviceSlug, businessHours))
 
-  const renderTimeSlot = (time: string) => {
+  const renderTimeSlot = (time: string, index: number) => {
     const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
     const isSelected = selectedTime === time
+    const isRecommended = index === 0
 
     return (
       <button
         key={time}
         onClick={() => onUpdateTime(time)}
-        className={`py-3 px-4 rounded-lg border transition-all relative ${
+        className={`py-3 px-4 rounded-lg border transition-all relative flex flex-col items-center gap-0.5 ${
           isSelected
             ? 'bg-black text-white border-black'
             : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
         }`}
       >
+        {isRecommended && (
+          <span
+            className={`text-[10px] font-semibold uppercase tracking-wide leading-none ${
+              isSelected ? 'text-gray-300' : 'text-gray-400'
+            }`}
+          >
+            Recommended
+          </span>
+        )}
         <span className="font-medium">{time}</span>
         {isAfterHours && (
           <span
@@ -181,8 +191,8 @@ export function DateTimeStep({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-4 gap-2">
-              {availableSlots.map((time) => renderTimeSlot(time))}
+            <div className="grid grid-cols-3 gap-2">
+              {availableSlots.map((time, i) => renderTimeSlot(time, i))}
             </div>
 
             {!isCrownedNight && businessHours.after_hours_enabled && hasAfterHoursSlots && (

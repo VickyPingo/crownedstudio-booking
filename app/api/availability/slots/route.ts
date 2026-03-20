@@ -248,12 +248,13 @@ export async function POST(request: NextRequest) {
 
     console.log('[Availability] RAW SLOTS (after group+time-block scheduling)', rawSlots)
 
-    // 7. Final safety filter
-    const availableSlots = rawSlots.filter(
+    // 7. Final safety filter — keep up to 3 slots (first = recommended)
+    const allValidSlots = rawSlots.filter(
       (slot) => typeof slot === 'string' && HHMM_RE.test(slot)
     )
+    const availableSlots = allValidSlots.slice(0, 3)
 
-    console.log('[Availability] FINAL SLOTS', availableSlots)
+    console.log(`[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`, availableSlots)
 
     return NextResponse.json({
       availableSlots,
