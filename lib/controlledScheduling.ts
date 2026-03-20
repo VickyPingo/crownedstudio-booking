@@ -1,4 +1,4 @@
-import { ROOM_GROUPS, BOOKING_BUFFER_MINUTES } from './timeSlots'
+import { ROOM_GROUPS, BOOKING_BUFFER_MINUTES, SLOT_INTERVAL_MINUTES } from './timeSlots'
 
 export interface Room {
   id: string
@@ -127,8 +127,13 @@ function getCandidateStartTimesForGroup(
   const businessStartMs = toUtcMsFromSast(date, businessStartTime)
   const businessEndMs = toUtcMsFromSast(date, businessEndTime)
 
-  if (Number.isFinite(businessStartMs)) {
-    candidates.add(businessStartMs)
+  if (!Number.isFinite(businessStartMs) || !Number.isFinite(businessEndMs)) {
+    return []
+  }
+
+  const intervalMs = SLOT_INTERVAL_MINUTES * 60 * 1000
+  for (let t = businessStartMs; t < businessEndMs; t += intervalMs) {
+    candidates.add(t)
   }
 
   const groupRoomIds = new Set(groupRooms.map((room) => room.id))
@@ -142,7 +147,7 @@ function getCandidateStartTimesForGroup(
     if (
       Number.isFinite(bookingEndWithBufferMs) &&
       bookingEndWithBufferMs >= businessStartMs &&
-      bookingEndWithBufferMs <= businessEndMs
+      bookingEndWithBufferMs < businessEndMs
     ) {
       candidates.add(bookingEndWithBufferMs)
     }
