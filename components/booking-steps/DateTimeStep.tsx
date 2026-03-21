@@ -92,35 +92,60 @@ export function DateTimeStep({
 
   const hasAfterHoursSlots = availableSlots.some(slot => isAfterHoursSlot(slot, serviceSlug, businessHours))
 
+  const getTimeBucket = (time: string): { label: string; supporting: string } => {
+    const [h, m] = time.split(':').map(Number)
+    const minutes = h * 60 + m
+    if (minutes < 11 * 60) return { label: 'Morning', supporting: 'Start your day relaxed' }
+    if (minutes < 14 * 60) return { label: 'Mid-morning', supporting: 'Popular choice' }
+    return { label: 'Afternoon', supporting: 'Ideal later option' }
+  }
+
   const renderTimeSlot = (time: string, index: number) => {
     const isAfterHours = isAfterHoursSlot(time, serviceSlug, businessHours)
     const isSelected = selectedTime === time
     const isRecommended = index === 0
+    const { label, supporting } = getTimeBucket(time)
 
     return (
       <button
         key={time}
         onClick={() => onUpdateTime(time)}
-        className={`py-3 px-4 rounded-lg border transition-all relative flex flex-col items-center gap-0.5 ${
+        className={`relative flex flex-col items-center justify-center gap-1 px-4 py-5 rounded-xl border transition-all duration-200 min-h-[100px] text-center ${
           isSelected
-            ? 'bg-black text-white border-black'
-            : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+            ? 'bg-black text-white border-black shadow-md'
+            : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400 hover:shadow-sm'
         }`}
       >
         {isRecommended && (
           <span
-            className={`text-[10px] font-semibold uppercase tracking-wide leading-none ${
-              isSelected ? 'text-gray-300' : 'text-gray-400'
+            className={`text-[10px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded-full leading-none mb-0.5 ${
+              isSelected ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-500'
             }`}
           >
             Recommended
           </span>
         )}
-        <span className="font-medium">{time}</span>
+
+        <span
+          className={`text-[10px] font-medium uppercase tracking-wider leading-none ${
+            isSelected ? 'text-gray-300' : 'text-gray-400'
+          }`}
+        >
+          {label}
+        </span>
+
+        <span className={`text-2xl font-bold leading-tight tracking-tight ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+          {time}
+        </span>
+
+        <span className={`text-xs leading-none ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
+          {isRecommended ? 'Best availability' : supporting}
+        </span>
+
         {isAfterHours && (
           <span
-            className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-              isSelected ? 'bg-amber-300' : 'bg-amber-500'
+            className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ${
+              isSelected ? 'bg-amber-300 ring-black' : 'bg-amber-500 ring-white'
             }`}
             title="After-hours slot (+R100/person)"
           />
@@ -191,7 +216,7 @@ export function DateTimeStep({
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {availableSlots.map((time, i) => renderTimeSlot(time, i))}
             </div>
 
