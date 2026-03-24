@@ -272,13 +272,16 @@ export function ManualBookingModal({
   }, [customers, customerSearch])
 
   const availableUpsells = useMemo(() => {
+    if (bookingType === 'custom') {
+      return upsells
+    }
     if (!selectedService?.allowed_upsells) return []
     const allowed = selectedService.allowed_upsells
       .split(/[,\n]/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
     return upsells.filter((u) => allowed.includes(u.name))
-  }, [selectedService, upsells])
+  }, [bookingType, selectedService, upsells])
 
   const getServicePrice = useCallback((service: Service, count: number): number => {
     const prices = [
