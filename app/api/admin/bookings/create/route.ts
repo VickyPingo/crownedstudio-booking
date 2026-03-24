@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
       isCustomBooking,
       customBookingName,
       customDurationMinutes,
+      customPrice,
       peopleCount,
       selectedDate,
       selectedTime,
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Service slug is required for existing service bookings' }, { status: 400 })
     }
 
-    const effectiveDuration = isCustomBooking ? safeNum(customDurationMinutes) : safeDuration
+    const effectiveDuration = safeDuration
 
     if (!selectedDate || !selectedTime || effectiveDuration <= 0) {
       console.error('[AdminBookingCreate] Invalid booking data:', { selectedDate, selectedTime, effectiveDuration })
@@ -165,11 +166,12 @@ export async function POST(request: NextRequest) {
       is_custom_booking: isCustomBooking === true,
       custom_booking_name: isCustomBooking ? (customBookingName?.trim() || null) : null,
       custom_duration_minutes: isCustomBooking ? safeNum(customDurationMinutes) : null,
+      custom_price: isCustomBooking ? safeNum(customPrice) : null,
       people_count: safeNum(peopleCount),
       status: bookingStatus,
       start_time: startDateTime.toISOString(),
       end_time: endDateTime.toISOString(),
-      base_price: safeNum(pricing?.basePrice),
+      base_price: isCustomBooking ? safeNum(customPrice) : safeNum(pricing?.basePrice),
       weekend_surcharge_amount: safeNum(pricing?.surcharge),
       upsells_total: safeNum(pricing?.upsellsTotal),
       discount_amount: safeNum(pricing?.discount),

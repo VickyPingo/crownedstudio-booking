@@ -124,6 +124,7 @@ export function ManualBookingModal({
   const [bookingType, setBookingType] = useState<'existing' | 'custom'>('existing')
   const [customBookingName, setCustomBookingName] = useState('')
   const [customDurationMinutes, setCustomDurationMinutes] = useState<number | ''>(60)
+  const [customPrice, setCustomPrice] = useState<number | ''>(0)
 
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [peopleCount, setPeopleCount] = useState(1)
@@ -210,9 +211,16 @@ export function ManualBookingModal({
 
     if (bookingType === 'custom') {
       if (!customBookingName.trim() || !customDurationMinutes) return
+      const maxCustomAddon = Object.values(selectedUpsellsByPerson)
+        .flat()
+        .reduce((max, upsellId) => {
+          const upsell = upsells.find((u) => u.id === upsellId)
+          const d = upsell?.duration_added_minutes || 0
+          return d > max ? d : max
+        }, 0)
       requestBody = {
         date: selectedDate,
-        serviceDurationMinutes: Number(customDurationMinutes),
+        serviceDurationMinutes: Number(customDurationMinutes) + maxCustomAddon,
         roomId: prefillRoomId || null,
         isCustomBooking: true,
       }
@@ -262,7 +270,6 @@ export function ManualBookingModal({
   }, [customers, customerSearch])
 
   const availableUpsells = useMemo(() => {
-    if (bookingType === 'custom') return []
     if (!selectedService?.allowed_upsells) return []
     const allowed = selectedService.allowed_upsells
       .split(/[,\n]/)
@@ -286,7 +293,27 @@ export function ManualBookingModal({
 
   const pricing = useMemo(() => {
     if (bookingType === 'custom') {
-      return { basePrice: 0, upsellsTotal: 0, surcharge: 0, subtotal: 0, discount: 0, total: 0, deposit: 0 }
+      const basePrice = Number(customPrice) || 0
+      let upsellsTotal = 0
+      Object.values(selectedUpsellsByPerson).forEach((ids) => {
+        ids.forEach((id) => {
+          const upsell = upsells.find((u) => u.id === id)
+          if (upsell) upsellsTotal += upsell.price
+        })
+      })
+      const subtotal = basePrice + upsellsTotal
+      let discount = 0
+      if (voucherData) {
+        if (voucherData.discount_type === 'percentage') {
+          discount = Math.round(subtotal * (voucherData.discount_value / 100))
+        } else {
+          discount = voucherData.discount_value
+        }
+        discount = Math.min(discount, subtotal)
+      }
+      const total = Math.max(0, subtotal - discount)
+      const deposit = Math.round(total * 0.5)
+      return { basePrice, upsellsTotal, surcharge: 0, subtotal, discount, total, deposit }
     }
 
     if (!selectedService || !selectedDate || !selectedTime) {
@@ -436,11 +463,19 @@ export function ManualBookingModal({
       let bodyExtras: Record<string, unknown>
 
       if (bookingType === 'custom') {
-        totalDuration = Number(customDurationMinutes)
+        const maxCustomAddon = Object.values(selectedUpsellsByPerson)
+          .flat()
+          .reduce((max, upsellId) => {
+            const upsell = upsells.find((u) => u.id === upsellId)
+            const d = upsell?.duration_added_minutes || 0
+            return d > max ? d : max
+          }, 0)
+        totalDuration = Number(customDurationMinutes) + maxCustomAddon
         bodyExtras = {
           isCustomBooking: true,
           customBookingName: customBookingName.trim(),
-          customDurationMinutes: totalDuration,
+          customDurationMinutes: Number(customDurationMinutes),
+          customPrice: Number(customPrice) || 0,
         }
       } else {
         const maxAddonDuration = Object.values(selectedUpsellsByPerson)
@@ -521,7 +556,7 @@ export function ManualBookingModal({
         return selectedCustomer !== null || (isNewCustomer && newCustomerName.trim() !== '')
       case 2:
         if (bookingType === 'custom') {
-          return customBookingName.trim() !== '' && Number(customDurationMinutes) > 0 && peopleCount > 0
+          return customBookingName.trim() !== '' && Number(customDurationMinutes) > 0 && customPrice !== '' && peopleCount > 0
         }
         return selectedService !== null && peopleCount > 0
       case 3:
@@ -705,6 +740,11 @@ export function ManualBookingModal({
                         setSelectedService(null)
                         setSelectedTime('')
                         setAvailableSlots([])
+                        setCustomBookingName('')
+                        setCustomDurationMinutes(60)
+                        setCustomPrice(0)
+                        setSelectedUpsellsByPerson({})
+                        setPressureByPerson({})
                       }}
                       className={`p-4 text-left border-2 rounded-xl transition-all ${
                         bookingType === type
@@ -732,17 +772,31 @@ export function ManualBookingModal({
                       placeholder="e.g. Corporate Chair Massage"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration (minutes) *</label>
-                    <input
-                      type="number"
-                      min={15}
-                      step={15}
-                      value={customDurationMinutes}
-                      onChange={(e) => { setCustomDurationMinutes(e.target.value === '' ? '' : Number(e.target.value)); setSelectedTime(''); setAvailableSlots([]) }}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                      placeholder="60"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration (minutes) *</label>
+                      <input
+                        type="number"
+                        min={15}
+                        step={15}
+                        value={customDurationMinutes}
+                        onChange={(e) => { setCustomDurationMinutes(e.target.value === '' ? '' : Number(e.target.value)); setSelectedTime(''); setAvailableSlots([]) }}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                        placeholder="60"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Price (R) *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={50}
+                        value={customPrice}
+                        onChange={(e) => setCustomPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                        placeholder="0"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Number of People</label>
@@ -1066,7 +1120,7 @@ export function ManualBookingModal({
                 <h4 className="font-semibold text-blue-900 mb-3">Booking Summary</h4>
                 <div className="text-sm text-blue-800 space-y-1.5">
                   <p><strong>Client:</strong> {selectedCustomer?.full_name || newCustomerName}</p>
-                  <p><strong>Service:</strong> {bookingType === 'custom' ? `${customBookingName} (Custom, ${customDurationMinutes} min)` : `${selectedService?.name}`} — {peopleCount} {peopleCount === 1 ? 'person' : 'people'}</p>
+                  <p><strong>Service:</strong> {bookingType === 'custom' ? `${customBookingName} (Custom, ${customDurationMinutes} min, R${Number(customPrice) || 0})` : selectedService?.name} — {peopleCount} {peopleCount === 1 ? 'person' : 'people'}</p>
                   <p>
                     <strong>Date:</strong>{' '}
                     {new Date(selectedDate).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedTime}
