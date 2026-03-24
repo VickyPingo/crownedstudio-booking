@@ -98,8 +98,12 @@ export async function POST(request: NextRequest) {
 
     const timeBlocks: TimeBlock[] = (timeBlocksRaw || []).filter((tb: any) => {
       if (roomId) {
-        return tb.room_id === roomId || (!tb.room_id && tb.is_full_day)
+        // Include:
+        // 1. Blocks specific to this room (tb.room_id === roomId)
+        // 2. Global blocks with no room_id (applies to all rooms, both full-day and partial)
+        return tb.room_id === roomId || !tb.room_id
       }
+      // When no specific room: include full-day blocks or blocks with no room_id
       return tb.is_full_day || !tb.room_id
     }) as TimeBlock[]
 
