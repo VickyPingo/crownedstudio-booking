@@ -221,6 +221,7 @@ export function ManualBookingModal({
       requestBody = {
         date: selectedDate,
         serviceDurationMinutes: Number(customDurationMinutes) + maxCustomAddon,
+        peopleCount,
         roomId: prefillRoomId || null,
         isCustomBooking: true,
       }
@@ -237,6 +238,7 @@ export function ManualBookingModal({
         date: selectedDate,
         serviceSlug: selectedService.slug,
         serviceDurationMinutes: selectedService.duration_minutes + maxAddonDuration,
+        peopleCount,
         roomId: prefillRoomId || null,
       }
     }

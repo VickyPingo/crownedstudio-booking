@@ -18,10 +18,43 @@ function timeToMinutes(hhmm: string): number {
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
-    const { date, serviceSlug, serviceDurationMinutes, roomId, isCustomBooking } = await request.json()
+    const { date, serviceSlug, serviceDurationMinutes, peopleCount, roomId, isCustomBooking } = await request.json()
 
     if (!date || (!serviceSlug && !isCustomBooking) || !serviceDurationMinutes) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // CRITICAL: If a specific room is requested, validate capacity BEFORE generating slots
+    if (roomId && peopleCount) {
+      const { data: roomRow } = await supabase
+        .from('rooms')
+        .select('id, room_name, capacity, active')
+        .eq('id', roomId)
+        .maybeSingle()
+
+      if (!roomRow) {
+        console.error(`[AdminAvailability] Room ${roomId} not found`)
+        return NextResponse.json({ availableSlots: [] })
+      }
+
+      if (!roomRow.active) {
+        console.error(`[AdminAvailability] Room ${roomRow.room_name} is not active`)
+        return NextResponse.json({ availableSlots: [] })
+      }
+
+      if (roomRow.capacity < peopleCount) {
+        console.warn(
+          `[AdminAvailability] Capacity rejected — room "${roomRow.room_name}" capacity ${roomRow.capacity} < people_count ${peopleCount}`
+        )
+        return NextResponse.json({
+          availableSlots: [],
+          capacityError: `${roomRow.room_name} has capacity ${roomRow.capacity} but booking requires ${peopleCount} people`
+        })
+      }
+
+      console.log(
+        `[AdminAvailability] Room-specific availability for "${roomRow.room_name}" (capacity ${roomRow.capacity}, requested ${peopleCount})`
+      )
     }
 
     const localDate = new Date(date + 'T00:00:00')
