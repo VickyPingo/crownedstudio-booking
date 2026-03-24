@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
     const {
       customerId,
       serviceSlug,
+      isCustomBooking,
+      customBookingName,
+      customDurationMinutes,
       peopleCount,
       selectedDate,
       selectedTime,
@@ -38,26 +41,38 @@ export async function POST(request: NextRequest) {
 
     const safeDuration = safeNum(totalDuration)
 
-    if (!selectedDate || !selectedTime || safeDuration <= 0) {
-      console.error('[AdminBookingCreate] Invalid booking data:', { selectedDate, selectedTime, safeDuration })
+    if (isCustomBooking && (!customBookingName?.trim() || !customDurationMinutes)) {
+      return NextResponse.json({ error: 'Custom bookings require a name and duration' }, { status: 400 })
+    }
+
+    if (!isCustomBooking && !serviceSlug) {
+      return NextResponse.json({ error: 'Service slug is required for existing service bookings' }, { status: 400 })
+    }
+
+    const effectiveDuration = isCustomBooking ? safeNum(customDurationMinutes) : safeDuration
+
+    if (!selectedDate || !selectedTime || effectiveDuration <= 0) {
+      console.error('[AdminBookingCreate] Invalid booking data:', { selectedDate, selectedTime, effectiveDuration })
       return NextResponse.json({ error: 'Invalid booking data: missing date, time, or duration' }, { status: 400 })
     }
 
     const startDateTime = new Date(`${selectedDate}T${selectedTime}:00+02:00`)
-    const endDateTime = new Date(startDateTime.getTime() + safeDuration * 60000)
+    const endDateTime = new Date(startDateTime.getTime() + effectiveDuration * 60000)
 
     if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
       console.error('[AdminBookingCreate] Invalid date/time:', { selectedDate, selectedTime })
       return NextResponse.json({ error: 'Invalid booking date/time' }, { status: 400 })
     }
 
-    const { data: serviceData } = await supabase
-      .from('services')
-      .select('service_area')
-      .eq('slug', serviceSlug)
-      .maybeSingle()
-
-    const serviceArea = serviceData?.service_area || 'treatment'
+    let serviceArea = 'treatment'
+    if (!isCustomBooking && serviceSlug) {
+      const { data: serviceData } = await supabase
+        .from('services')
+        .select('service_area')
+        .eq('slug', serviceSlug)
+        .maybeSingle()
+      serviceArea = serviceData?.service_area || 'treatment'
+    }
 
     let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }
 
@@ -146,7 +161,10 @@ export async function POST(request: NextRequest) {
 
     const insertPayload = {
       customer_id: customerId,
-      service_slug: serviceSlug,
+      service_slug: isCustomBooking ? null : serviceSlug,
+      is_custom_booking: isCustomBooking === true,
+      custom_booking_name: isCustomBooking ? (customBookingName?.trim() || null) : null,
+      custom_duration_minutes: isCustomBooking ? safeNum(customDurationMinutes) : null,
       people_count: safeNum(peopleCount),
       status: bookingStatus,
       start_time: startDateTime.toISOString(),
@@ -285,7 +303,7 @@ export async function POST(request: NextRequest) {
         status: 'complete',
         amount: txAmount,
         payment_method: manualPaymentMethod || null,
-        item_name: `Manual booking - ${serviceSlug}`,
+        item_name: isCustomBooking ? `Manual booking - ${customBookingName}` : `Manual booking - ${serviceSlug}`,
       })
       if (txError) {
         console.error('[AdminBookingCreate] payment_transactions insert error:', txError)

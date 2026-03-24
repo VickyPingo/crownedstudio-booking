@@ -18,9 +18,9 @@ function timeToMinutes(hhmm: string): number {
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
-    const { date, serviceSlug, serviceDurationMinutes, roomId } = await request.json()
+    const { date, serviceSlug, serviceDurationMinutes, roomId, isCustomBooking } = await request.json()
 
-    if (!date || !serviceSlug || !serviceDurationMinutes) {
+    if (!date || (!serviceSlug && !isCustomBooking) || !serviceDurationMinutes) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -47,11 +47,13 @@ export async function POST(request: NextRequest) {
           after_hours_end_time: null,
         }
 
-    const { data: timeWindowRow } = await supabase
-      .from('service_time_windows')
-      .select('service_slug, start_time, end_time')
-      .eq('service_slug', serviceSlug)
-      .maybeSingle()
+    const { data: timeWindowRow } = serviceSlug
+      ? await supabase
+          .from('service_time_windows')
+          .select('service_slug, start_time, end_time')
+          .eq('service_slug', serviceSlug)
+          .maybeSingle()
+      : { data: null }
 
     const dayStartISO = new Date(date + 'T00:00:00+02:00').toISOString()
     const dayEndISO = new Date(date + 'T23:59:59+02:00').toISOString()
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
     }) as TimeBlock[]
 
     const config: TimeSlotConfig = {
-      serviceSlug,
+      serviceSlug: serviceSlug || '__custom__',
       serviceDurationMinutes,
       businessHours,
       serviceTimeWindow: timeWindowRow || null,

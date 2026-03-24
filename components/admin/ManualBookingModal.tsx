@@ -121,6 +121,10 @@ export function ManualBookingModal({
   const [newCustomerEmail, setNewCustomerEmail] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
 
+  const [bookingType, setBookingType] = useState<'existing' | 'custom'>('existing')
+  const [customBookingName, setCustomBookingName] = useState('')
+  const [customDurationMinutes, setCustomDurationMinutes] = useState<number | ''>(60)
+
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [peopleCount, setPeopleCount] = useState(1)
   const [selectedDate, setSelectedDate] = useState(prefillDate || '')
@@ -192,34 +196,48 @@ export function ManualBookingModal({
   }, [prefillCustomerId])
 
   useEffect(() => {
-    if (!selectedDate || !selectedService) return
+    if (!selectedDate) return
+    if (bookingType === 'existing' && !selectedService) return
+    if (bookingType === 'custom' && (!customBookingName.trim() || !customDurationMinutes)) return
     fetchSlots()
-  }, [selectedDate, selectedService, peopleCount, selectedUpsellsByPerson])
+  }, [selectedDate, selectedService, peopleCount, selectedUpsellsByPerson, bookingType, customBookingName, customDurationMinutes])
 
   const fetchSlots = async () => {
-    if (!selectedDate || !selectedService) return
+    if (!selectedDate) return
     setSlotsLoading(true)
 
-    const maxAddonDuration = Object.values(selectedUpsellsByPerson)
-      .flat()
-      .reduce((max, upsellId) => {
-        const upsell = upsells.find((u) => u.id === upsellId)
-        const d = upsell?.duration_added_minutes || 0
-        return d > max ? d : max
-      }, 0)
+    let requestBody: Record<string, unknown>
 
-    const totalDuration = selectedService.duration_minutes + maxAddonDuration
+    if (bookingType === 'custom') {
+      if (!customBookingName.trim() || !customDurationMinutes) return
+      requestBody = {
+        date: selectedDate,
+        serviceDurationMinutes: Number(customDurationMinutes),
+        roomId: prefillRoomId || null,
+        isCustomBooking: true,
+      }
+    } else {
+      if (!selectedService) return
+      const maxAddonDuration = Object.values(selectedUpsellsByPerson)
+        .flat()
+        .reduce((max, upsellId) => {
+          const upsell = upsells.find((u) => u.id === upsellId)
+          const d = upsell?.duration_added_minutes || 0
+          return d > max ? d : max
+        }, 0)
+      requestBody = {
+        date: selectedDate,
+        serviceSlug: selectedService.slug,
+        serviceDurationMinutes: selectedService.duration_minutes + maxAddonDuration,
+        roomId: prefillRoomId || null,
+      }
+    }
 
     try {
       const res = await fetch('/api/admin/availability/slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          date: selectedDate,
-          serviceSlug: selectedService.slug,
-          serviceDurationMinutes: totalDuration,
-          roomId: prefillRoomId || null,
-        }),
+        body: JSON.stringify(requestBody),
       })
       const data = await res.json()
       setAvailableSlots(data.availableSlots || [])
@@ -244,6 +262,7 @@ export function ManualBookingModal({
   }, [customers, customerSearch])
 
   const availableUpsells = useMemo(() => {
+    if (bookingType === 'custom') return []
     if (!selectedService?.allowed_upsells) return []
     const allowed = selectedService.allowed_upsells
       .split(/[,\n]/)
@@ -266,6 +285,10 @@ export function ManualBookingModal({
   }, [])
 
   const pricing = useMemo(() => {
+    if (bookingType === 'custom') {
+      return { basePrice: 0, upsellsTotal: 0, surcharge: 0, subtotal: 0, discount: 0, total: 0, deposit: 0 }
+    }
+
     if (!selectedService || !selectedDate || !selectedTime) {
       return { basePrice: 0, upsellsTotal: 0, surcharge: 0, subtotal: 0, discount: 0, total: 0, deposit: 0 }
     }
@@ -381,21 +404,23 @@ export function ManualBookingModal({
         customerId = newCustomer.id
       }
 
-      if (!customerId || !selectedService) {
+      if (!customerId) {
         alert('Missing required information')
         setSubmitting(false)
         return
       }
 
-      const maxAddonDuration = Object.values(selectedUpsellsByPerson)
-        .flat()
-        .reduce((max, upsellId) => {
-          const upsell = upsells.find((u) => u.id === upsellId)
-          const d = upsell?.duration_added_minutes || 0
-          return d > max ? d : max
-        }, 0)
+      if (bookingType === 'existing' && !selectedService) {
+        alert('Please select a service')
+        setSubmitting(false)
+        return
+      }
 
-      const totalDuration = selectedService.duration_minutes + maxAddonDuration
+      if (bookingType === 'custom' && (!customBookingName.trim() || !customDurationMinutes)) {
+        alert('Please enter a custom booking name and duration')
+        setSubmitting(false)
+        return
+      }
 
       const upsellsByPersonWithSlugs: PerPersonUpsells = {}
       for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson)) {
@@ -407,12 +432,34 @@ export function ManualBookingModal({
 
       const primaryPressure = pressureByPerson[1] || 'medium'
 
+      let totalDuration: number
+      let bodyExtras: Record<string, unknown>
+
+      if (bookingType === 'custom') {
+        totalDuration = Number(customDurationMinutes)
+        bodyExtras = {
+          isCustomBooking: true,
+          customBookingName: customBookingName.trim(),
+          customDurationMinutes: totalDuration,
+        }
+      } else {
+        const maxAddonDuration = Object.values(selectedUpsellsByPerson)
+          .flat()
+          .reduce((max, upsellId) => {
+            const upsell = upsells.find((u) => u.id === upsellId)
+            const d = upsell?.duration_added_minutes || 0
+            return d > max ? d : max
+          }, 0)
+        totalDuration = selectedService!.duration_minutes + maxAddonDuration
+        bodyExtras = { serviceSlug: selectedService!.slug }
+      }
+
       const response = await fetch('/api/admin/bookings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId,
-          serviceSlug: selectedService.slug,
+          ...bodyExtras,
           peopleCount,
           selectedDate,
           selectedTime,
@@ -473,6 +520,9 @@ export function ManualBookingModal({
       case 1:
         return selectedCustomer !== null || (isNewCustomer && newCustomerName.trim() !== '')
       case 2:
+        if (bookingType === 'custom') {
+          return customBookingName.trim() !== '' && Number(customDurationMinutes) > 0 && peopleCount > 0
+        }
         return selectedService !== null && peopleCount > 0
       case 3:
         return selectedDate !== '' && selectedTime !== ''
@@ -637,68 +687,146 @@ export function ManualBookingModal({
           {step === 2 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Select Service</h3>
-                <p className="text-sm text-gray-500">Choose the service for this booking</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Booking Type</h3>
+                <p className="text-sm text-gray-500">Select an existing service or create a custom booking</p>
               </div>
 
-              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                {services.map((service) => (
-                  <button
-                    key={service.id}
-                    onClick={() => {
-                      setSelectedService(service)
-                      if (peopleCount > service.max_people) setPeopleCount(service.max_people)
-                      setSelectedTime('')
-                    }}
-                    className={`w-full p-4 text-left border-2 rounded-xl transition-all ${
-                      selectedService?.id === service.id
-                        ? 'border-gray-900 bg-gray-50 shadow-sm'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <p className="font-semibold text-gray-900">{service.name}</p>
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          {service.duration_minutes} min · Up to {service.max_people} people
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="font-semibold text-gray-900">From R{service.price_1_person}</p>
-                        {selectedService?.id === service.id && (
-                          <p className="text-xs text-gray-500 mt-0.5">R{getServicePrice(service, peopleCount)} for {peopleCount}</p>
-                        )}
-                      </div>
+              <div className="grid grid-cols-2 gap-3">
+                {(['existing', 'custom'] as const).map((type) => {
+                  const labels = {
+                    existing: { title: 'Existing Service', sub: 'Select from active services' },
+                    custom: { title: 'Custom Booking', sub: 'Enter a name and duration' },
+                  }
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setBookingType(type)
+                        setSelectedService(null)
+                        setSelectedTime('')
+                        setAvailableSlots([])
+                      }}
+                      className={`p-4 text-left border-2 rounded-xl transition-all ${
+                        bookingType === type
+                          ? 'border-gray-900 bg-gray-50 shadow-sm'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <p className="font-semibold text-gray-900">{labels[type].title}</p>
+                      <p className="text-sm text-gray-500 mt-0.5">{labels[type].sub}</p>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {bookingType === 'custom' && (
+                <div className="border border-gray-200 rounded-xl p-5 space-y-4">
+                  <h4 className="font-semibold text-gray-900">Custom Booking Details</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Booking Name *</label>
+                    <input
+                      type="text"
+                      value={customBookingName}
+                      onChange={(e) => { setCustomBookingName(e.target.value); setSelectedTime(''); setAvailableSlots([]) }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      placeholder="e.g. Corporate Chair Massage"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration (minutes) *</label>
+                    <input
+                      type="number"
+                      min={15}
+                      step={15}
+                      value={customDurationMinutes}
+                      onChange={(e) => { setCustomDurationMinutes(e.target.value === '' ? '' : Number(e.target.value)); setSelectedTime(''); setAvailableSlots([]) }}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      placeholder="60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Number of People</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 2, 3, 4, 5, 6].map((num) => (
+                        <button
+                          key={num}
+                          onClick={() => setPeopleCount(num)}
+                          className={`w-12 h-12 rounded-xl font-semibold text-base transition-colors ${
+                            peopleCount === num
+                              ? 'bg-gray-900 text-white shadow-sm'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {num}
+                        </button>
+                      ))}
                     </div>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </div>
+              )}
 
-              {selectedService && (
-                <div className="border border-gray-200 rounded-xl p-5 space-y-3">
-                  <h4 className="font-semibold text-gray-900">Number of People</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from({ length: selectedService.max_people }, (_, i) => i + 1).map((num) => (
+              {bookingType === 'existing' && (
+                <>
+                  <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                    {services.map((service) => (
                       <button
-                        key={num}
+                        key={service.id}
                         onClick={() => {
-                          setPeopleCount(num)
+                          setSelectedService(service)
+                          if (peopleCount > service.max_people) setPeopleCount(service.max_people)
                           setSelectedTime('')
                         }}
-                        className={`w-12 h-12 rounded-xl font-semibold text-base transition-colors ${
-                          peopleCount === num
-                            ? 'bg-gray-900 text-white shadow-sm'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        className={`w-full p-4 text-left border-2 rounded-xl transition-all ${
+                          selectedService?.id === service.id
+                            ? 'border-gray-900 bg-gray-50 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
                         }`}
                       >
-                        {num}
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <p className="font-semibold text-gray-900">{service.name}</p>
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              {service.duration_minutes} min · Up to {service.max_people} people
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-semibold text-gray-900">From R{service.price_1_person}</p>
+                            {selectedService?.id === service.id && (
+                              <p className="text-xs text-gray-500 mt-0.5">R{getServicePrice(service, peopleCount)} for {peopleCount}</p>
+                            )}
+                          </div>
+                        </div>
                       </button>
                     ))}
                   </div>
-                  <p className="text-sm text-gray-600">
-                    Price for {peopleCount} {peopleCount === 1 ? 'person' : 'people'}: <span className="font-semibold">R{getServicePrice(selectedService, peopleCount)}</span>
-                  </p>
-                </div>
+
+                  {selectedService && (
+                    <div className="border border-gray-200 rounded-xl p-5 space-y-3">
+                      <h4 className="font-semibold text-gray-900">Number of People</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from({ length: selectedService.max_people }, (_, i) => i + 1).map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => {
+                              setPeopleCount(num)
+                              setSelectedTime('')
+                            }}
+                            className={`w-12 h-12 rounded-xl font-semibold text-base transition-colors ${
+                              peopleCount === num
+                                ? 'bg-gray-900 text-white shadow-sm'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Price for {peopleCount} {peopleCount === 1 ? 'person' : 'people'}: <span className="font-semibold">R{getServicePrice(selectedService, peopleCount)}</span>
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -708,7 +836,11 @@ export function ManualBookingModal({
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-1">Date & Time</h3>
                 <p className="text-sm text-gray-500">
-                  {prefillRoomName ? `Showing availability for ${prefillRoomName}` : 'Pick a date and available time slot'}
+                  {prefillRoomName
+                    ? `Showing availability for ${prefillRoomName}`
+                    : bookingType === 'custom'
+                    ? `Availability for ${customBookingName} (${customDurationMinutes} min)`
+                    : 'Pick a date and available time slot'}
                 </p>
               </div>
 
@@ -934,7 +1066,7 @@ export function ManualBookingModal({
                 <h4 className="font-semibold text-blue-900 mb-3">Booking Summary</h4>
                 <div className="text-sm text-blue-800 space-y-1.5">
                   <p><strong>Client:</strong> {selectedCustomer?.full_name || newCustomerName}</p>
-                  <p><strong>Service:</strong> {selectedService?.name} ({peopleCount} {peopleCount === 1 ? 'person' : 'people'})</p>
+                  <p><strong>Service:</strong> {bookingType === 'custom' ? `${customBookingName} (Custom, ${customDurationMinutes} min)` : `${selectedService?.name}`} — {peopleCount} {peopleCount === 1 ? 'person' : 'people'}</p>
                   <p>
                     <strong>Date:</strong>{' '}
                     {new Date(selectedDate).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedTime}
