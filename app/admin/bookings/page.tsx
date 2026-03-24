@@ -9,6 +9,8 @@ interface Booking {
   id: string
   customer_id: string | null
   service_slug: string | null
+  is_custom_booking: boolean
+  custom_booking_name: string | null
   people_count: number
   status: string
   start_time: string
@@ -55,6 +57,8 @@ export default function AdminBookingsPage() {
           id,
           customer_id,
           service_slug,
+          is_custom_booking,
+          custom_booking_name,
           people_count,
           status,
           start_time,
@@ -149,7 +153,8 @@ export default function AdminBookingsPage() {
     return (
       booking.customer_name?.toLowerCase().includes(query) ||
       booking.customer_email?.toLowerCase().includes(query) ||
-      booking.service_name?.toLowerCase().includes(query)
+      booking.service_name?.toLowerCase().includes(query) ||
+      booking.custom_booking_name?.toLowerCase().includes(query)
     )
   })
 
@@ -290,8 +295,19 @@ export default function AdminBookingsPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
-                            {booking.pricing_option_name && (
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <p className="text-gray-900">
+                                {booking.is_custom_booking
+                                  ? (booking.custom_booking_name || 'Custom Booking')
+                                  : (booking.service_name || booking.service_slug || '-')}
+                              </p>
+                              {booking.is_custom_booking && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
+                            {!booking.is_custom_booking && booking.pricing_option_name && (
                               <p className="text-sm text-gray-600">{booking.pricing_option_name}</p>
                             )}
                             <p className="text-sm text-gray-500">{booking.people_count} person(s)</p>
@@ -346,7 +362,18 @@ export default function AdminBookingsPage() {
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-gray-900 truncate">{booking.customer_name || 'Unknown'}</p>
-                          <p className="text-sm text-gray-600 truncate">{booking.service_name || booking.service_slug || '-'}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm text-gray-600 truncate">
+                              {booking.is_custom_booking
+                                ? (booking.custom_booking_name || 'Custom Booking')
+                                : (booking.service_name || booking.service_slug || '-')}
+                            </p>
+                            {booking.is_custom_booking && (
+                              <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                Custom
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>

@@ -15,6 +15,11 @@ interface BookingData {
   id: string
   customer_id: string | null
   service_slug: string | null
+  is_custom_booking: boolean
+  is_manual_booking: boolean
+  custom_booking_name: string | null
+  custom_duration_minutes: number | null
+  custom_price: number | null
   voucher_id: string | null
   room_id: string | null
   people_count: number
@@ -204,15 +209,37 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     if (!booking) return
 
     setUpdatingRoom(true)
-    const { error } = await supabase
-      .from('bookings')
-      .update({ room_id: roomId })
-      .eq('id', booking.id)
 
-    if (!error) {
-      fetchBooking()
-      onUpdate()
-      setShowRoomSelect(false)
+    if (roomId === null) {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ room_id: null })
+        .eq('id', booking.id)
+      if (!error) {
+        fetchBooking()
+        onUpdate()
+        setShowRoomSelect(false)
+      }
+      setUpdatingRoom(false)
+      return
+    }
+
+    try {
+      const res = await fetch('/api/admin/bookings/reassign-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, newRoomId: roomId }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Failed to reassign room')
+      } else {
+        fetchBooking()
+        onUpdate()
+        setShowRoomSelect(false)
+      }
+    } catch {
+      alert('Network error — room reassignment failed')
     }
     setUpdatingRoom(false)
   }
@@ -276,7 +303,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     const newStartTime = `${rescheduleDate}T${rescheduleTime}:00`
     const startDate = new Date(newStartTime)
 
-    const baseDuration = booking.service?.duration_minutes || 60
+    const baseDuration = booking.is_custom_booking
+      ? (booking.custom_duration_minutes || 60)
+      : (booking.service?.duration_minutes || 60)
     const upsellDuration = booking.booking_upsells.reduce((total, bu) => total + (bu.duration_added_minutes || 0), 0)
     const totalDuration = baseDuration + upsellDuration
     const endDate = new Date(startDate.getTime() + totalDuration * 60000)
@@ -453,14 +482,42 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Service</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <p className="font-medium text-gray-900">{booking.service?.name}</p>
-                {booking.pricing_option_name && (
+                {(booking.is_manual_booking || booking.is_custom_booking) && (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-800 text-white">
+                      Manual Booking
+                    </span>
+                    {booking.is_custom_booking && (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                        Custom
+                      </span>
+                    )}
+                  </div>
+                )}
+                <p className="font-medium text-gray-900">
+                  {booking.is_custom_booking
+                    ? (booking.custom_booking_name || 'Custom Booking')
+                    : booking.service?.name}
+                </p>
+                {!booking.is_custom_booking && booking.pricing_option_name && (
                   <p className="text-sm text-blue-700 font-medium">{booking.pricing_option_name}</p>
                 )}
-                <p className="text-sm text-gray-600">{booking.service?.category}</p>
+                {!booking.is_custom_booking && (
+                  <p className="text-sm text-gray-600">{booking.service?.category}</p>
+                )}
+                {booking.is_custom_booking && booking.custom_price != null && (
+                  <p className="text-sm text-gray-600">Base price: R{booking.custom_price.toLocaleString()}</p>
+                )}
                 <p className="text-sm text-gray-600">
-                  {booking.people_count} person(s) - {Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)} min
-                  {Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000) > (booking.service?.duration_minutes || 0) && (
+                  {booking.people_count} person(s) -{' '}
+                  {booking.is_custom_booking
+                    ? (booking.custom_duration_minutes || Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000))
+                    : Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)
+                  } min
+                  {!booking.is_custom_booking && Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000) > (booking.service?.duration_minutes || 0) && (
+                    <span className="text-gray-500"> (includes add-ons)</span>
+                  )}
+                  {booking.is_custom_booking && booking.booking_upsells.length > 0 && (
                     <span className="text-gray-500"> (includes add-ons)</span>
                   )}
                 </p>
@@ -495,16 +552,18 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Room Assignment</h3>
               <div className="bg-gray-50 rounded-lg p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Required area:</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    booking.service?.service_area === 'public'
-                      ? 'bg-teal-100 text-teal-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {booking.service?.service_area || 'treatment'}
-                  </span>
-                </div>
+                {!booking.is_custom_booking && (
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Required area:</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      booking.service?.service_area === 'public'
+                        ? 'bg-teal-100 text-teal-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {booking.service?.service_area || 'treatment'}
+                    </span>
+                  </div>
+                )}
                 {!showRoomSelect ? (
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -556,7 +615,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   <div className="space-y-3">
                     <div className="space-y-2">
                       {rooms.map((room) => {
-                        const isMatchingArea = room.room_area === (booking.service?.service_area || 'treatment')
+                        const isMatchingArea = booking.is_custom_booking || room.room_area === (booking.service?.service_area || 'treatment')
                         return (
                           <button
                             key={room.id}

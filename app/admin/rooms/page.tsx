@@ -16,13 +16,15 @@ interface RoomBooking {
   status: string
   people_count: number
   total_price: number
+  is_custom_booking: boolean
+  custom_booking_name: string | null
   assigned_room_ids?: string[]
   customer: {
     full_name: string
   }
   service: {
     name: string
-  }
+  } | null
   payment_transactions: {
     status: string
     amount: number
@@ -159,6 +161,7 @@ export default function RoomsCalendarPage() {
         .from('bookings')
         .select(`
           id, start_time, end_time, room_id, status, people_count, total_price,
+          is_custom_booking, custom_booking_name,
           customer:customers(full_name),
           service:services(name),
           payment_transactions(status, amount)
@@ -600,7 +603,11 @@ export default function RoomsCalendarPage() {
                                   </div>
                                 )}
                                 <p className="font-medium text-sm truncate">{booking.customer?.full_name}</p>
-                                <p className="text-xs truncate opacity-80">{booking.service?.name}</p>
+                                <p className="text-xs truncate opacity-80">
+                                  {booking.is_custom_booking
+                                    ? (booking.custom_booking_name || 'Custom Booking')
+                                    : booking.service?.name}
+                                </p>
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className="text-xs">
                                     {new Date(booking.start_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
@@ -741,7 +748,11 @@ export default function RoomsCalendarPage() {
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-sm text-gray-600 truncate">{booking.service?.name}</p>
+                                  <p className="text-sm text-gray-600 truncate">
+                                    {booking.is_custom_booking
+                                      ? (booking.custom_booking_name || 'Custom Booking')
+                                      : booking.service?.name}
+                                  </p>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded shrink-0 ${
                                   paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :

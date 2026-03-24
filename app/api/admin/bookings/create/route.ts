@@ -88,6 +88,18 @@ export async function POST(request: NextRequest) {
 
       console.log('[AdminBookingCreate] prefillRoomId:', prefillRoomId, '| room record:', prefillRoomRow, '| resolved serviceArea:', serviceArea)
 
+      const roomCapacity = prefillRoomRow?.capacity ?? 0
+      const safePeopleCount = safeNum(peopleCount)
+      if (prefillRoomRow && roomCapacity < safePeopleCount) {
+        console.error(
+          `[AdminBookingCreate] Capacity rejected — room "${prefillRoomRow.room_name}" capacity ${roomCapacity} < people_count ${safePeopleCount}`
+        )
+        return NextResponse.json(
+          { error: `Room "${prefillRoomRow.room_name}" has capacity ${roomCapacity} but booking requires ${safePeopleCount} people` },
+          { status: 409 }
+        )
+      }
+
       const isAvailable = await checkRoomAvailability(prefillRoomId, startDateTime, endDateTime)
 
       console.log('[AdminBookingCreate] checkRoomAvailability result for', prefillRoomRow?.room_name ?? prefillRoomId, ':', isAvailable)

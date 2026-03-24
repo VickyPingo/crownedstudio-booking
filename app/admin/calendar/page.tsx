@@ -12,6 +12,8 @@ interface Booking {
   id: string
   customer_id: string | null
   service_slug: string | null
+  is_custom_booking: boolean
+  custom_booking_name: string | null
   status: string
   start_time: string
   people_count: number
@@ -53,7 +55,7 @@ export default function AdminCalendarPage() {
 
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('id, customer_id, service_slug, status, start_time, people_count, room_id')
+        .select('id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id')
         .gte('start_time', `${startOfMonth}T00:00:00`)
         .lte('start_time', `${endOfMonth}T23:59:59`)
         .in('status', ['confirmed', 'completed', 'cancelled', 'no_show'])
@@ -448,7 +450,11 @@ export default function AdminCalendarPage() {
                     className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
                   >
                     <div>
-                      <p className="font-medium text-gray-900">{booking.service_name || booking.service_slug || '-'}</p>
+                      <p className="font-medium text-gray-900">
+                      {booking.is_custom_booking
+                        ? (booking.custom_booking_name || 'Custom Booking')
+                        : (booking.service_name || booking.service_slug || '-')}
+                    </p>
                       <p className="text-sm text-gray-600">
                         {booking.customer_name || 'Unknown'} at{' '}
                         {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
