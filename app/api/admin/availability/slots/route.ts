@@ -15,6 +15,23 @@ function timeToMinutes(hhmm: string): number {
   return h * 60 + m
 }
 
+/**
+ * Converts an ISO timestamp to minutes-since-midnight in SAST (UTC+2) timezone.
+ * This ensures booking times are compared in the same timezone as the business operates.
+ */
+function timestampToSASTMinutes(isoTimestamp: string): number {
+  const date = new Date(isoTimestamp)
+  // Get hours and minutes in UTC+2 (SAST)
+  // We need to handle the timezone offset properly
+  const utcHours = date.getUTCHours()
+  const utcMinutes = date.getUTCMinutes()
+
+  // SAST is UTC+2, so add 2 hours
+  const sastHours = (utcHours + 2) % 24
+
+  return sastHours * 60 + utcMinutes
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
@@ -138,11 +155,9 @@ export async function POST(request: NextRequest) {
           if (booking.status === 'pending_payment') {
             if (!booking.payment_expires_at || booking.payment_expires_at <= now) continue
           }
-          const startLocal = new Date(booking.start_time)
-          const endLocal = new Date(booking.end_time)
           existingBookingTimes.push({
-            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
-            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+            startMin: timestampToSASTMinutes(booking.start_time),
+            endMin: timestampToSASTMinutes(booking.end_time),
           })
           seenViaBookingRooms.add((br as any).booking_id)
         }
@@ -164,11 +179,9 @@ export async function POST(request: NextRequest) {
           if (b.status === 'pending_payment') {
             if (!b.payment_expires_at || b.payment_expires_at <= now) continue
           }
-          const startLocal = new Date(b.start_time)
-          const endLocal = new Date(b.end_time)
           existingBookingTimes.push({
-            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
-            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+            startMin: timestampToSASTMinutes(b.start_time),
+            endMin: timestampToSASTMinutes(b.end_time),
           })
         }
       }
@@ -186,11 +199,9 @@ export async function POST(request: NextRequest) {
           if (b.status === 'pending_payment') {
             if (!b.payment_expires_at || b.payment_expires_at <= now) continue
           }
-          const startLocal = new Date(b.start_time)
-          const endLocal = new Date(b.end_time)
           existingBookingTimes.push({
-            startMin: startLocal.getHours() * 60 + startLocal.getMinutes(),
-            endMin: endLocal.getHours() * 60 + endLocal.getMinutes(),
+            startMin: timestampToSASTMinutes(b.start_time),
+            endMin: timestampToSASTMinutes(b.end_time),
           })
         }
       }
