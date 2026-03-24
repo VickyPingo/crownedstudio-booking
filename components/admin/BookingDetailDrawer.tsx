@@ -276,7 +276,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
     if (!error) {
       setNewNote('')
-      fetchBooking()
+      await fetchBooking()
     }
     setAddingNote(false)
   }
