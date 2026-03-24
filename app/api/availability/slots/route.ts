@@ -78,6 +78,11 @@ function scoreSlot(slot: string, roomBookings: RoomBooking[]): number {
 function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[] {
   if (slots.length === 0) return []
 
+  // CORE RULE: If 08:30 is available, it ALWAYS gets highest priority
+  // This applies to both weekdays and weekends
+  const START_OF_DAY = '08:30'
+  const hasStartOfDay = slots.includes(START_OF_DAY)
+
   interface ScoredSlot { slot: string; score: number }
 
   const morning: ScoredSlot[] = []
@@ -99,6 +104,12 @@ function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[]
 
   const selectedScored: ScoredSlot[] = []
   const used = new Set<string>()
+
+  // PRIORITY: If 08:30 is available, add it first and mark as used
+  if (hasStartOfDay) {
+    selectedScored.push({ slot: START_OF_DAY, score: scoreSlot(START_OF_DAY, roomBookings) })
+    used.add(START_OF_DAY)
+  }
 
   const bucketBests = [best(morning), best(midMorning), best(afternoon)]
   for (const pick of bucketBests) {
@@ -123,12 +134,22 @@ function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[]
 
   if (selectedScored.length === 0) return []
 
-  const overallBest = selectedScored.reduce((a, b) => (b.score > a.score ? b : a))
-  const rest = selectedScored
-    .filter((s) => s.slot !== overallBest.slot)
-    .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
-
-  return [overallBest.slot, ...rest.map((s) => s.slot)]
+  // PRIORITY: If 08:30 was added, it's already first in selectedScored
+  // If not, use the existing logic to find the overall best
+  if (hasStartOfDay) {
+    // 08:30 is guaranteed to be first, rest sorted by time
+    const rest = selectedScored
+      .slice(1)
+      .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
+    return [START_OF_DAY, ...rest.map((s) => s.slot)]
+  } else {
+    // Original logic: best by score, then rest by time
+    const overallBest = selectedScored.reduce((a, b) => (b.score > a.score ? b : a))
+    const rest = selectedScored
+      .filter((s) => s.slot !== overallBest.slot)
+      .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
+    return [overallBest.slot, ...rest.map((s) => s.slot)]
+  }
 }
 
 function sanitizeHHMM(value: string): string {
