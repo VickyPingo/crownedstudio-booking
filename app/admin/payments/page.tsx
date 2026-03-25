@@ -3,6 +3,7 @@
 import { AdminLayout } from '@/components/admin/AdminLayout'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface SpaBooking {
   type: 'spa'
@@ -10,6 +11,7 @@ interface SpaBooking {
   total_price: number
   deposit_due: number
   balance_paid: number
+  no_payment_required: boolean
   status: string
   start_time: string
   voucher_discount: number
@@ -67,6 +69,7 @@ export default function AdminPaymentsPage() {
           total_price,
           deposit_due,
           balance_paid,
+          no_payment_required,
           status,
           start_time,
           voucher_discount,
@@ -127,19 +130,21 @@ export default function AdminPaymentsPage() {
   }, [fetchPayments])
 
   const getSpaPaymentStatus = (booking: SpaBooking) => {
-    const completedPayments = booking.payment_transactions?.filter(p => p.status === 'complete') || []
-    const depositPaid = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-    const balancePaid = booking.balance_paid || 0
-    const totalPaid = depositPaid + balancePaid
+    const ps = getPaymentState(booking)
     const voucherDiscount = booking.voucher_discount || 0
-    const balanceDue = Math.max(0, booking.total_price - totalPaid)
-
-    if (balanceDue <= 0) {
-      return { status: 'fully_paid', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
-    } else if (depositPaid > 0 || balancePaid > 0) {
-      return { status: 'deposit_paid', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
+    const legacyStatus = ps.state === 'not_required' ? 'fully_paid'
+      : ps.state === 'fully_paid' ? 'fully_paid'
+      : ps.state === 'partially_paid' ? 'deposit_paid'
+      : 'pending'
+    return {
+      status: legacyStatus,
+      depositPaid: ps.depositPaid,
+      balancePaid: ps.balancePaid,
+      balanceDue: ps.balanceDue,
+      totalPaid: ps.totalPaid,
+      voucherDiscount,
+      paymentState: ps.state,
     }
-    return { status: 'pending', depositPaid, balancePaid, balanceDue, totalPaid, voucherDiscount }
   }
 
   const filteredSpaBookings = spaBookings.filter((booking) => {
@@ -160,13 +165,20 @@ export default function AdminPaymentsPage() {
 
     const { data: { user } } = await supabase.auth.getUser()
 
+    const booking = spaBookings.find(b => b.id === bookingId)
+    const updates: Record<string, unknown> = {
+      balance_paid: (booking?.balance_paid || 0) + amount,
+      balance_paid_at: new Date().toISOString(),
+      balance_paid_by: user?.id || null,
+    }
+
+    if (booking?.status === 'pending_payment') {
+      updates.status = 'confirmed'
+    }
+
     const { error } = await supabase
       .from('bookings')
-      .update({
-        balance_paid: amount,
-        balance_paid_at: new Date().toISOString(),
-        balance_paid_by: user?.id || null,
-      })
+      .update(updates)
       .eq('id', bookingId)
 
     if (!error) {
@@ -177,12 +189,24 @@ export default function AdminPaymentsPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      pending: 'bg-amber-100 text-amber-800',
-      deposit_paid: 'bg-blue-100 text-blue-800',
-      fully_paid: 'bg-green-100 text-green-800',
-      paid: 'bg-green-100 text-green-800',
+      pending: PAYMENT_STATE_STYLES.pending,
+      deposit_paid: PAYMENT_STATE_STYLES.partially_paid,
+      fully_paid: PAYMENT_STATE_STYLES.fully_paid,
+      not_required: PAYMENT_STATE_STYLES.not_required,
+      paid: PAYMENT_STATE_STYLES.fully_paid,
     }
     return styles[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  const formatPaymentStatus = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: PAYMENT_STATE_LABELS.pending,
+      deposit_paid: PAYMENT_STATE_LABELS.partially_paid,
+      fully_paid: PAYMENT_STATE_LABELS.fully_paid,
+      not_required: PAYMENT_STATE_LABELS.not_required,
+      paid: PAYMENT_STATE_LABELS.fully_paid,
+    }
+    return labels[status] || status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   const formatStatus = (status: string) => {
@@ -364,11 +388,11 @@ export default function AdminPaymentsPage() {
                               </td>
                               <td className="px-6 py-4">
                                 <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(payment.status)}`}>
-                                  {formatStatus(payment.status)}
+                                  {formatPaymentStatus(payment.status)}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
-                                {payment.status === 'deposit_paid' && payment.balanceDue > 0 && (
+                                {payment.balanceDue > 0 && payment.paymentState !== 'not_required' && (
                                   <button
                                     onClick={() => handleMarkBalancePaid(booking.id, payment.balanceDue)}
                                     disabled={markingPayment === booking.id}
@@ -396,7 +420,7 @@ export default function AdminPaymentsPage() {
                               <p className="text-sm text-gray-600">{booking.service?.name}</p>
                             </div>
                             <span className={`px-2 py-1 text-xs rounded-full shrink-0 ${getStatusBadge(payment.status)}`}>
-                              {formatStatus(payment.status)}
+                              {formatPaymentStatus(payment.status)}
                             </span>
                           </div>
                           <div className="text-sm text-gray-600 mb-3">
@@ -428,7 +452,7 @@ export default function AdminPaymentsPage() {
                               </p>
                             </div>
                           </div>
-                          {payment.status === 'deposit_paid' && payment.balanceDue > 0 && (
+                          {payment.balanceDue > 0 && payment.paymentState !== 'not_required' && (
                             <button
                               onClick={() => handleMarkBalancePaid(booking.id, payment.balanceDue)}
                               disabled={markingPayment === booking.id}

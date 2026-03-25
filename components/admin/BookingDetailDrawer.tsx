@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { BookingStatus, Room } from '@/types/admin'
 import { getMinimumBookingDate, isSameDayBooking } from '@/lib/timeSlots'
+import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface BookingDetailDrawerProps {
   bookingId: string | null
@@ -29,6 +30,7 @@ interface BookingData {
   total_price: number
   deposit_due: number
   balance_paid: number
+  no_payment_required: boolean
   voucher_code: string | null
   voucher_discount: number
   allergies: string | null
@@ -393,19 +395,26 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const handleMarkBalancePaid = async () => {
     if (!booking) return
 
-    const payment = getPaymentSummary()
+    const payment = getPaymentState(booking)
     if (payment.balanceDue <= 0) return
 
     setMarkingBalancePaid(true)
     const { data: { user } } = await supabase.auth.getUser()
 
+    const newBalancePaid = (booking.balance_paid || 0) + payment.balanceDue
+    const updates: Record<string, unknown> = {
+      balance_paid: newBalancePaid,
+      balance_paid_at: new Date().toISOString(),
+      balance_paid_by: user?.id || null,
+    }
+
+    if (booking.status === 'pending_payment') {
+      updates.status = 'confirmed'
+    }
+
     const { error } = await supabase
       .from('bookings')
-      .update({
-        balance_paid: (booking.balance_paid || 0) + payment.balanceDue,
-        balance_paid_at: new Date().toISOString(),
-        balance_paid_by: user?.id || null,
-      })
+      .update(updates)
       .eq('id', booking.id)
 
     if (!error) {
@@ -415,28 +424,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     setMarkingBalancePaid(false)
   }
 
-  const getPaymentSummary = () => {
-    if (!booking) return { depositPaid: 0, balanceDue: 0, status: 'pending' }
-
-    const completedPayments = booking.payment_transactions?.filter(p => p.status === 'complete') || []
-    const depositPaid = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-    const balancePaid = booking.balance_paid || 0
-    const totalPaid = depositPaid + balancePaid
-    const balanceDue = Math.max(0, booking.total_price - totalPaid)
-
-    let status = 'pending'
-    if (balanceDue <= 0) {
-      status = 'fully_paid'
-    } else if (depositPaid > 0) {
-      status = 'deposit_paid'
-    }
-
-    return { depositPaid, balanceDue, totalPaid, status }
-  }
-
   if (!bookingId) return null
 
-  const payment = getPaymentSummary()
+  const payment = booking ? getPaymentState(booking) : { state: 'pending' as const, totalPaid: 0, depositPaid: 0, balancePaid: 0, balanceDue: 0 }
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -840,34 +830,40 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Payment</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Amount</span>
-                  <span className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Deposit Paid</span>
-                  <span className="font-medium text-green-700">R{payment.depositPaid?.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Balance Paid</span>
-                  <span className="font-medium text-green-700">R{(booking.balance_paid || 0).toLocaleString()}</span>
-                </div>
-                <div className="border-t pt-2 flex justify-between">
-                  <span className="text-sm font-medium text-gray-700">Balance Due</span>
-                  <span className={`font-semibold ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
-                    R{payment.balanceDue?.toLocaleString()}
-                  </span>
-                </div>
-                <div className="pt-2">
-                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                    payment.status === 'fully_paid' ? 'bg-green-100 text-green-800' :
-                    payment.status === 'deposit_paid' ? 'bg-blue-100 text-blue-800' :
-                    'bg-amber-100 text-amber-800'
-                  }`}>
-                    {payment.status === 'fully_paid' ? 'Fully Paid' :
-                     payment.status === 'deposit_paid' ? 'Deposit Paid' : 'Pending'}
-                  </span>
-                </div>
+                {booking.no_payment_required ? (
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES['not_required']}`}>
+                      {PAYMENT_STATE_LABELS['not_required']}
+                    </span>
+                    <span className="text-sm text-gray-500">No payment was required for this booking.</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Total Amount</span>
+                      <span className="font-medium text-gray-900">R{booking.total_price?.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Deposit Paid</span>
+                      <span className="font-medium text-green-700">R{payment.depositPaid?.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Balance Paid</span>
+                      <span className="font-medium text-green-700">R{(booking.balance_paid || 0).toLocaleString()}</span>
+                    </div>
+                    <div className="border-t pt-2 flex justify-between">
+                      <span className="text-sm font-medium text-gray-700">Balance Due</span>
+                      <span className={`font-semibold ${payment.balanceDue > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                        R{payment.balanceDue?.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="pt-2">
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES[payment.state]}`}>
+                        {PAYMENT_STATE_LABELS[payment.state]}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
 
@@ -1016,7 +1012,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   </div>
                 )}
 
-                {payment.balanceDue > 0 && (
+                {!booking.no_payment_required && payment.balanceDue > 0 && (
                   <button
                     onClick={handleMarkBalancePaid}
                     disabled={markingBalancePaid}

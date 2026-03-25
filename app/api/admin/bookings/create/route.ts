@@ -172,6 +172,9 @@ export async function POST(request: NextRequest) {
 
     console.log('[AdminBookingCreate] bookingStatus:', bookingStatus, '| paymentOption:', paymentOption, '| depositPaid:', depositPaid, '| fullyPaid:', fullyPaid)
 
+    const isNoPayment = paymentOption === 'no_payment'
+    const totalPrice = safeNum(pricing?.total)
+
     const insertPayload = {
       customer_id: customerId,
       service_slug: isCustomBooking ? null : serviceSlug,
@@ -188,8 +191,8 @@ export async function POST(request: NextRequest) {
       upsells_total: safeNum(pricing?.upsellsTotal),
       discount_amount: safeNum(pricing?.discount),
       discount_type: voucherId ? 'voucher' : null,
-      total_price: safeNum(pricing?.total),
-      deposit_due: safeNum(pricing?.deposit),
+      total_price: totalPrice,
+      deposit_due: isNoPayment ? 0 : safeNum(pricing?.deposit),
       allergies: allergies || null,
       massage_pressure: massagePressure || null,
       medical_history: medicalHistory || null,
@@ -199,12 +202,13 @@ export async function POST(request: NextRequest) {
       voucher_discount: safeNum(pricing?.discount),
       is_manual_booking: true,
       created_by_admin: adminUserId,
-      payment_method_manual: paymentOption !== 'no_payment' ? (manualPaymentMethod || null) : null,
+      no_payment_required: isNoPayment,
+      payment_method_manual: !isNoPayment ? (manualPaymentMethod || null) : null,
       deposit_paid_manually: depositPaid === true,
       deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
-      balance_paid: fullyPaid === true ? safeNum(pricing?.total) : 0,
-      balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
-      balance_paid_by: fullyPaid === true ? adminUserId : null,
+      balance_paid: fullyPaid === true ? totalPrice : (isNoPayment ? totalPrice : 0),
+      balance_paid_at: (fullyPaid === true || isNoPayment) ? new Date().toISOString() : null,
+      balance_paid_by: (fullyPaid === true || isNoPayment) ? adminUserId : null,
       room_id: roomAllocation.room_ids[0] || null,
       terms_accepted: true,
       terms_accepted_at: new Date().toISOString(),

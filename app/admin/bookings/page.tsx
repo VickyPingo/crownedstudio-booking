@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout'
 import { BookingDetailDrawer } from '@/components/admin/BookingDetailDrawer'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface Booking {
   id: string
@@ -16,6 +17,8 @@ interface Booking {
   start_time: string
   total_price: number
   deposit_due: number
+  balance_paid: number
+  no_payment_required: boolean
   room_id: string | null
   pricing_option_name: string | null
   customer_name?: string
@@ -24,6 +27,7 @@ interface Booking {
   room_name?: string
   room_area?: string
   total_paid: number
+  payment_transactions?: Array<{ status: string; amount: number }>
 }
 
 type FilterStatus = 'all' | 'pending_payment' | 'confirmed' | 'completed' | 'cancelled' | 'no_show' | 'expired'
@@ -64,6 +68,8 @@ export default function AdminBookingsPage() {
           start_time,
           total_price,
           deposit_due,
+          balance_paid,
+          no_payment_required,
           room_id,
           pricing_option_name
         `)
@@ -118,19 +124,30 @@ export default function AdminBookingsPage() {
         }
       }
 
+      const txnsByBooking = new Map<string, Array<{ status: string; amount: number }>>()
+      for (const payment of (paymentsRes.data || [])) {
+        const list = txnsByBooking.get(payment.booking_id) || []
+        list.push({ status: payment.status, amount: payment.amount || 0 })
+        txnsByBooking.set(payment.booking_id, list)
+      }
+
       const enrichedBookings: Booking[] = bookingsData.map(b => {
         const customer = b.customer_id ? customerMap.get(b.customer_id) : null
         const service = b.service_slug ? serviceMap.get(b.service_slug) : null
         const room = b.room_id ? roomMap.get(b.room_id) : null
+        const txns = txnsByBooking.get(b.id) || []
 
         return {
           ...b,
+          balance_paid: (b as unknown as { balance_paid?: number }).balance_paid || 0,
+          no_payment_required: (b as unknown as { no_payment_required?: boolean }).no_payment_required || false,
           customer_name: customer?.full_name || undefined,
           customer_email: customer?.email || undefined,
           service_name: service?.name || undefined,
           room_name: room?.room_name || undefined,
           room_area: room?.room_area || undefined,
           total_paid: paymentsByBooking.get(b.id) || 0,
+          payment_transactions: txns,
         }
       })
 
@@ -178,12 +195,14 @@ export default function AdminBookingsPage() {
   }
 
   const getPaymentStatus = (booking: Booking) => {
-    if (booking.total_paid >= booking.total_price) {
-      return { label: 'Paid', style: 'bg-green-100 text-green-800' }
-    } else if (booking.total_paid > 0) {
-      return { label: 'Deposit', style: 'bg-blue-100 text-blue-800' }
-    }
-    return { label: 'Pending', style: 'bg-amber-100 text-amber-800' }
+    const ps = getPaymentState({
+      total_price: booking.total_price,
+      balance_paid: booking.balance_paid,
+      no_payment_required: booking.no_payment_required,
+      status: booking.status,
+      payment_transactions: booking.payment_transactions,
+    })
+    return { label: PAYMENT_STATE_LABELS[ps.state], style: PAYMENT_STATE_STYLES[ps.state] }
   }
 
 
