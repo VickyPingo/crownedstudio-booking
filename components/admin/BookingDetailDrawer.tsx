@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 import type { BookingStatus, Room } from '@/types/admin'
 import { getMinimumBookingDate, isSameDayBooking } from '@/lib/timeSlots'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
+import { writeAuditLog } from '@/lib/auditLog'
 
 interface BookingDetailDrawerProps {
   bookingId: string | null
@@ -72,6 +73,16 @@ interface BookingData {
   payment_transactions: Array<{ id: string; status: string; amount: number; created_at: string }>
 }
 
+interface AuditLogEntry {
+  id: string
+  booking_id: string
+  action_type: string
+  changed_by_admin_id: string | null
+  changed_by_name: string | null
+  details_json: Record<string, unknown> | null
+  created_at: string
+}
+
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
   { value: 'pending_payment', label: 'Pending Payment', color: 'bg-amber-100 text-amber-800' },
   { value: 'confirmed', label: 'Confirmed', color: 'bg-blue-100 text-blue-800' },
@@ -96,11 +107,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const [rooms, setRooms] = useState<Room[]>([])
   const [showRoomSelect, setShowRoomSelect] = useState(false)
   const [updatingRoom, setUpdatingRoom] = useState(false)
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
+  const [loadingAudit, setLoadingAudit] = useState(false)
 
   useEffect(() => {
     if (bookingId) {
       fetchBooking()
       fetchRooms()
+      fetchAuditLog()
     }
   }, [bookingId])
 
@@ -207,18 +221,36 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     }
   }
 
+  const fetchAuditLog = async () => {
+    if (!bookingId) return
+    setLoadingAudit(true)
+    const { data } = await supabase
+      .from('booking_audit_log')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: true })
+    setAuditLog((data as AuditLogEntry[]) || [])
+    setLoadingAudit(false)
+  }
+
   const handleRoomChange = async (roomId: string | null) => {
     if (!booking) return
 
     setUpdatingRoom(true)
 
     if (roomId === null) {
+      const previousRoomNames = (booking.assigned_rooms || []).map(r => r.room_name)
       const { error } = await supabase
         .from('bookings')
         .update({ room_id: null })
         .eq('id', booking.id)
       if (!error) {
+        await writeAuditLog(booking.id, 'room_changed', {
+          from: previousRoomNames.join(', ') || 'unknown',
+          to: 'unassigned',
+        })
         fetchBooking()
+        fetchAuditLog()
         onUpdate()
         setShowRoomSelect(false)
       }
@@ -227,16 +259,25 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const previousRoomNames = (booking.assigned_rooms || []).map(r => r.room_name)
       const res = await fetch('/api/admin/bookings/reassign-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id, newRoomId: roomId }),
+        body: JSON.stringify({
+          bookingId: booking.id,
+          newRoomId: roomId,
+          adminId: user?.id || null,
+          adminName: null,
+          previousRoomNames,
+        }),
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
         alert(data.error || 'Failed to reassign room')
       } else {
         fetchBooking()
+        fetchAuditLog()
         onUpdate()
         setShowRoomSelect(false)
       }
@@ -250,13 +291,25 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     if (!booking) return
 
     setUpdatingStatus(true)
+    const previousStatus = booking.status
     const { error } = await supabase
       .from('bookings')
       .update({ status: newStatus })
       .eq('id', booking.id)
 
     if (!error) {
+      const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
+        cancelled: 'cancelled',
+        completed: 'completed',
+        no_show: 'no_show',
+      }
+      const actionType = actionTypeMap[newStatus] || 'status_changed'
+      await writeAuditLog(booking.id, actionType, {
+        from: previousStatus,
+        to: newStatus,
+      })
       setBooking({ ...booking, status: newStatus })
+      fetchAuditLog()
       onUpdate()
     }
     setUpdatingStatus(false)
@@ -277,8 +330,12 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       })
 
     if (!error) {
+      await writeAuditLog(booking.id, 'note_added', {
+        note_preview: newNote.trim().slice(0, 100),
+      })
       setNewNote('')
       await fetchBooking()
+      fetchAuditLog()
     }
     setAddingNote(false)
   }
@@ -368,6 +425,11 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         created_by: user?.id || null,
       })
 
+      await writeAuditLog(booking.id, 'rescheduled', {
+        from: oldStartTime,
+        to: startDate.toISOString(),
+      })
+
       if (booking.customer?.email) {
         try {
           await fetch('/api/bookings/send-reschedule-email', {
@@ -388,6 +450,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       setRescheduleDate('')
       setRescheduleTime('')
       fetchBooking()
+      fetchAuditLog()
       onUpdate()
     }
   }
@@ -419,7 +482,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       .eq('id', booking.id)
 
     if (!error) {
+      await writeAuditLog(booking.id, 'payment_updated', {
+        action: 'balance_paid',
+        amount: payment.balanceDue,
+        new_balance_paid: (booking.balance_paid || 0) + payment.balanceDue,
+        total_price: booking.total_price,
+      })
       fetchBooking()
+      fetchAuditLog()
       onUpdate()
     }
     setMarkingBalancePaid(false)
@@ -1047,6 +1117,104 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   Mark as Completed
                 </button>
               </div>
+            </section>
+
+            <section className="border-t pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Admin Activity Log</h3>
+              {loadingAudit ? (
+                <p className="text-sm text-gray-500">Loading activity...</p>
+              ) : auditLog.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No activity recorded yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {auditLog.map((entry) => {
+                    const d = entry.details_json || {}
+                    const who = entry.changed_by_name || 'Admin'
+                    const when = new Date(entry.created_at).toLocaleString('en-ZA', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'Africa/Johannesburg',
+                    })
+
+                    let description = ''
+                    switch (entry.action_type) {
+                      case 'booking_created':
+                        description = `created this booking`
+                        if (d.service) description += ` (${d.service})`
+                        break
+                      case 'status_changed':
+                        description = `changed status from ${d.from} to ${d.to}`
+                        break
+                      case 'rescheduled': {
+                        const fromDate = d.from ? new Date(d.from as string).toLocaleString('en-ZA', {
+                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg',
+                        }) : '?'
+                        const toDate = d.to ? new Date(d.to as string).toLocaleString('en-ZA', {
+                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Johannesburg',
+                        }) : '?'
+                        description = `rescheduled from ${fromDate} to ${toDate}`
+                        break
+                      }
+                      case 'room_changed':
+                        description = `changed room from "${d.from}" to "${d.to}"`
+                        break
+                      case 'payment_updated':
+                        if (d.action === 'balance_paid') {
+                          description = `marked balance paid (R${d.amount})`
+                        } else {
+                          description = `updated payment`
+                        }
+                        break
+                      case 'cancelled':
+                        description = `cancelled the booking`
+                        break
+                      case 'completed':
+                        description = `marked booking as completed`
+                        break
+                      case 'no_show':
+                        description = `marked booking as no-show`
+                        break
+                      case 'note_added':
+                        description = `added a note`
+                        if (d.note_preview) description += `: "${d.note_preview}"`
+                        break
+                      default:
+                        description = entry.action_type.replace(/_/g, ' ')
+                    }
+
+                    const iconMap: Record<string, string> = {
+                      booking_created: 'text-blue-600 bg-blue-50',
+                      status_changed: 'text-gray-600 bg-gray-100',
+                      rescheduled: 'text-amber-600 bg-amber-50',
+                      room_changed: 'text-teal-600 bg-teal-50',
+                      payment_updated: 'text-green-600 bg-green-50',
+                      cancelled: 'text-red-600 bg-red-50',
+                      completed: 'text-green-700 bg-green-50',
+                      no_show: 'text-gray-500 bg-gray-100',
+                      note_added: 'text-gray-600 bg-gray-100',
+                    }
+                    const dot = iconMap[entry.action_type] || 'text-gray-500 bg-gray-100'
+
+                    return (
+                      <div key={entry.id} className="flex items-start gap-3">
+                        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dot.split(' ')[1]}`}>
+                          <div className={`w-2 h-2 rounded-full ${dot.split(' ')[1]}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900">
+                            <span className="font-medium">{who}</span>{' '}
+                            <span className="text-gray-600">{description}</span>
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">{when}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </section>
           </div>
         )}

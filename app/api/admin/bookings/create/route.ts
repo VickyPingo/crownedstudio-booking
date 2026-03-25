@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock, RoomAssignmentInput } from '@/lib/roomAllocation'
+import { writeAuditLogServer, resolveAdminName } from '@/lib/auditLogServer'
 
 const safeNum = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v)
@@ -355,6 +356,19 @@ export async function POST(request: NextRequest) {
         console.error('[AdminBookingCreate] payment_transactions insert error:', txError)
       }
     }
+
+    const adminName = await resolveAdminName(adminUserId)
+    await writeAuditLogServer(booking.id, 'booking_created', adminUserId, adminName, {
+      booking_type: isCustomBooking ? 'custom' : 'existing_service',
+      service: isCustomBooking ? customBookingName : serviceSlug,
+      people_count: safeNum(peopleCount),
+      date: selectedDate,
+      time: selectedTime,
+      total_price: safeNum(pricing?.total),
+      status: bookingStatus,
+      rooms: roomAllocation.room_names,
+      payment_option: paymentOption,
+    })
 
     return NextResponse.json({
       success: true,

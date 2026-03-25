@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { checkRoomAvailability, assignRoomsToBooking } from '@/lib/roomAllocation'
+import { writeAuditLogServer } from '@/lib/auditLogServer'
 
 interface ReassignRoomRequest {
   bookingId: string
   newRoomId: string
+  adminId?: string | null
+  adminName?: string | null
+  previousRoomNames?: string[]
 }
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
-    const { bookingId, newRoomId } = (await request.json()) as ReassignRoomRequest
+    const { bookingId, newRoomId, adminId = null, adminName = null, previousRoomNames = [] } = (await request.json()) as ReassignRoomRequest
 
     if (!bookingId || !newRoomId) {
       return NextResponse.json({ error: 'Missing bookingId or newRoomId' }, { status: 400 })
@@ -78,6 +82,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await writeAuditLogServer(bookingId, 'room_changed', adminId, adminName, {
+      from: previousRoomNames.length > 0 ? previousRoomNames.join(', ') : 'unknown',
+      to: newRoom.room_name,
+    })
 
     return NextResponse.json({ success: true, roomName: newRoom.room_name })
   } catch (error) {
