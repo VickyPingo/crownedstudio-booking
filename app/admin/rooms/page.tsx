@@ -8,6 +8,7 @@ import { TimeBlockModal } from '@/components/admin/TimeBlockModal'
 import { supabase } from '@/lib/supabase/client'
 import type { Room, TimeBlock } from '@/types/admin'
 import { filterActiveBookings, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
+import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface BookingRoomAllocation {
   room_id: string
@@ -22,6 +23,8 @@ interface RoomBooking {
   status: string
   people_count: number
   total_price: number
+  balance_paid: number
+  no_payment_required: boolean
   is_custom_booking: boolean
   custom_booking_name: string | null
   assigned_room_ids?: string[]
@@ -73,13 +76,6 @@ const MAJOR_TIME_SLOTS = [
 const CALENDAR_START_HOUR = 8
 const SLOT_HEIGHT_PX = 60
 
-function getPaymentStatus(booking: RoomBooking): 'paid' | 'pending' | 'partial' {
-  const completedPayments = booking.payment_transactions?.filter(p => p.status === 'complete') || []
-  const totalPaid = completedPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
-  if (totalPaid >= booking.total_price) return 'paid'
-  if (totalPaid > 0) return 'partial'
-  return 'pending'
-}
 
 function getStatusColor(status: string): string {
   switch (status) {
@@ -216,6 +212,7 @@ export default function RoomsCalendarPage() {
         .from('bookings')
         .select(`
           id, start_time, end_time, room_id, status, people_count, total_price,
+          balance_paid, no_payment_required,
           is_custom_booking, custom_booking_name, payment_expires_at,
           allergies, medical_history, massage_pressure, is_pregnant,
           customer:customers(full_name),
@@ -644,7 +641,7 @@ export default function RoomsCalendarPage() {
 
                           {roomBookings.map((booking) => {
                             const { top, height } = getBookingPosition(booking)
-                            const paymentStatus = getPaymentStatus(booking)
+                            const paymentResult = getPaymentState(booking)
                             const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
                             const isDragging = dragState?.bookingId === booking.id
 
@@ -688,12 +685,8 @@ export default function RoomsCalendarPage() {
                                     {isMultiRoom ? `Room share: ${getPeopleCountForRoom(booking, room.id)}p` : `${booking.people_count}p`}
                                   </span>
                                   {height > 50 && (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                      paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
-                                      paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
-                                      'bg-amber-200 text-amber-800'
-                                    }`}>
-                                      {paymentStatus === 'paid' ? 'Paid' : paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${PAYMENT_STATE_STYLES[paymentResult.state]}`}>
+                                      {PAYMENT_STATE_LABELS[paymentResult.state]}
                                     </span>
                                   )}
                                 </div>
@@ -829,7 +822,7 @@ export default function RoomsCalendarPage() {
                     ) : (
                       <div className="divide-y divide-gray-100">
                         {roomBookings.map((booking) => {
-                          const paymentStatus = getPaymentStatus(booking)
+                          const paymentResult = getPaymentState(booking)
                           const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
                           return (
                             <button
@@ -855,12 +848,8 @@ export default function RoomsCalendarPage() {
                                       : booking.service?.name}
                                   </p>
                                 </div>
-                                <span className={`text-xs px-2 py-1 rounded shrink-0 ${
-                                  paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
-                                  paymentStatus === 'partial' ? 'bg-blue-200 text-blue-800' :
-                                  'bg-amber-200 text-amber-800'
-                                }`}>
-                                  {paymentStatus === 'paid' ? 'Paid' : paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                                <span className={`text-xs px-2 py-1 rounded shrink-0 ${PAYMENT_STATE_STYLES[paymentResult.state]}`}>
+                                  {PAYMENT_STATE_LABELS[paymentResult.state]}
                                 </span>
                               </div>
                               <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
