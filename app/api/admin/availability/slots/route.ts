@@ -9,6 +9,12 @@ import {
   TimeBlock,
   overlapsBooking,
 } from '@/lib/timeSlots'
+import {
+  findAllAvailableSlotsInActiveGroup,
+  Room,
+  RoomBooking,
+  SchedulingTimeBlock
+} from '@/lib/controlledScheduling'
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
@@ -41,7 +47,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // CRITICAL: If a specific room is requested, validate capacity BEFORE generating slots
+    // Determine booking mode: single-room vs multi-room
+    let useMultiRoomLogic = false
+    let requestedRoomName = ''
+
     if (roomId && peopleCount) {
       const { data: roomRow } = await supabase
         .from('rooms')
@@ -59,19 +68,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ availableSlots: [] })
       }
 
-      if (roomRow.capacity < peopleCount) {
-        console.warn(
-          `[AdminAvailability] Capacity rejected — room "${roomRow.room_name}" capacity ${roomRow.capacity} < people_count ${peopleCount}`
-        )
-        return NextResponse.json({
-          availableSlots: [],
-          capacityError: `${roomRow.room_name} has capacity ${roomRow.capacity} but booking requires ${peopleCount} people`
-        })
-      }
+      requestedRoomName = roomRow.room_name
 
-      console.log(
-        `[AdminAvailability] Room-specific availability for "${roomRow.room_name}" (capacity ${roomRow.capacity}, requested ${peopleCount})`
-      )
+      // DECISION POINT: Single-room or multi-room?
+      if (roomRow.capacity < peopleCount) {
+        // peopleCount exceeds single room capacity → switch to multi-room logic
+        console.log(
+          `[AdminAvailability] Switching to MULTI-ROOM mode: "${roomRow.room_name}" capacity ${roomRow.capacity} < people_count ${peopleCount}`
+        )
+        useMultiRoomLogic = true
+      } else {
+        // peopleCount fits in single room → use single-room logic
+        console.log(
+          `[AdminAvailability] Using SINGLE-ROOM mode for "${roomRow.room_name}" (capacity ${roomRow.capacity}, requested ${peopleCount})`
+        )
+      }
     }
 
     const localDate = new Date(date + 'T00:00:00')
@@ -108,13 +119,112 @@ export async function POST(request: NextRequest) {
     const dayStartISO = new Date(date + 'T00:00:00+02:00').toISOString()
     const dayEndISO = new Date(date + 'T23:59:59+02:00').toISOString()
 
+    // MULTI-ROOM LOGIC: Use the same algorithm as customer booking
+    if (useMultiRoomLogic) {
+      console.log(`[AdminAvailability] Using multi-room scheduling logic (starting from ${requestedRoomName})`)
+
+      // Load all treatment rooms
+      const { data: roomsData } = await supabase
+        .from('rooms')
+        .select('id, room_name, room_area, capacity, priority, active')
+        .eq('active', true)
+        .eq('room_area', 'treatment')
+        .order('priority', { ascending: true })
+
+      const rooms = (roomsData || []) as Room[]
+
+      // Load all bookings for the day
+      const { data: bookingsData } = await supabase
+        .from('bookings')
+        .select('id, start_time, end_time, room_id, status, payment_expires_at')
+        .gte('start_time', dayStartISO)
+        .lte('start_time', dayEndISO)
+
+      const now = new Date().toISOString()
+      const activeBookings = (bookingsData || []).filter((booking: any) => {
+        if (booking.status === 'confirmed' || booking.status === 'completed') return true
+        if (booking.status === 'pending_payment') {
+          return booking.payment_expires_at && booking.payment_expires_at > now
+        }
+        return false
+      })
+
+      const bookingIds = activeBookings.map((b: any) => b.id)
+
+      // Load multi-room assignments
+      let bookingRoomsData: any[] = []
+      if (bookingIds.length > 0) {
+        const { data: splitRooms } = await supabase
+          .from('booking_rooms')
+          .select('booking_id, room_id')
+          .in('booking_id', bookingIds)
+
+        bookingRoomsData = splitRooms || []
+      }
+
+      // Build room bookings list (combining legacy room_id and booking_rooms)
+      const roomBookings: RoomBooking[] = []
+      const seen = new Set<string>()
+
+      for (const booking of activeBookings) {
+        if (booking.room_id) {
+          const key = `${booking.id}:${booking.room_id}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            roomBookings.push({
+              room_id: booking.room_id,
+              start_time: booking.start_time,
+              end_time: booking.end_time
+            })
+          }
+        }
+
+        const extraRooms = bookingRoomsData.filter((row: any) => row.booking_id === booking.id)
+        for (const extraRoom of extraRooms) {
+          const key = `${booking.id}:${extraRoom.room_id}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            roomBookings.push({
+              room_id: extraRoom.room_id,
+              start_time: booking.start_time,
+              end_time: booking.end_time
+            })
+          }
+        }
+      }
+
+      // Load time blocks
+      const { data: timeBlocksRaw } = await supabase
+        .from('time_blocks')
+        .select('id, block_date, start_time, end_time, is_full_day, reason, room_id')
+        .eq('block_date', date)
+
+      const timeBlocks: SchedulingTimeBlock[] = (timeBlocksRaw || []) as SchedulingTimeBlock[]
+
+      // Call multi-room scheduling logic
+      const availableSlots = findAllAvailableSlotsInActiveGroup(
+        date,
+        rooms,
+        roomBookings,
+        serviceDurationMinutes,
+        peopleCount,
+        businessHours.open_time,
+        businessHours.close_time,
+        timeBlocks
+      )
+
+      console.log(`[AdminAvailability] Multi-room slots found: ${availableSlots.length}`)
+      return NextResponse.json({ availableSlots })
+    }
+
+    // SINGLE-ROOM LOGIC: Original behavior
     const { data: timeBlocksRaw } = await supabase
       .from('time_blocks')
       .select('*')
       .eq('block_date', date)
 
     const timeBlocks: TimeBlock[] = (timeBlocksRaw || []).filter((tb: any) => {
-      if (roomId) {
+      if (roomId && !useMultiRoomLogic) {
         // Include:
         // 1. Blocks specific to this room (tb.room_id === roomId)
         // 2. Global blocks with no room_id (applies to all rooms, both full-day and partial)
@@ -137,7 +247,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
     const existingBookingTimes: { startMin: number; endMin: number }[] = []
 
-    if (roomId) {
+    if (roomId && !useMultiRoomLogic) {
       // SOURCE OF TRUTH: booking_rooms first. Track which booking IDs we've seen.
       const { data: brBookings } = await supabase
         .from('booking_rooms')
@@ -185,7 +295,7 @@ export async function POST(request: NextRequest) {
           })
         }
       }
-    } else {
+    } else if (!roomId) {
       // No specific room — show slots that don't conflict with any booking on this date
       const { data: allBookings } = await supabase
         .from('bookings')
@@ -226,6 +336,7 @@ export async function POST(request: NextRequest) {
       return true
     })
 
+    console.log(`[AdminAvailability] Single-room slots found: ${availableSlots.length}`)
     return NextResponse.json({ availableSlots })
   } catch (error) {
     console.error('[AdminAvailabilitySlots] error:', error)
