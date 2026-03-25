@@ -23,12 +23,20 @@ export interface PaymentStateResult {
 
 export function getPaymentState(booking: PaymentStateInput): PaymentStateResult {
   const completedTxns = (booking.payment_transactions || []).filter(p => p.status === 'complete')
-  const rawDepositPaid = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
+  const txnTotal = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
   const rawBalancePaid = booking.balance_paid || 0
   const totalPrice = booking.total_price || 0
 
-  // No payment required: display amounts are zero (no money changed hands).
-  // Raw amounts are preserved so reporting callers can inspect stored DB values.
+  // Use whichever source shows more money received to avoid double-counting.
+  // Manual bookings store the full amount in both balance_paid AND create an audit
+  // payment_transaction — adding them would double the total. Taking the max
+  // gives the correct figure in all cases:
+  //   - Online payments: txnTotal > 0, balance_paid = 0  → txnTotal wins
+  //   - Manual deposit:  txnTotal = deposit, balance_paid = 0 → txnTotal wins
+  //   - Manual full pay: txnTotal = total, balance_paid = total → both equal, max = total (not 2x)
+  const rawDepositPaid = txnTotal
+  const totalPaid = Math.max(txnTotal, rawBalancePaid)
+
   if (booking.no_payment_required === true || totalPrice <= 0) {
     return {
       state: 'not_required',
@@ -37,21 +45,16 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
     }
   }
 
-  // Calculate actual money received from transactions + manual balance payments
-  const totalPaid = rawDepositPaid + rawBalancePaid
   const balanceDue = Math.max(0, totalPrice - totalPaid)
 
-  // Fully paid: no outstanding balance and total matches
   if (balanceDue <= 0 && totalPaid >= totalPrice) {
     return { state: 'fully_paid', totalPaid, depositPaid: rawDepositPaid, balancePaid: rawBalancePaid, balanceDue: 0, rawDepositPaid, rawBalancePaid }
   }
 
-  // Partially paid: some money received but balance remains
   if (totalPaid > 0) {
     return { state: 'partially_paid', totalPaid, depositPaid: rawDepositPaid, balancePaid: rawBalancePaid, balanceDue, rawDepositPaid, rawBalancePaid }
   }
 
-  // Pending: no money received yet
   return { state: 'pending', totalPaid: 0, depositPaid: 0, balancePaid: 0, balanceDue, rawDepositPaid, rawBalancePaid }
 }
 

@@ -230,6 +230,13 @@ export function ManualBookingModal({
     }
   }, [prefillRoomId, allRooms])
 
+  // When there is exactly one room assigned, keep its people count in sync with peopleCount
+  useEffect(() => {
+    if (roomAssignments.length === 1 && roomAssignments[0].people !== peopleCount) {
+      setRoomAssignments(prev => [{ ...prev[0], people: peopleCount }])
+    }
+  }, [peopleCount])
+
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 10)
     const search = customerSearch.toLowerCase()

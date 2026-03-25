@@ -461,9 +461,15 @@ export async function getRoomsForDate(
  * Always updates booking_rooms (source of truth) AND syncs bookings.room_id
  * to the first/primary room so the legacy column never drifts out of sync.
  */
+export interface RoomAssignmentInput {
+  roomId: string
+  people: number
+}
+
 export async function assignRoomsToBooking(
   bookingId: string,
-  roomIds: string[]
+  roomIds: string[],
+  assignments?: RoomAssignmentInput[]
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = supabaseAdmin
 
@@ -480,10 +486,14 @@ export async function assignRoomsToBooking(
     return { success: true }
   }
 
-  const inserts = roomIds.map(roomId => ({
-    booking_id: bookingId,
-    room_id: roomId,
-  }))
+  const inserts = roomIds.map(roomId => {
+    const assignment = assignments?.find(a => a.roomId === roomId)
+    return {
+      booking_id: bookingId,
+      room_id: roomId,
+      ...(assignment ? { capacity_used: assignment.people } : {}),
+    }
+  })
 
   const { error } = await supabase
     .from('booking_rooms')
@@ -493,8 +503,6 @@ export async function assignRoomsToBooking(
     return { success: false, error: error.message }
   }
 
-  // Always keep bookings.room_id in sync with the primary room from booking_rooms
-  // so the legacy column never causes ghost-blocking
   await supabase
     .from('bookings')
     .update({ room_id: roomIds[0] })
