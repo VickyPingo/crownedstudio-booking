@@ -123,11 +123,17 @@ function getPeopleCountForRoom(booking: RoomBooking, roomId: string): number {
     return booking.people_count
   }
 
-  // Multi-room booking: try to get from booking_rooms data
+  // Multi-room booking: check if booking_rooms has valid capacity data
   if (booking.booking_rooms) {
     const allocation = booking.booking_rooms.find(br => br.room_id === roomId)
     if (allocation) {
-      return allocation.capacity_used
+      // Validate: capacity_used should be reasonable (not default value of 1 for all rooms)
+      const totalCapacityUsed = booking.booking_rooms.reduce((sum, br) => sum + br.capacity_used, 0)
+
+      // If total capacity matches people_count, the data is valid
+      if (totalCapacityUsed === booking.people_count) {
+        return allocation.capacity_used
+      }
     }
   }
 
