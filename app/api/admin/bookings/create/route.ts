@@ -9,7 +9,7 @@ const safeNum = (v: unknown): number => {
 
 export async function POST(request: NextRequest) {
   try {
-    const Bolt Database = supabaseAdmin
+    const supabase = supabaseAdmin
     const payload = await request.json()
 
     console.log('[AdminBookingCreate] incoming payload:', JSON.stringify(payload))
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     let serviceArea = 'treatment'
     if (!isCustomBooking && serviceSlug) {
-      const { data: serviceData } = await Bolt Database
+      const { data: serviceData } = await supabase
         .from('services')
         .select('service_area')
         .eq('slug', serviceSlug)
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       const room_names: string[] = []
 
       for (const roomId of explicitRoomIds) {
-        const { data: roomRow } = await Bolt Database
+        const { data: roomRow } = await supabase
           .from('rooms')
           .select('room_name, room_area, capacity, active')
           .eq('id', roomId)
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[AdminBookingCreate] insert payload:', JSON.stringify(insertPayload))
 
-    const { data: booking, error: bookingError } = await Bolt Database
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert(insertPayload)
       .select('id')
@@ -277,7 +277,7 @@ export async function POST(request: NextRequest) {
     if (selectedUpsellsByPerson && Object.keys(selectedUpsellsByPerson).length > 0) {
       const allUpsellSlugs = [...new Set(Object.values(selectedUpsellsByPerson).flat())] as string[]
       if (allUpsellSlugs.length > 0) {
-        const { data: upsellData, error: upsellFetchError } = await Bolt Database
+        const { data: upsellData, error: upsellFetchError } = await supabase
           .from('upsells')
           .select('id, slug, price, duration_added_minutes')
           .in('slug', allUpsellSlugs)
