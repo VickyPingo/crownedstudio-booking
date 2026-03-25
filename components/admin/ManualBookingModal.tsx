@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Bolt Database } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 import { PerPersonUpsells, PerPersonPressure } from '@/types/booking'
 import { PersonalisationStep } from '@/components/booking-steps/PersonalisationStep'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
@@ -474,7 +474,7 @@ export function ManualBookingModal({
     setVoucherError('')
     setVoucherData(null)
 
-    const { data: voucher, error } = await Bolt Database
+    const { data: voucher, error } = await supabase
       .from('vouchers')
       .select('id, code, discount_type, discount_value, min_spend, usage_limit, usage_count, expires_at, is_active')
       .eq('code', voucherCode.trim().toUpperCase())
@@ -510,7 +510,7 @@ export function ManualBookingModal({
       let customerId = selectedCustomer?.id
 
       if (isNewCustomer) {
-        const { data: newCustomer, error: customerError } = await Bolt Database
+        const { data: newCustomer, error: customerError } = await supabase
           .from('customers')
           .insert({
             full_name: newCustomerName,
