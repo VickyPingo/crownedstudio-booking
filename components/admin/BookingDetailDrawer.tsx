@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 import type { BookingStatus, Room } from '@/types/admin'
 import { getMinimumBookingDate, isSameDayBooking } from '@/lib/timeSlots'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
-
+import { writeAuditLog } from '@/lib/auditLog'
 interface BookingDetailDrawerProps {
   bookingId: string | null
   onClose: () => void
@@ -218,10 +218,17 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         .update({ room_id: null })
         .eq('id', booking.id)
       if (!error) {
-        fetchBooking()
-        onUpdate()
-        setShowRoomSelect(false)
-      }
+  await writeAuditLog(booking.id, 'room_changed', {
+    from_room_id: booking.room_id,
+    to_room_id: null,
+    from_rooms: booking.assigned_rooms?.map(r => r.room_name) || [],
+    to_rooms: [],
+  })
+
+  fetchBooking()
+  onUpdate()
+  setShowRoomSelect(false)
+}
       setUpdatingRoom(false)
       return
     }
@@ -234,12 +241,21 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
-        alert(data.error || 'Failed to reassign room')
-      } else {
-        fetchBooking()
-        onUpdate()
-        setShowRoomSelect(false)
-      }
+  alert(data.error || 'Failed to reassign room')
+} else {
+  const newRoom = rooms.find(r => r.id === roomId)
+
+  await writeAuditLog(booking.id, 'room_changed', {
+    from_room_id: booking.room_id,
+    to_room_id: roomId,
+    from_rooms: booking.assigned_rooms?.map(r => r.room_name) || [],
+    to_rooms: newRoom ? [newRoom.room_name] : [],
+  })
+
+  fetchBooking()
+  onUpdate()
+  setShowRoomSelect(false)
+}
     } catch {
       alert('Network error — room reassignment failed')
     }
@@ -256,11 +272,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       .eq('id', booking.id)
 
     if (!error) {
-      setBooking({ ...booking, status: newStatus })
-      onUpdate()
-    }
-    setUpdatingStatus(false)
-  }
+  await writeAuditLog(booking.id, 'status_changed', {
+    from_status: booking.status,
+    to_status: newStatus,
+  })
+
+  setBooking({ ...booking, status: newStatus })
+  onUpdate()
+}
 
   const handleAddNote = async () => {
     if (!booking || !newNote.trim()) return
@@ -277,11 +296,13 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       })
 
     if (!error) {
-      setNewNote('')
-      await fetchBooking()
-    }
-    setAddingNote(false)
-  }
+  await writeAuditLog(booking.id, 'note_added', {
+    note: newNote.trim(),
+  })
+
+  setNewNote('')
+  await fetchBooking()
+}
 
   const handleReschedule = async () => {
     if (!booking || !rescheduleDate || !rescheduleTime) return
