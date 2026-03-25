@@ -172,6 +172,7 @@ export default function AdminPaymentsPage() {
       balance_paid_by: user?.id || null,
     }
 
+    // Change status from pending_payment to confirmed when balance is paid
     if (booking?.status === 'pending_payment') {
       updates.status = 'confirmed'
     }

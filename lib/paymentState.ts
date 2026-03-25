@@ -21,22 +21,28 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
   const completedTxns = (booking.payment_transactions || []).filter(p => p.status === 'complete')
   const depositPaid = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
   const balancePaid = booking.balance_paid || 0
-  const totalPaid = depositPaid + balancePaid
   const totalPrice = booking.total_price || 0
-  const balanceDue = Math.max(0, totalPrice - totalPaid)
 
-  if (booking.no_payment_required || totalPrice <= 0) {
-    return { state: 'not_required', totalPaid, depositPaid, balancePaid, balanceDue: 0 }
+  // If no payment is required, return not_required state with zero amounts
+  if (booking.no_payment_required === true || totalPrice <= 0) {
+    return { state: 'not_required', totalPaid: 0, depositPaid: 0, balancePaid: 0, balanceDue: 0 }
   }
 
+  // Calculate actual money received
+  const totalPaid = depositPaid + balancePaid
+  const balanceDue = Math.max(0, totalPrice - totalPaid)
+
+  // Fully paid: balance is zero AND total paid equals or exceeds total price
   if (balanceDue <= 0 && totalPaid >= totalPrice) {
     return { state: 'fully_paid', totalPaid, depositPaid, balancePaid, balanceDue: 0 }
   }
 
+  // Partially paid: some money has been received
   if (totalPaid > 0) {
     return { state: 'partially_paid', totalPaid, depositPaid, balancePaid, balanceDue }
   }
 
+  // Pending: no money received yet
   return { state: 'pending', totalPaid, depositPaid, balancePaid, balanceDue }
 }
 
