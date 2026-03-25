@@ -8,6 +8,11 @@ import { TimeBlockModal } from '@/components/admin/TimeBlockModal'
 import { supabase } from '@/lib/supabase/client'
 import type { Room, TimeBlock } from '@/types/admin'
 
+interface BookingRoomAllocation {
+  room_id: string
+  capacity_used: number
+}
+
 interface RoomBooking {
   id: string
   start_time: string
@@ -19,6 +24,7 @@ interface RoomBooking {
   is_custom_booking: boolean
   custom_booking_name: string | null
   assigned_room_ids?: string[]
+  booking_rooms?: BookingRoomAllocation[]
   allergies: string | null
   medical_history: string | null
   massage_pressure: string
@@ -107,6 +113,32 @@ function formatUpsellsSummary(upsells: { upsell: { name: string } }[]): string {
   if (upsells.length === 1) return upsells[0].upsell.name
   if (upsells.length === 2) return `${upsells[0].upsell.name}, ${upsells[1].upsell.name}`
   return `${upsells[0].upsell.name}, +${upsells.length - 1}`
+}
+
+function getPeopleCountForRoom(booking: RoomBooking, roomId: string): number {
+  const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
+
+  // Single-room booking: return total people count
+  if (!isMultiRoom) {
+    return booking.people_count
+  }
+
+  // Multi-room booking: try to get from booking_rooms data
+  if (booking.booking_rooms) {
+    const allocation = booking.booking_rooms.find(br => br.room_id === roomId)
+    if (allocation) {
+      return allocation.capacity_used
+    }
+  }
+
+  // Fallback: evenly distribute people across rooms
+  const roomCount = booking.assigned_room_ids!.length
+  const baseCount = Math.floor(booking.people_count / roomCount)
+  const remainder = booking.people_count % roomCount
+
+  // Give the remainder to the first rooms
+  const roomIndex = booking.assigned_room_ids!.indexOf(roomId)
+  return roomIndex < remainder ? baseCount + 1 : baseCount
 }
 
 export default function RoomsCalendarPage() {
@@ -198,20 +230,32 @@ export default function RoomsCalendarPage() {
       const bookingIds = bookingsRes.data.map(b => b.id)
       const { data: bookingRoomsData } = await supabase
         .from('booking_rooms')
-        .select('booking_id, room_id')
+        .select('booking_id, room_id, capacity_used')
         .in('booking_id', bookingIds)
 
       const bookingRoomsMap = new Map<string, string[]>()
+      const bookingRoomsAllocationsMap = new Map<string, BookingRoomAllocation[]>()
       if (bookingRoomsData) {
         bookingRoomsData.forEach(br => {
           if (!bookingRoomsMap.has(br.booking_id)) bookingRoomsMap.set(br.booking_id, [])
           bookingRoomsMap.get(br.booking_id)!.push(br.room_id)
+
+          if (!bookingRoomsAllocationsMap.has(br.booking_id)) bookingRoomsAllocationsMap.set(br.booking_id, [])
+          bookingRoomsAllocationsMap.get(br.booking_id)!.push({
+            room_id: br.room_id,
+            capacity_used: br.capacity_used
+          })
         })
       }
 
       enrichedBookings = bookingsRes.data.map(b => {
         const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
-        return { ...(b as unknown as RoomBooking), assigned_room_ids: assignedRoomIds }
+        const bookingRoomsAllocations = bookingRoomsAllocationsMap.get(b.id)
+        return {
+          ...(b as unknown as RoomBooking),
+          assigned_room_ids: assignedRoomIds,
+          booking_rooms: bookingRoomsAllocations
+        }
       })
     }
 
@@ -630,7 +674,9 @@ export default function RoomsCalendarPage() {
                                   <span className="text-xs">
                                     {new Date(booking.start_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
                                   </span>
-                                  <span className="text-xs opacity-70">{booking.people_count}p</span>
+                                  <span className="text-xs opacity-70">
+                                    {isMultiRoom ? `Room share: ${getPeopleCountForRoom(booking, room.id)}p` : `${booking.people_count}p`}
+                                  </span>
                                   {height > 50 && (
                                     <span className={`text-xs px-1.5 py-0.5 rounded ${
                                       paymentStatus === 'paid' ? 'bg-green-200 text-green-800' :
@@ -814,7 +860,11 @@ export default function RoomsCalendarPage() {
                                   {new Date(booking.end_time).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                                 <span className="text-gray-400">|</span>
-                                <span>{booking.people_count} person{booking.people_count !== 1 ? 's' : ''}</span>
+                                <span>
+                                  {isMultiRoom
+                                    ? `Room share: ${getPeopleCountForRoom(booking, room.id)} ${getPeopleCountForRoom(booking, room.id) !== 1 ? 'people' : 'person'}`
+                                    : `${booking.people_count} ${booking.people_count !== 1 ? 'people' : 'person'}`}
+                                </span>
                               </div>
                               <div className="mt-2 pt-2 border-t border-gray-200 space-y-1 text-xs text-gray-600">
                                 {booking.allergies && (
