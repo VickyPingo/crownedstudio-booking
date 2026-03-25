@@ -408,6 +408,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       balance_paid_by: user?.id || null,
     }
 
+    // Change status from pending_payment to confirmed when balance is paid
     if (booking.status === 'pending_payment') {
       updates.status = 'confirmed'
     }
@@ -830,7 +831,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Payment</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                {booking.no_payment_required ? (
+                {payment.state === 'not_required' ? (
                   <div className="flex items-center gap-2">
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES['not_required']}`}>
                       {PAYMENT_STATE_LABELS['not_required']}
@@ -849,7 +850,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Balance Paid</span>
-                      <span className="font-medium text-green-700">R{(booking.balance_paid || 0).toLocaleString()}</span>
+                      <span className="font-medium text-green-700">R{payment.balancePaid.toLocaleString()}</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between">
                       <span className="text-sm font-medium text-gray-700">Balance Due</span>

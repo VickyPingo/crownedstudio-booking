@@ -50,6 +50,26 @@ interface BusinessHours {
   after_hours_end_time: string | null
 }
 
+interface Room {
+  id: string
+  room_name: string
+  room_area: string
+  capacity: number
+  active: boolean
+}
+
+interface RoomAssignment {
+  roomId: string
+  roomName: string
+  capacity: number
+  people: number
+}
+
+interface ValidationResult {
+  valid: boolean
+  errors: string[]
+}
+
 interface ManualBookingModalProps {
   onClose: () => void
   onSuccess: () => void
@@ -104,13 +124,14 @@ export function ManualBookingModal({
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   const [services, setServices] = useState<Service[]>([])
   const [upsells, setUpsells] = useState<Upsell[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [businessHours, setBusinessHours] = useState<Record<number, BusinessHours>>({})
-  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [allRooms, setAllRooms] = useState<Room[]>([])
 
   const [customerSearch, setCustomerSearch] = useState('')
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
@@ -130,6 +151,8 @@ export function ManualBookingModal({
   const [peopleCount, setPeopleCount] = useState(1)
   const [selectedDate, setSelectedDate] = useState(prefillDate || '')
   const [selectedTime, setSelectedTime] = useState(prefillTime || '')
+
+  const [roomAssignments, setRoomAssignments] = useState<RoomAssignment[]>([])
 
   const [selectedUpsellsByPerson, setSelectedUpsellsByPerson] = useState<PerPersonUpsells>({})
   const [pressureByPerson, setPressureByPerson] = useState<PerPersonPressure>({})
@@ -156,16 +179,18 @@ export function ManualBookingModal({
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true)
-      const [servicesRes, upsellsRes, customersRes, hoursRes] = await Promise.all([
+      const [servicesRes, upsellsRes, customersRes, hoursRes, roomsRes] = await Promise.all([
         supabase.from('services').select('*').eq('active', true).order('name'),
         supabase.from('upsells').select('*').eq('active', true).order('name'),
         supabase.from('customers').select('*').order('full_name'),
         supabase.from('business_hours').select('*'),
+        supabase.from('rooms').select('id, room_name, room_area, capacity, active').eq('active', true).order('room_name'),
       ])
 
       if (servicesRes.data) setServices(servicesRes.data as Service[])
       if (upsellsRes.data) setUpsells(upsellsRes.data)
       if (customersRes.data) setCustomers(customersRes.data)
+      if (roomsRes.data) setAllRooms(roomsRes.data as Room[])
 
       if (hoursRes.data) {
         const hoursMap: Record<number, BusinessHours> = {}
@@ -196,67 +221,21 @@ export function ManualBookingModal({
     fetchInitialData()
   }, [prefillCustomerId])
 
+  // Initialise room assignments when prefillRoomId changes or allRooms loads
   useEffect(() => {
-    if (!selectedDate) return
-    if (bookingType === 'existing' && !selectedService) return
-    if (bookingType === 'custom' && (!customBookingName.trim() || !customDurationMinutes)) return
-    fetchSlots()
-  }, [selectedDate, selectedService, peopleCount, selectedUpsellsByPerson, bookingType, customBookingName, customDurationMinutes])
-
-  const fetchSlots = async () => {
-    if (!selectedDate) return
-    setSlotsLoading(true)
-
-    let requestBody: Record<string, unknown>
-
-    if (bookingType === 'custom') {
-      if (!customBookingName.trim() || !customDurationMinutes) return
-      const maxCustomAddon = Object.values(selectedUpsellsByPerson)
-        .flat()
-        .reduce((max, upsellId) => {
-          const upsell = upsells.find((u) => u.id === upsellId)
-          const d = upsell?.duration_added_minutes || 0
-          return d > max ? d : max
-        }, 0)
-      requestBody = {
-        date: selectedDate,
-        serviceDurationMinutes: Number(customDurationMinutes) + maxCustomAddon,
-        peopleCount,
-        roomId: prefillRoomId || null,
-        isCustomBooking: true,
-      }
-    } else {
-      if (!selectedService) return
-      const maxAddonDuration = Object.values(selectedUpsellsByPerson)
-        .flat()
-        .reduce((max, upsellId) => {
-          const upsell = upsells.find((u) => u.id === upsellId)
-          const d = upsell?.duration_added_minutes || 0
-          return d > max ? d : max
-        }, 0)
-      requestBody = {
-        date: selectedDate,
-        serviceSlug: selectedService.slug,
-        serviceDurationMinutes: selectedService.duration_minutes + maxAddonDuration,
-        peopleCount,
-        roomId: prefillRoomId || null,
-      }
+    if (!prefillRoomId || allRooms.length === 0) return
+    const room = allRooms.find(r => r.id === prefillRoomId)
+    if (room && roomAssignments.length === 0) {
+      setRoomAssignments([{ roomId: room.id, roomName: room.room_name, capacity: room.capacity, people: peopleCount }])
     }
+  }, [prefillRoomId, allRooms])
 
-    try {
-      const res = await fetch('/api/admin/availability/slots', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      })
-      const data = await res.json()
-      setAvailableSlots(data.availableSlots || [])
-    } catch {
-      setAvailableSlots([])
-    } finally {
-      setSlotsLoading(false)
+  // When there is exactly one room assigned, keep its people count in sync with peopleCount
+  useEffect(() => {
+    if (roomAssignments.length === 1 && roomAssignments[0].people !== peopleCount) {
+      setRoomAssignments(prev => [{ ...prev[0], people: peopleCount }])
     }
-  }
+  }, [peopleCount])
 
   const filteredCustomers = useMemo(() => {
     if (!customerSearch) return customers.slice(0, 10)
@@ -282,6 +261,21 @@ export function ManualBookingModal({
       .filter((s) => s.length > 0)
     return upsells.filter((u) => allowed.includes(u.name))
   }, [bookingType, selectedService, upsells])
+
+  const totalDuration = useMemo(() => {
+    const maxAddon = Object.values(selectedUpsellsByPerson)
+      .flat()
+      .reduce((max, upsellId) => {
+        const upsell = upsells.find((u) => u.id === upsellId)
+        const d = upsell?.duration_added_minutes || 0
+        return d > max ? d : max
+      }, 0)
+
+    if (bookingType === 'custom') {
+      return Number(customDurationMinutes || 0) + maxAddon
+    }
+    return (selectedService?.duration_minutes || 0) + maxAddon
+  }, [bookingType, customDurationMinutes, selectedService, selectedUpsellsByPerson, upsells])
 
   const getServicePrice = useCallback((service: Service, count: number): number => {
     const prices = [
@@ -363,7 +357,100 @@ export function ManualBookingModal({
     const deposit = Math.round(total * 0.5)
 
     return { basePrice, upsellsTotal, surcharge, subtotal, discount, total, deposit }
-  }, [selectedService, selectedDate, selectedTime, peopleCount, selectedUpsellsByPerson, upsells, businessHours, voucherData, getServicePrice])
+  }, [selectedService, selectedDate, selectedTime, peopleCount, selectedUpsellsByPerson, upsells, businessHours, voucherData, getServicePrice, bookingType, customPrice])
+
+  const assignedPeopleTotal = useMemo(
+    () => roomAssignments.reduce((sum, ra) => sum + ra.people, 0),
+    [roomAssignments]
+  )
+
+  const roomAssignmentValid = useMemo(() => {
+    if (roomAssignments.length === 0) return false
+    if (assignedPeopleTotal !== peopleCount) return false
+    for (const ra of roomAssignments) {
+      if (ra.people <= 0 || ra.people > ra.capacity) return false
+    }
+    const ids = roomAssignments.map(r => r.roomId)
+    if (new Set(ids).size !== ids.length) return false
+    return true
+  }, [roomAssignments, peopleCount, assignedPeopleTotal])
+
+  const addRoomAssignment = () => {
+    const usedIds = new Set(roomAssignments.map(r => r.roomId))
+    const next = allRooms.find(r => !usedIds.has(r.id))
+    if (!next) return
+    setRoomAssignments(prev => [...prev, { roomId: next.id, roomName: next.room_name, capacity: next.capacity, people: 1 }])
+  }
+
+  const removeRoomAssignment = (idx: number) => {
+    setRoomAssignments(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const updateRoomAssignment = (idx: number, field: 'roomId' | 'people', value: string | number) => {
+    setRoomAssignments(prev => {
+      const next = [...prev]
+      if (field === 'roomId') {
+        const room = allRooms.find(r => r.id === value)
+        if (room) {
+          next[idx] = { ...next[idx], roomId: room.id, roomName: room.room_name, capacity: room.capacity }
+        }
+      } else {
+        next[idx] = { ...next[idx], people: Number(value) }
+      }
+      return next
+    })
+  }
+
+  const validateDateTime = useCallback(async (): Promise<ValidationResult> => {
+    if (!selectedDate || !selectedTime || totalDuration <= 0) {
+      return { valid: false, errors: ['Date, time, and duration are required'] }
+    }
+    if (roomAssignments.length === 0) {
+      return { valid: false, errors: ['At least one room must be assigned'] }
+    }
+    if (!roomAssignmentValid) {
+      const errors: string[] = []
+      if (assignedPeopleTotal !== peopleCount) {
+        errors.push(`People assigned (${assignedPeopleTotal}) must equal total people count (${peopleCount})`)
+      }
+      for (const ra of roomAssignments) {
+        if (ra.people > ra.capacity) {
+          errors.push(`${ra.roomName} capacity is ${ra.capacity} but ${ra.people} people assigned`)
+        }
+        if (ra.people <= 0) {
+          errors.push(`${ra.roomName} must have at least 1 person assigned`)
+        }
+      }
+      const ids = roomAssignments.map(r => r.roomId)
+      if (new Set(ids).size !== ids.length) {
+        errors.push('Duplicate room assignments are not allowed')
+      }
+      return { valid: false, errors }
+    }
+
+    setValidating(true)
+    try {
+      const res = await fetch('/api/admin/bookings/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedDate,
+          selectedTime,
+          totalDuration,
+          roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.valid) {
+        return { valid: false, errors: data.errors || ['Validation failed'] }
+      }
+      return { valid: true, errors: [] }
+    } catch {
+      return { valid: false, errors: ['Could not validate — please check your connection'] }
+    } finally {
+      setValidating(false)
+    }
+  }, [selectedDate, selectedTime, totalDuration, roomAssignments, roomAssignmentValid, assignedPeopleTotal, peopleCount])
 
   const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer)
@@ -409,6 +496,13 @@ export function ManualBookingModal({
   }
 
   const handleSubmit = async () => {
+    setValidationErrors([])
+    const validation = await validateDateTime()
+    if (!validation.valid) {
+      setValidationErrors(validation.errors)
+      return
+    }
+
     setSubmitting(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -464,18 +558,9 @@ export function ManualBookingModal({
 
       const primaryPressure = pressureByPerson[1] || 'medium'
 
-      let totalDuration: number
       let bodyExtras: Record<string, unknown>
 
       if (bookingType === 'custom') {
-        const maxCustomAddon = Object.values(selectedUpsellsByPerson)
-          .flat()
-          .reduce((max, upsellId) => {
-            const upsell = upsells.find((u) => u.id === upsellId)
-            const d = upsell?.duration_added_minutes || 0
-            return d > max ? d : max
-          }, 0)
-        totalDuration = Number(customDurationMinutes) + maxCustomAddon
         bodyExtras = {
           isCustomBooking: true,
           customBookingName: customBookingName.trim(),
@@ -483,14 +568,6 @@ export function ManualBookingModal({
           customPrice: Number(customPrice) || 0,
         }
       } else {
-        const maxAddonDuration = Object.values(selectedUpsellsByPerson)
-          .flat()
-          .reduce((max, upsellId) => {
-            const upsell = upsells.find((u) => u.id === upsellId)
-            const d = upsell?.duration_added_minutes || 0
-            return d > max ? d : max
-          }, 0)
-        totalDuration = selectedService!.duration_minutes + maxAddonDuration
         bodyExtras = { serviceSlug: selectedService!.slug }
       }
 
@@ -517,14 +594,14 @@ export function ManualBookingModal({
           depositPaid,
           fullyPaid,
           selectedUpsellsByPerson: upsellsByPersonWithSlugs,
-          prefillRoomId: prefillRoomId || null,
+          roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
         }),
       })
 
       const result = await response.json()
 
       if (!response.ok || !result.success) {
-        alert(result.error || 'Failed to create booking')
+        setValidationErrors([result.error || 'Failed to create booking'])
         setSubmitting(false)
         return
       }
@@ -565,7 +642,7 @@ export function ManualBookingModal({
         }
         return selectedService !== null && peopleCount > 0
       case 3:
-        return selectedDate !== '' && selectedTime !== ''
+        return selectedDate !== '' && selectedTime !== '' && roomAssignmentValid
       case 4:
         return allPressuresSet
       case 5:
@@ -744,7 +821,6 @@ export function ManualBookingModal({
                         setBookingType(type)
                         setSelectedService(null)
                         setSelectedTime('')
-                        setAvailableSlots([])
                         setCustomBookingName('')
                         setCustomDurationMinutes(60)
                         setCustomPrice(0)
@@ -772,7 +848,7 @@ export function ManualBookingModal({
                     <input
                       type="text"
                       value={customBookingName}
-                      onChange={(e) => { setCustomBookingName(e.target.value); setSelectedTime(''); setAvailableSlots([]) }}
+                      onChange={(e) => setCustomBookingName(e.target.value)}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                       placeholder="e.g. Corporate Chair Massage"
                     />
@@ -783,9 +859,9 @@ export function ManualBookingModal({
                       <input
                         type="number"
                         min={15}
-                        step={15}
+                        step={5}
                         value={customDurationMinutes}
-                        onChange={(e) => { setCustomDurationMinutes(e.target.value === '' ? '' : Number(e.target.value)); setSelectedTime(''); setAvailableSlots([]) }}
+                        onChange={(e) => setCustomDurationMinutes(e.target.value === '' ? '' : Number(e.target.value))}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
                         placeholder="60"
                       />
@@ -893,65 +969,142 @@ export function ManualBookingModal({
           {step === 3 && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">Date & Time</h3>
-                <p className="text-sm text-gray-500">
-                  {prefillRoomName
-                    ? `Showing availability for ${prefillRoomName}`
-                    : bookingType === 'custom'
-                    ? `Availability for ${customBookingName} (${customDurationMinutes} min)`
-                    : 'Pick a date and available time slot'}
-                </p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-1">Date, Time & Rooms</h3>
+                <p className="text-sm text-gray-500">Set an exact start time and assign rooms directly — no slot restrictions apply</p>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
+                  <input
+                    type="time"
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    step={60}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {selectedDate && selectedTime && totalDuration > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 flex flex-wrap gap-4">
+                  <span>
+                    <span className="font-medium">Duration:</span> {totalDuration} min
+                  </span>
+                  <span>
+                    <span className="font-medium">End time:</span>{' '}
+                    {(() => {
+                      const [h, m] = selectedTime.split(':').map(Number)
+                      const endMin = h * 60 + m + totalDuration
+                      return `${String(Math.floor(endMin / 60) % 24).padStart(2, '0')}:${String(endMin % 60).padStart(2, '0')}`
+                    })()}
+                  </span>
+                  <span>
+                    <span className="font-medium">People:</span> {peopleCount}
+                  </span>
+                </div>
+              )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    setSelectedDate(e.target.value)
-                    setSelectedTime('')
-                  }}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700">Room Assignments</label>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                    assignedPeopleTotal === peopleCount
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {assignedPeopleTotal}/{peopleCount} people assigned
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {roomAssignments.map((ra, idx) => {
+                    const usedIds = new Set(roomAssignments.filter((_, i) => i !== idx).map(r => r.roomId))
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl bg-white">
+                        <div className="flex-1">
+                          <select
+                            value={ra.roomId}
+                            onChange={(e) => updateRoomAssignment(idx, 'roomId', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                          >
+                            {allRooms.map(room => (
+                              <option
+                                key={room.id}
+                                value={room.id}
+                                disabled={usedIds.has(room.id)}
+                              >
+                                {room.room_name} (cap. {room.capacity})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="w-28 flex-shrink-0">
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-gray-500 whitespace-nowrap">People:</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={ra.capacity}
+                              value={ra.people}
+                              onChange={(e) => updateRoomAssignment(idx, 'people', e.target.value)}
+                              className={`w-14 px-2 py-2 border rounded-lg text-sm text-gray-900 text-center focus:ring-2 focus:ring-gray-900 focus:border-transparent ${
+                                ra.people > ra.capacity ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                              }`}
+                            />
+                          </div>
+                          {ra.people > ra.capacity && (
+                            <p className="text-xs text-red-600 mt-0.5">Max {ra.capacity}</p>
+                          )}
+                        </div>
+                        {roomAssignments.length > 1 && (
+                          <button
+                            onClick={() => removeRoomAssignment(idx)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {roomAssignments.length < allRooms.length && (
+                  <button
+                    onClick={addRoomAssignment}
+                    className="mt-3 flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 border border-dashed border-gray-300 rounded-xl hover:border-gray-400 transition-colors w-full justify-center"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add another room
+                  </button>
+                )}
+
+                {roomAssignments.length > 0 && assignedPeopleTotal !== peopleCount && (
+                  <p className="text-sm text-amber-700 mt-2">
+                    Total people assigned ({assignedPeopleTotal}) must match booking people count ({peopleCount})
+                  </p>
+                )}
               </div>
 
-              {selectedDate && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">Available Times</label>
-                    {slotsLoading && (
-                      <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Loading slots...
-                      </span>
-                    )}
-                  </div>
-                  {!slotsLoading && availableSlots.length === 0 ? (
-                    <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="text-gray-600 font-medium">No available time slots for this date</p>
-                      <p className="text-sm text-gray-400 mt-1">Try a different date or check existing bookings</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-5 sm:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
-                      {availableSlots.map((time) => (
-                        <button
-                          key={time}
-                          onClick={() => setSelectedTime(time)}
-                          className={`py-2.5 text-sm rounded-lg font-medium transition-colors ${
-                            selectedTime === time
-                              ? 'bg-gray-900 text-white shadow-sm'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {time}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {validationErrors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  {validationErrors.map((err, i) => (
+                    <p key={i} className="text-sm text-red-700">{err}</p>
+                  ))}
                 </div>
               )}
             </div>
@@ -1130,13 +1283,24 @@ export function ManualBookingModal({
                     <strong>Date:</strong>{' '}
                     {new Date(selectedDate).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })} at {selectedTime}
                   </p>
-                  {prefillRoomName && <p><strong>Preferred Room:</strong> {prefillRoomName}</p>}
+                  <p>
+                    <strong>Rooms:</strong>{' '}
+                    {roomAssignments.map(ra => `${ra.roomName} (${ra.people}p)`).join(', ')}
+                  </p>
                   <p>
                     <strong>Status:</strong>{' '}
                     {paymentOption === 'no_payment' || fullyPaid || depositPaid ? 'Confirmed' : 'Pending Payment'}
                   </p>
                 </div>
               </div>
+
+              {validationErrors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  {validationErrors.map((err, i) => (
+                    <p key={i} className="text-sm text-red-700">{err}</p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1144,7 +1308,7 @@ export function ManualBookingModal({
         <div className="px-8 py-5 border-t bg-gray-50 flex items-center justify-between gap-4">
           {step > 1 ? (
             <button
-              onClick={() => setStep(step - 1)}
+              onClick={() => { setStep(step - 1); setValidationErrors([]) }}
               className="px-5 py-2.5 text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-xl font-medium transition-colors"
             >
               Back
@@ -1157,16 +1321,26 @@ export function ManualBookingModal({
             <span className="text-sm text-gray-400">{STEPS[step - 1]}</span>
             {step < 5 ? (
               <button
-                onClick={() => setStep(step + 1)}
-                disabled={!canProceed(step)}
+                onClick={async () => {
+                  if (step === 3) {
+                    setValidationErrors([])
+                    const validation = await validateDateTime()
+                    if (!validation.valid) {
+                      setValidationErrors(validation.errors)
+                      return
+                    }
+                  }
+                  setStep(step + 1)
+                }}
+                disabled={!canProceed(step) || validating}
                 className="px-7 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Continue
+                {validating ? 'Checking...' : 'Continue'}
               </button>
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || validating}
                 className="px-7 py-2.5 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
               >
                 {submitting ? 'Creating...' : 'Create Booking'}

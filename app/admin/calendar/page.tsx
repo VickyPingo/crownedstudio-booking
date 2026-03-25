@@ -8,6 +8,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { TimeBlock } from '@/types/admin'
 import { DISPLAY_BOOKING_STATUSES } from '@/lib/bookingFilters'
+import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface Booking {
   id: string
@@ -19,6 +20,10 @@ interface Booking {
   start_time: string
   people_count: number
   room_id: string | null
+  total_price: number
+  balance_paid: number
+  no_payment_required: boolean
+  payment_transactions?: Array<{ status: string; amount: number }>
   customer_name?: string
   service_name?: string
   room_name?: string
@@ -56,7 +61,7 @@ export default function AdminCalendarPage() {
 
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id')
+        .select('id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id, total_price, balance_paid, no_payment_required, payment_transactions(status, amount)')
         .gte('start_time', `${startOfMonth}T00:00:00`)
         .lte('start_time', `${endOfMonth}T23:59:59`)
         .in('status', DISPLAY_BOOKING_STATUSES)
@@ -211,6 +216,7 @@ export default function AdminCalendarPage() {
       confirmed: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',
+      pending_payment: 'bg-amber-100 text-amber-800',
       no_show: 'bg-gray-200 text-gray-700',
     }
     return styles[status] || 'bg-gray-100 text-gray-800'
@@ -219,6 +225,15 @@ export default function AdminCalendarPage() {
   const formatStatus = (status: string) => {
     return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
+
+  const getBookingPaymentState = (booking: Booking) =>
+    getPaymentState({
+      total_price: booking.total_price,
+      balance_paid: booking.balance_paid,
+      no_payment_required: booking.no_payment_required,
+      status: booking.status,
+      payment_transactions: booking.payment_transactions,
+    })
 
   return (
     <AdminLayout>
@@ -467,10 +482,18 @@ export default function AdminCalendarPage() {
                         <p className="text-xs text-gray-500 mt-0.5">{booking.room_name}</p>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-1 items-end">
                       <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>
                         {formatStatus(booking.status)}
                       </span>
+                      {(() => {
+                        const ps = getBookingPaymentState(booking)
+                        return (
+                          <span className={`px-2 py-1 text-xs rounded-full ${PAYMENT_STATE_STYLES[ps.state]}`}>
+                            {PAYMENT_STATE_LABELS[ps.state]}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </button>
                 ))}

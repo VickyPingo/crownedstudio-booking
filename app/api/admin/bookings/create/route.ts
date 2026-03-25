@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock } from '@/lib/roomAllocation'
+import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock, RoomAssignmentInput } from '@/lib/roomAllocation'
 
 const safeNum = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v)
@@ -37,8 +37,15 @@ export async function POST(request: NextRequest) {
       depositPaid,
       fullyPaid,
       selectedUpsellsByPerson,
+      // New: explicit room assignments from admin UI (array of { roomId, people })
+      roomAssignments,
+      // Legacy fallback — kept for backward compat with any direct API callers
       prefillRoomId,
     } = payload
+
+    const explicitRoomIds: string[] = Array.isArray(roomAssignments) && roomAssignments.length > 0
+      ? roomAssignments.map((ra: { roomId: string }) => ra.roomId)
+      : prefillRoomId ? [prefillRoomId] : []
 
     const safeDuration = safeNum(totalDuration)
 
@@ -77,85 +84,101 @@ export async function POST(request: NextRequest) {
 
     let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }
 
-    if (prefillRoomId) {
-      const { checkRoomAvailability } = await import('@/lib/roomAllocation')
+    if (explicitRoomIds.length > 0) {
+      // Admin has explicitly chosen rooms — validate each one without falling back to auto-allocation
+      const room_ids: string[] = []
+      const room_names: string[] = []
 
-      const { data: prefillRoomRow } = await supabase
-        .from('rooms')
-        .select('room_name, room_area, capacity, active')
-        .eq('id', prefillRoomId)
-        .maybeSingle()
+      for (const roomId of explicitRoomIds) {
+        const { data: roomRow } = await supabase
+          .from('rooms')
+          .select('room_name, room_area, capacity, active')
+          .eq('id', roomId)
+          .maybeSingle()
 
-      console.log('[AdminBookingCreate] prefillRoomId:', prefillRoomId, '| room record:', prefillRoomRow, '| resolved serviceArea:', serviceArea)
-
-      const roomCapacity = prefillRoomRow?.capacity ?? 0
-      const safePeopleCount = safeNum(peopleCount)
-      if (prefillRoomRow && roomCapacity < safePeopleCount) {
-        console.error(
-          `[AdminBookingCreate] Capacity rejected — room "${prefillRoomRow.room_name}" capacity ${roomCapacity} < people_count ${safePeopleCount}`
-        )
-        return NextResponse.json(
-          { error: `Room "${prefillRoomRow.room_name}" has capacity ${roomCapacity} but booking requires ${safePeopleCount} people` },
-          { status: 409 }
-        )
-      }
-
-      const isAvailable = await checkRoomAvailability(prefillRoomId, startDateTime, endDateTime)
-
-      console.log('[AdminBookingCreate] checkRoomAvailability result for', prefillRoomRow?.room_name ?? prefillRoomId, ':', isAvailable)
-
-      if (isAvailable) {
-        roomAllocation = {
-          room_ids: [prefillRoomId],
-          room_names: [prefillRoomRow?.room_name || ''],
+        if (!roomRow || !roomRow.active) {
+          return NextResponse.json(
+            { error: `Room ${roomId} not found or inactive` },
+            { status: 409 }
+          )
         }
-        console.log('[AdminBookingCreate] Using prefill room:', prefillRoomRow?.room_name ?? prefillRoomId)
-      } else {
-        console.error(
-          '[AdminBookingCreate] Prefill room', prefillRoomRow?.room_name ?? prefillRoomId,
-          'is not available for', startDateTime.toISOString(), '–', endDateTime.toISOString(),
-          '| NOT falling back to auto-allocation — returning conflict error'
-        )
-        return NextResponse.json(
-          { error: `Room "${prefillRoomRow?.room_name ?? prefillRoomId}" is not available for the selected time slot` },
-          { status: 409 }
-        )
+
+        // Check for conflicting time blocks
+        const blockingBlock = await getBlockingTimeBlock(roomId, startDateTime, endDateTime)
+        if (blockingBlock) {
+          const blockDesc = blockingBlock.is_full_day
+            ? 'all day'
+            : `${blockingBlock.start_time?.slice(0, 5)} to ${blockingBlock.end_time?.slice(0, 5)}`
+          console.error(
+            `[AdminBookingCreate] Rejected — room "${roomRow.room_name}" blocked ${blockDesc} id=${blockingBlock.id}`
+          )
+          return NextResponse.json(
+            { error: `Room "${roomRow.room_name}" is blocked ${blockDesc} and cannot be booked during this time` },
+            { status: 409 }
+          )
+        }
+
+        // Check for conflicting bookings
+        const { checkRoomAvailability } = await import('@/lib/roomAllocation')
+        const isAvailable = await checkRoomAvailability(roomId, startDateTime, endDateTime)
+        if (!isAvailable) {
+          console.error(
+            `[AdminBookingCreate] Rejected — room "${roomRow.room_name}" has conflicting booking` +
+            ` | requested ${startDateTime.toISOString()} – ${endDateTime.toISOString()}`
+          )
+          return NextResponse.json(
+            { error: `Room "${roomRow.room_name}" is not available for the selected time slot` },
+            { status: 409 }
+          )
+        }
+
+        room_ids.push(roomId)
+        room_names.push(roomRow.room_name)
+        console.log(`[AdminBookingCreate] Admin-assigned room accepted: "${roomRow.room_name}"`)
       }
+
+      roomAllocation = { room_ids, room_names }
     } else {
+      // No explicit rooms — use auto-allocation based on service area
       try {
         roomAllocation = await allocateRoom(serviceArea, startDateTime, endDateTime, safeNum(peopleCount))
       } catch (err) {
         console.error('[AdminBookingCreate] Room allocation error:', err)
         return NextResponse.json({ error: 'Room allocation failed' }, { status: 500 })
       }
+
+      if (roomAllocation.error || roomAllocation.room_ids.length === 0) {
+        return NextResponse.json(
+          { error: roomAllocation.error || 'No rooms available for this time slot' },
+          { status: 409 }
+        )
+      }
+
+      // Defensive guard for auto-allocated rooms
+      for (const roomId of roomAllocation.room_ids) {
+        const blockingBlock = await getBlockingTimeBlock(roomId, startDateTime, endDateTime)
+        if (blockingBlock) {
+          const blockDesc = blockingBlock.is_full_day
+            ? 'all day'
+            : `${blockingBlock.start_time?.slice(0, 5)} to ${blockingBlock.end_time?.slice(0, 5)}`
+          console.error(
+            `[AdminBookingCreate] Rejected — room ${roomId} is blocked by time block id=${blockingBlock.id}` +
+            ` (${blockingBlock.room_id ? 'room-specific' : 'global'}) ${blockDesc}` +
+            ` | requested ${startDateTime.toISOString()} – ${endDateTime.toISOString()}`
+          )
+          return NextResponse.json(
+            { error: `Room is blocked from ${blockDesc} and cannot be booked during this time` },
+            { status: 409 }
+          )
+        }
+      }
     }
 
-    if (roomAllocation.error || roomAllocation.room_ids.length === 0) {
+    if (roomAllocation.room_ids.length === 0) {
       return NextResponse.json(
         { error: roomAllocation.error || 'No rooms available for this time slot' },
         { status: 409 }
       )
-    }
-
-    // Final defensive guard: re-check all allocated rooms against time blocks
-    // before inserting. Catches race conditions and direct API calls that bypass
-    // the availability slot filter.
-    for (const roomId of roomAllocation.room_ids) {
-      const blockingBlock = await getBlockingTimeBlock(roomId, startDateTime, endDateTime)
-      if (blockingBlock) {
-        const blockDesc = blockingBlock.is_full_day
-          ? 'all day'
-          : `${blockingBlock.start_time?.slice(0, 5)} to ${blockingBlock.end_time?.slice(0, 5)}`
-        console.error(
-          `[AdminBookingCreate] Rejected — room ${roomId} is blocked by time block id=${blockingBlock.id}` +
-          ` (${blockingBlock.room_id ? 'room-specific' : 'global'}) ${blockDesc}` +
-          ` | requested ${startDateTime.toISOString()} – ${endDateTime.toISOString()}`
-        )
-        return NextResponse.json(
-          { error: `Room is blocked from ${blockDesc} and cannot be booked during this time` },
-          { status: 409 }
-        )
-      }
     }
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -206,9 +229,9 @@ export async function POST(request: NextRequest) {
       payment_method_manual: !isNoPayment ? (manualPaymentMethod || null) : null,
       deposit_paid_manually: depositPaid === true,
       deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
-      balance_paid: fullyPaid === true ? totalPrice : (isNoPayment ? totalPrice : 0),
-      balance_paid_at: (fullyPaid === true || isNoPayment) ? new Date().toISOString() : null,
-      balance_paid_by: (fullyPaid === true || isNoPayment) ? adminUserId : null,
+      balance_paid: fullyPaid === true ? totalPrice : 0,
+      balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
+      balance_paid_by: fullyPaid === true ? adminUserId : null,
       room_id: roomAllocation.room_ids[0] || null,
       terms_accepted: true,
       terms_accepted_at: new Date().toISOString(),
@@ -238,7 +261,12 @@ export async function POST(request: NextRequest) {
 
     console.log('[AdminBookingCreate] Booking created:', booking.id)
 
-    const assignResult = await assignRoomsToBooking(booking.id, roomAllocation.room_ids).catch((err) => {
+    const explicitAssignments: RoomAssignmentInput[] | undefined =
+      Array.isArray(roomAssignments) && roomAssignments.length > 0
+        ? roomAssignments.map((ra: { roomId: string; people: number }) => ({ roomId: ra.roomId, people: ra.people }))
+        : undefined
+
+    const assignResult = await assignRoomsToBooking(booking.id, roomAllocation.room_ids, explicitAssignments).catch((err) => {
       console.error('[AdminBookingCreate] assignRoomsToBooking threw:', err)
       return { success: false, error: String(err) }
     })

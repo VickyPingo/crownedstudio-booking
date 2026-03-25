@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { supabaseAdmin } from "@/lib/supabase/server"
 import { ServiceList } from "@/components/ServiceList"
 import { Service, ServiceWithUpsells, Upsell } from "@/types/service"

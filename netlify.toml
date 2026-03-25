@@ -1,6 +1,7 @@
 [build]
 command = "npx next build"
 publish = ".next"
+ignore = "exit 1"
 
 [[plugins]]
 package = "@netlify/plugin-nextjs"
