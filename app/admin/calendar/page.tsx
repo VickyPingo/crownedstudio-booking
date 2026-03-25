@@ -216,6 +216,7 @@ export default function AdminCalendarPage() {
       confirmed: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',
+      pending_payment: 'bg-amber-100 text-amber-800',
       no_show: 'bg-gray-200 text-gray-700',
     }
     return styles[status] || 'bg-gray-100 text-gray-800'
@@ -224,6 +225,15 @@ export default function AdminCalendarPage() {
   const formatStatus = (status: string) => {
     return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
+
+  const getBookingPaymentState = (booking: Booking) =>
+    getPaymentState({
+      total_price: booking.total_price,
+      balance_paid: booking.balance_paid,
+      no_payment_required: booking.no_payment_required,
+      status: booking.status,
+      payment_transactions: booking.payment_transactions,
+    })
 
   return (
     <AdminLayout>
@@ -477,13 +487,7 @@ export default function AdminCalendarPage() {
                         {formatStatus(booking.status)}
                       </span>
                       {(() => {
-                        const ps = getPaymentState({
-                          total_price: booking.total_price,
-                          balance_paid: booking.balance_paid,
-                          no_payment_required: booking.no_payment_required,
-                          status: booking.status,
-                          payment_transactions: booking.payment_transactions,
-                        })
+                        const ps = getBookingPaymentState(booking)
                         return (
                           <span className={`px-2 py-1 text-xs rounded-full ${PAYMENT_STATE_STYLES[ps.state]}`}>
                             {PAYMENT_STATE_LABELS[ps.state]}

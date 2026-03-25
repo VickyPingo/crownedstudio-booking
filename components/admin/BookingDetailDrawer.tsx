@@ -831,7 +831,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
             <section>
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Payment</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                {booking.no_payment_required ? (
+                {payment.state === 'not_required' ? (
                   <div className="flex items-center gap-2">
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES['not_required']}`}>
                       {PAYMENT_STATE_LABELS['not_required']}
