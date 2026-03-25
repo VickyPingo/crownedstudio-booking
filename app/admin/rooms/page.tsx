@@ -19,6 +19,10 @@ interface RoomBooking {
   is_custom_booking: boolean
   custom_booking_name: string | null
   assigned_room_ids?: string[]
+  allergies: string | null
+  medical_history: string | null
+  massage_pressure: string
+  is_pregnant: boolean
   customer: {
     full_name: string
   }
@@ -28,6 +32,11 @@ interface RoomBooking {
   payment_transactions: {
     status: string
     amount: number
+  }[]
+  booking_upsells: {
+    upsell: {
+      name: string
+    }
   }[]
 }
 
@@ -91,6 +100,13 @@ function getYOffsetToTime(yOffset: number): string {
   const minutesFromStart = Math.round((yOffset / SLOT_HEIGHT_PX) * 30 / 30) * 30
   const totalMinutes = CALENDAR_START_HOUR * 60 + minutesFromStart
   return minutesToHHMM(totalMinutes)
+}
+
+function formatUpsellsSummary(upsells: { upsell: { name: string } }[]): string {
+  if (!upsells || upsells.length === 0) return ''
+  if (upsells.length === 1) return upsells[0].upsell.name
+  if (upsells.length === 2) return `${upsells[0].upsell.name}, ${upsells[1].upsell.name}`
+  return `${upsells[0].upsell.name}, +${upsells.length - 1}`
 }
 
 export default function RoomsCalendarPage() {
@@ -162,9 +178,11 @@ export default function RoomsCalendarPage() {
         .select(`
           id, start_time, end_time, room_id, status, people_count, total_price,
           is_custom_booking, custom_booking_name,
+          allergies, medical_history, massage_pressure, is_pregnant,
           customer:customers(full_name),
           service:services(name),
-          payment_transactions(status, amount)
+          payment_transactions(status, amount),
+          booking_upsells(upsell:upsells(name))
         `)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
@@ -623,6 +641,33 @@ export default function RoomsCalendarPage() {
                                     </span>
                                   )}
                                 </div>
+                                {height > 80 && (
+                                  <div className="mt-1 pt-1 border-t border-black border-opacity-10 space-y-0.5">
+                                    {booking.allergies && (
+                                      <p className="text-xs opacity-75 truncate">
+                                        <span className="font-medium">Allergies:</span> {booking.allergies}
+                                      </p>
+                                    )}
+                                    {booking.medical_history && (
+                                      <p className="text-xs opacity-75 truncate">
+                                        <span className="font-medium">Medical:</span> {booking.medical_history}
+                                      </p>
+                                    )}
+                                    {booking.is_pregnant && (
+                                      <p className="text-xs opacity-75">
+                                        <span className="font-medium">Pregnant:</span> Yes
+                                      </p>
+                                    )}
+                                    <p className="text-xs opacity-75">
+                                      <span className="font-medium">Pressure:</span> {booking.massage_pressure.charAt(0).toUpperCase() + booking.massage_pressure.slice(1)}
+                                    </p>
+                                    {booking.booking_upsells && booking.booking_upsells.length > 0 && (
+                                      <p className="text-xs opacity-75 truncate">
+                                        <span className="font-medium">Add-ons:</span> {formatUpsellsSummary(booking.booking_upsells)}
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
@@ -770,6 +815,31 @@ export default function RoomsCalendarPage() {
                                 </span>
                                 <span className="text-gray-400">|</span>
                                 <span>{booking.people_count} person{booking.people_count !== 1 ? 's' : ''}</span>
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-gray-200 space-y-1 text-xs text-gray-600">
+                                {booking.allergies && (
+                                  <p className="truncate">
+                                    <span className="font-medium text-gray-700">Allergies:</span> {booking.allergies}
+                                  </p>
+                                )}
+                                {booking.medical_history && (
+                                  <p className="truncate">
+                                    <span className="font-medium text-gray-700">Medical:</span> {booking.medical_history}
+                                  </p>
+                                )}
+                                {booking.is_pregnant && (
+                                  <p>
+                                    <span className="font-medium text-gray-700">Pregnant:</span> Yes
+                                  </p>
+                                )}
+                                <p>
+                                  <span className="font-medium text-gray-700">Pressure:</span> {booking.massage_pressure.charAt(0).toUpperCase() + booking.massage_pressure.slice(1)}
+                                </p>
+                                {booking.booking_upsells && booking.booking_upsells.length > 0 && (
+                                  <p className="truncate">
+                                    <span className="font-medium text-gray-700">Add-ons:</span> {formatUpsellsSummary(booking.booking_upsells)}
+                                  </p>
+                                )}
                               </div>
                             </button>
                           )
