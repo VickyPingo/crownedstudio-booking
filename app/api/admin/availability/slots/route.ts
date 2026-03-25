@@ -11,6 +11,7 @@ import {
 } from '@/lib/timeSlots'
 import {
   findAllAvailableSlotsInActiveGroup,
+  findAvailableSlotsAnchoredToRoom,
   Room,
   RoomBooking,
   SchedulingTimeBlock
@@ -119,9 +120,9 @@ export async function POST(request: NextRequest) {
     const dayStartISO = new Date(date + 'T00:00:00+02:00').toISOString()
     const dayEndISO = new Date(date + 'T23:59:59+02:00').toISOString()
 
-    // MULTI-ROOM LOGIC: Use the same algorithm as customer booking
-    if (useMultiRoomLogic) {
-      console.log(`[AdminAvailability] Using multi-room scheduling logic (starting from ${requestedRoomName})`)
+    // ROOM-ANCHORED MULTI-ROOM LOGIC: Anchor room MUST be part of allocation
+    if (useMultiRoomLogic && roomId) {
+      console.log(`[AdminAvailability] Using ROOM-ANCHORED multi-room logic (anchored to ${requestedRoomName})`)
 
       // Load all treatment rooms
       const { data: roomsData } = await supabase
@@ -201,10 +202,11 @@ export async function POST(request: NextRequest) {
 
       const timeBlocks: SchedulingTimeBlock[] = (timeBlocksRaw || []) as SchedulingTimeBlock[]
 
-      // Call multi-room scheduling logic
-      const availableSlots = findAllAvailableSlotsInActiveGroup(
+      // Call ROOM-ANCHORED scheduling logic - anchor room MUST be free
+      const availableSlots = findAvailableSlotsAnchoredToRoom(
         date,
         rooms,
+        roomId,
         roomBookings,
         serviceDurationMinutes,
         peopleCount,
@@ -213,7 +215,7 @@ export async function POST(request: NextRequest) {
         timeBlocks
       )
 
-      console.log(`[AdminAvailability] Multi-room slots found: ${availableSlots.length}`)
+      console.log(`[AdminAvailability] Room-anchored slots found: ${availableSlots.length}`)
       return NextResponse.json({ availableSlots })
     }
 

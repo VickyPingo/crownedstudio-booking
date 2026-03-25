@@ -222,6 +222,95 @@ function calculateValidSlotsForGroup(
   return Array.from(new Set(validSlots)).sort()
 }
 
+/**
+ * ROOM-ANCHORED variant of calculateValidSlotsForGroup.
+ *
+ * Returns slots where:
+ * 1. The anchor room MUST be free
+ * 2. Additional rooms in the group can supplement capacity if needed
+ * 3. Total capacity >= peopleCount
+ *
+ * This ensures that when a booking is started from a specific room in the
+ * admin calendar, that room participates in the allocation.
+ */
+function calculateValidSlotsForGroupWithAnchor(
+  date: string,
+  groupRooms: Room[],
+  anchorRoomId: string,
+  bookings: RoomBooking[],
+  serviceDurationMinutes: number,
+  peopleCount: number,
+  businessStartTime: string,
+  businessEndTime: string
+): string[] {
+  const validSlots: string[] = []
+
+  const businessStartMs = toUtcMsFromSast(date, businessStartTime)
+  const businessEndMs = toUtcMsFromSast(date, businessEndTime)
+
+  if (!Number.isFinite(businessStartMs) || !Number.isFinite(businessEndMs)) {
+    return []
+  }
+
+  const occupancyDurationMs =
+    (serviceDurationMinutes + BOOKING_BUFFER_MINUTES) * 60 * 1000
+
+  const candidateStartTimes = getCandidateStartTimesForGroup(
+    date,
+    groupRooms,
+    bookings,
+    businessStartTime,
+    businessEndTime
+  )
+
+  for (const candidateStartMs of candidateStartTimes) {
+    if (!Number.isFinite(candidateStartMs)) continue
+
+    const candidateEndWithBufferMs = candidateStartMs + occupancyDurationMs
+
+    if (candidateEndWithBufferMs > businessEndMs) {
+      continue
+    }
+
+    // CRITICAL: Anchor room MUST be free
+    const anchorRoomFree = isRoomFreeAtTime(
+      anchorRoomId,
+      bookings,
+      candidateStartMs,
+      candidateEndWithBufferMs
+    )
+
+    if (!anchorRoomFree) {
+      continue // Skip this slot - anchor room is not available
+    }
+
+    // Calculate total capacity including anchor + other free rooms
+    let availableCapacity = 0
+
+    for (const room of groupRooms) {
+      const roomIsFree = isRoomFreeAtTime(
+        room.id,
+        bookings,
+        candidateStartMs,
+        candidateEndWithBufferMs
+      )
+
+      if (roomIsFree) {
+        availableCapacity += room.capacity
+      }
+    }
+
+    if (availableCapacity >= peopleCount) {
+      const slot = msToTimeString(candidateStartMs)
+      if (HHMM_RE.test(slot)) {
+        validSlots.push(slot)
+      }
+    }
+  }
+
+  return Array.from(new Set(validSlots)).sort()
+}
+
 export function findRoomCombinationInGroup(
   groupRooms: Room[],
   peopleCount: number
@@ -369,4 +458,81 @@ export function findAllAvailableSlotsInActiveGroup(
   }
 
   return []
+}
+
+/**
+ * ROOM-ANCHORED availability for admin manual bookings.
+ *
+ * Returns slots where the anchor room MUST be free and the total capacity
+ * (including the anchor room + supplementary rooms from the same group) >= peopleCount.
+ *
+ * Use this when a booking is initiated from a specific room in the admin calendar
+ * to ensure that room participates in the allocation.
+ */
+export function findAvailableSlotsAnchoredToRoom(
+  date: string,
+  rooms: Room[],
+  anchorRoomId: string,
+  bookings: RoomBooking[],
+  serviceDurationMinutes: number,
+  peopleCount: number,
+  businessStartTime: string,
+  businessEndTime: string,
+  timeBlocks?: SchedulingTimeBlock[]
+): string[] {
+  const activeRooms = rooms.filter((room) => room.active && room.room_area === 'treatment')
+
+  // Find the anchor room
+  const anchorRoom = activeRooms.find((r) => r.id === anchorRoomId)
+  if (!anchorRoom) {
+    console.log(`[ControlledScheduling] Anchor room ${anchorRoomId} not found or not active`)
+    return []
+  }
+
+  // Determine which group the anchor room belongs to
+  const anchorGroup = getRoomGroup(anchorRoom.priority)
+  const groupedRooms = groupRoomsByPriority(activeRooms)
+  const groupRooms = groupedRooms.get(anchorGroup) || []
+
+  if (groupRooms.length === 0) {
+    console.log(`[ControlledScheduling] No rooms in group ${anchorGroup} for anchor room`)
+    return []
+  }
+
+  const allRoomIds = activeRooms.map((r) => r.id)
+
+  const syntheticBlockBookings = timeBlocks && timeBlocks.length > 0
+    ? convertTimeBlocksToSyntheticBookings(date, timeBlocks, allRoomIds)
+    : []
+
+  const mergedBookings = syntheticBlockBookings.length > 0
+    ? [...bookings, ...syntheticBlockBookings]
+    : bookings
+
+  if (syntheticBlockBookings.length > 0) {
+    console.log(
+      `[ControlledScheduling][RoomAnchored] Merged ${syntheticBlockBookings.length} synthetic time-block booking(s)` +
+      ` with ${bookings.length} real booking(s) for date ${date}`
+    )
+  }
+
+  const validSlots = calculateValidSlotsForGroupWithAnchor(
+    date,
+    groupRooms,
+    anchorRoomId,
+    mergedBookings,
+    serviceDurationMinutes,
+    peopleCount,
+    sanitizeHHMM(businessStartTime),
+    sanitizeHHMM(businessEndTime)
+  )
+
+  console.log(
+    `[ControlledScheduling][RoomAnchored] Anchor room=${anchorRoom.room_name}` +
+    ` group=${anchorGroup}` +
+    ` groupRooms=[${groupRooms.map(r => r.room_name).join(', ')}]` +
+    ` validSlots=${validSlots.length}`
+  )
+
+  return validSlots.filter((slot) => HHMM_RE.test(slot))
 }
