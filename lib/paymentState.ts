@@ -23,21 +23,23 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
   const balancePaid = booking.balance_paid || 0
   const totalPrice = booking.total_price || 0
 
-  // If no payment is required, return not_required state with zero amounts
+  // No payment required: state is not_required; amounts are zero because no money
+  // was supposed to change hands. Any stored balance_paid value from legacy data
+  // must not surface as "received" in this state.
   if (booking.no_payment_required === true || totalPrice <= 0) {
     return { state: 'not_required', totalPaid: 0, depositPaid: 0, balancePaid: 0, balanceDue: 0 }
   }
 
-  // Calculate actual money received
+  // Calculate actual money received from transactions + manual balance payments
   const totalPaid = depositPaid + balancePaid
   const balanceDue = Math.max(0, totalPrice - totalPaid)
 
-  // Fully paid: balance is zero AND total paid equals or exceeds total price
+  // Fully paid: no outstanding balance and total matches
   if (balanceDue <= 0 && totalPaid >= totalPrice) {
     return { state: 'fully_paid', totalPaid, depositPaid, balancePaid, balanceDue: 0 }
   }
 
-  // Partially paid: some money has been received
+  // Partially paid: some money received but balance remains
   if (totalPaid > 0) {
     return { state: 'partially_paid', totalPaid, depositPaid, balancePaid, balanceDue }
   }

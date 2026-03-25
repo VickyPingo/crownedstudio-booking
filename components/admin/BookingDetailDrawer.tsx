@@ -850,7 +850,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-600">Balance Paid</span>
-                      <span className="font-medium text-green-700">R{(booking.balance_paid || 0).toLocaleString()}</span>
+                      <span className="font-medium text-green-700">R{payment.balancePaid.toLocaleString()}</span>
                     </div>
                     <div className="border-t pt-2 flex justify-between">
                       <span className="text-sm font-medium text-gray-700">Balance Due</span>
