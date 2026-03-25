@@ -7,6 +7,7 @@ import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { TimeBlockModal } from '@/components/admin/TimeBlockModal'
 import { supabase } from '@/lib/supabase/client'
 import type { Room, TimeBlock } from '@/types/admin'
+import { filterActiveBookings, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
 
 interface BookingRoomAllocation {
   room_id: string
@@ -215,7 +216,7 @@ export default function RoomsCalendarPage() {
         .from('bookings')
         .select(`
           id, start_time, end_time, room_id, status, people_count, total_price,
-          is_custom_booking, custom_booking_name,
+          is_custom_booking, custom_booking_name, payment_expires_at,
           allergies, medical_history, massage_pressure, is_pregnant,
           customer:customers(full_name),
           service:services(name),
@@ -224,7 +225,7 @@ export default function RoomsCalendarPage() {
         `)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
-        .in('status', ['confirmed', 'completed']),
+        .in('status', ACTIVE_BOOKING_STATUSES),
       supabase
         .from('time_blocks')
         .select('*')
@@ -233,7 +234,10 @@ export default function RoomsCalendarPage() {
 
     let enrichedBookings: RoomBooking[] = []
     if (bookingsRes.data && bookingsRes.data.length > 0) {
-      const bookingIds = bookingsRes.data.map(b => b.id)
+      // Filter out expired pending_payment bookings and cancelled bookings
+      const activeBookings = filterActiveBookings(bookingsRes.data as any[])
+
+      const bookingIds = activeBookings.map(b => b.id)
       const { data: bookingRoomsData } = await supabase
         .from('booking_rooms')
         .select('booking_id, room_id, capacity_used')
@@ -254,7 +258,7 @@ export default function RoomsCalendarPage() {
         })
       }
 
-      enrichedBookings = bookingsRes.data.map(b => {
+      enrichedBookings = activeBookings.map(b => {
         const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
         const bookingRoomsAllocations = bookingRoomsAllocationsMap.get(b.id)
         return {

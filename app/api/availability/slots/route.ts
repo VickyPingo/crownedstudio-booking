@@ -6,6 +6,7 @@ import {
   RoomBooking,
   SchedulingTimeBlock
 } from '@/lib/controlledScheduling'
+import { isActiveBooking, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
 
 interface AvailabilityRequest {
   date: string
@@ -165,18 +166,7 @@ function getUtcRangeForSastDate(date: string) {
   }
 }
 
-function isActiveBooking(status: string, paymentExpiresAt?: string | null): boolean {
-  if (status === 'confirmed' || status === 'completed') return true
-  if (status === 'pending_payment') {
-    if (!paymentExpiresAt) return false
-    const isStillActive = new Date(paymentExpiresAt).getTime() > Date.now()
-    if (!isStillActive) {
-      console.log('[Availability] Ignoring stale pending_payment booking (expired payment window)')
-    }
-    return isStillActive
-  }
-  return false
-}
+// Removed: now using shared helper from @/lib/bookingFilters
 
 async function getEveningAvailability(
   date: string,

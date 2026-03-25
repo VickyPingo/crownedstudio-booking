@@ -16,6 +16,7 @@ import {
   RoomBooking,
   SchedulingTimeBlock
 } from '@/lib/controlledScheduling'
+import { filterActiveBookings, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
 
 function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
@@ -141,14 +142,7 @@ export async function POST(request: NextRequest) {
         .gte('start_time', dayStartISO)
         .lte('start_time', dayEndISO)
 
-      const now = new Date().toISOString()
-      const activeBookings = (bookingsData || []).filter((booking: any) => {
-        if (booking.status === 'confirmed' || booking.status === 'completed') return true
-        if (booking.status === 'pending_payment') {
-          return booking.payment_expires_at && booking.payment_expires_at > now
-        }
-        return false
-      })
+      const activeBookings = filterActiveBookings(bookingsData || [])
 
       const bookingIds = activeBookings.map((b: any) => b.id)
 
@@ -281,7 +275,7 @@ export async function POST(request: NextRequest) {
         .from('bookings')
         .select('id, start_time, end_time, status, payment_expires_at')
         .eq('room_id', roomId)
-        .in('status', ['confirmed', 'completed', 'pending_payment'])
+        .in('status', ACTIVE_BOOKING_STATUSES)
         .gte('start_time', dayStartISO)
         .lte('start_time', dayEndISO)
 
@@ -302,7 +296,7 @@ export async function POST(request: NextRequest) {
       const { data: allBookings } = await supabase
         .from('bookings')
         .select('start_time, end_time, status, payment_expires_at')
-        .in('status', ['confirmed', 'completed', 'pending_payment'])
+        .in('status', ACTIVE_BOOKING_STATUSES)
         .gte('start_time', dayStartISO)
         .lte('start_time', dayEndISO)
 

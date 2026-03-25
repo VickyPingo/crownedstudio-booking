@@ -7,6 +7,7 @@ import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { TimeBlock } from '@/types/admin'
+import { DISPLAY_BOOKING_STATUSES } from '@/lib/bookingFilters'
 
 interface Booking {
   id: string
@@ -58,7 +59,7 @@ export default function AdminCalendarPage() {
         .select('id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id')
         .gte('start_time', `${startOfMonth}T00:00:00`)
         .lte('start_time', `${endOfMonth}T23:59:59`)
-        .in('status', ['confirmed', 'completed', 'cancelled', 'no_show'])
+        .in('status', DISPLAY_BOOKING_STATUSES)
         .order('start_time')
 
       if (bookingsError) {
