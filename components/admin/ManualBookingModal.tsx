@@ -595,6 +595,12 @@ export function ManualBookingModal({
           fullyPaid,
           selectedUpsellsByPerson: upsellsByPersonWithSlugs,
           roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
+          adminUserId: user?.id || null,
+  adminName:
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email ||
+    null,
         }),
       })
 
