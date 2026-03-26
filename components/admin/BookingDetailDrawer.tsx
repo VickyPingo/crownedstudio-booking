@@ -261,6 +261,15 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const previousRoomNames = (booking.assigned_rooms || []).map(r => r.room_name)
+      let resolvedAdminName: string | null = null
+      if (user?.id) {
+        const { data: adminRow } = await supabase
+          .from('admin_users')
+          .select('name, email')
+          .eq('id', user.id)
+          .maybeSingle()
+        resolvedAdminName = adminRow?.name || adminRow?.email || user.email || null
+      }
       const res = await fetch('/api/admin/bookings/reassign-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -268,7 +277,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
           bookingId: booking.id,
           newRoomId: roomId,
           adminId: user?.id || null,
-          adminName: null,
+          adminName: resolvedAdminName,
           previousRoomNames,
         }),
       })

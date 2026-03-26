@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       depositPaid,
       fullyPaid,
       selectedUpsellsByPerson,
+      pressureByPerson,
       // New: explicit room assignments from admin UI (array of { roomId, people })
       roomAssignments,
       // Legacy fallback — kept for backward compat with any direct API callers
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest) {
       deposit_due: isNoPayment ? 0 : safeNum(pricing?.deposit),
       allergies: allergies || null,
       massage_pressure: massagePressure || null,
+      pressure_preferences: (pressureByPerson && Object.keys(pressureByPerson).length > 0) ? pressureByPerson : null,
       medical_history: medicalHistory || null,
       internal_notes: internalNotes || null,
       voucher_code: voucherCode || null,

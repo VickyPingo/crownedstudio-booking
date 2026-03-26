@@ -248,11 +248,24 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
       <div class="section">
         <div class="section-title">Payment Summary</div>
         <div class="highlight-box">
+          ${data.depositAmount === 0 && data.balanceDue === 0 ? `
+          <div style="text-align: center;">
+            <span class="badge badge-success">No Payment Required</span>
+          </div>
+          ` : data.balanceDue === 0 ? `
+          <div style="text-align: center; margin-bottom: 12px;">
+            <span class="badge badge-success">Fully Paid</span>
+          </div>
+          <table>
+            <tr><td class="label-cell">Total Paid</td><td class="value-cell"><strong>R${data.totalPrice.toLocaleString()}</strong></td></tr>
+          </table>
+          ` : `
           <table>
             <tr><td class="label-cell">Deposit Paid</td><td class="value-cell">R${data.depositAmount.toLocaleString()}</td></tr>
             <tr><td class="label-cell">Balance Due</td><td class="value-cell"><strong>R${data.balanceDue.toLocaleString()}</strong></td></tr>
             <tr><td class="label-cell">Total</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
           </table>
+          `}
         </div>
         ${data.balanceDue > 0 ? '<p style="font-size: 13px; color: #6b7280; margin-top: 8px;">The remaining balance is payable on the day of your appointment.</p>' : ''}
       </div>
