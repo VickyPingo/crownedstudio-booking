@@ -277,7 +277,7 @@ await writeAuditLogServer(
   },
   {
     adminId: adminUserId,
-    adminName: adminName || null,
+    adminName: payloadAdminName || null,
   }
 )
     const explicitAssignments: RoomAssignmentInput[] | undefined =
