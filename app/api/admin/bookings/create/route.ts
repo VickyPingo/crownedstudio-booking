@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
         allergies,
         massage_pressure: massagePressure,
         medical_history: medicalHistory,
-        notes: internalNotes,
+        internal_notes: internalNotes || null,
       })
       .select()
       .single()
