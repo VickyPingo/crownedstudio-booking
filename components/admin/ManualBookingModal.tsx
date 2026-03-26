@@ -880,23 +880,18 @@ export function ManualBookingModal({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Number of People</label>
-                    <div className="flex flex-wrap gap-2">
-                      {[1, 2, 3, 4, 5, 6].map((num) => (
-                        <button
-                          key={num}
-                          onClick={() => setPeopleCount(num)}
-                          className={`w-12 h-12 rounded-xl font-semibold text-base transition-colors ${
-                            peopleCount === num
-                              ? 'bg-gray-900 text-white shadow-sm'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+  <label className="block text-sm font-medium text-gray-700 mb-1.5">Number of People</label>
+  <input
+    type="number"
+    min={1}
+    value={peopleCount}
+    onChange={(e) => {
+      const val = Math.max(1, Number(e.target.value) || 1)
+      setPeopleCount(val)
+    }}
+    className="w-32 px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+  />
+</div>
                 </div>
               )}
 
