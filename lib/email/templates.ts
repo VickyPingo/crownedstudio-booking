@@ -201,6 +201,48 @@ export function newBookingToSpaTemplate(data: BookingEmailData): string {
 
 export function bookingConfirmationToClientTemplate(data: BookingEmailData): string {
   const upsellsList = data.upsells.length > 0 ? data.upsells.join(', ') : 'None'
+  const isFullyPaid = data.balanceDue <= 0 && data.paymentStatus === 'confirmed'
+  const isNoPaymentRequired =
+    data.balanceDue <= 0 &&
+    data.depositAmount <= 0 &&
+    data.totalPrice > 0 &&
+    data.paymentStatus !== 'pending_payment'
+
+  let paymentSummaryHtml = ''
+
+  if (isNoPaymentRequired) {
+    paymentSummaryHtml = `
+      <div class="highlight-box">
+        <table>
+          <tr><td class="label-cell">Payment Status</td><td class="value-cell"><strong>No Payment Required</strong></td></tr>
+          <tr><td class="label-cell">Balance Due</td><td class="value-cell"><strong>R0</strong></td></tr>
+          <tr><td class="label-cell">Total</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
+        </table>
+      </div>
+    `
+  } else if (isFullyPaid) {
+    paymentSummaryHtml = `
+      <div class="highlight-box">
+        <table>
+          <tr><td class="label-cell">Amount Paid</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
+          <tr><td class="label-cell">Balance Due</td><td class="value-cell"><strong>R0</strong></td></tr>
+          <tr><td class="label-cell">Total</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
+        </table>
+      </div>
+      <p style="font-size: 13px; color: #065f46; margin-top: 8px;">Your booking has been fully paid.</p>
+    `
+  } else {
+    paymentSummaryHtml = `
+      <div class="highlight-box">
+        <table>
+          <tr><td class="label-cell">Deposit Paid</td><td class="value-cell">R${data.depositAmount.toLocaleString()}</td></tr>
+          <tr><td class="label-cell">Balance Due</td><td class="value-cell"><strong>R${data.balanceDue.toLocaleString()}</strong></td></tr>
+          <tr><td class="label-cell">Total</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
+        </table>
+      </div>
+      ${data.balanceDue > 0 ? '<p style="font-size: 13px; color: #6b7280; margin-top: 8px;">The remaining balance is payable on the day of your appointment.</p>' : ''}
+    `
+  }
 
   return `
 <!DOCTYPE html>
@@ -247,14 +289,7 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
 
       <div class="section">
         <div class="section-title">Payment Summary</div>
-        <div class="highlight-box">
-          <table>
-            <tr><td class="label-cell">Deposit Paid</td><td class="value-cell">R${data.depositAmount.toLocaleString()}</td></tr>
-            <tr><td class="label-cell">Balance Due</td><td class="value-cell"><strong>R${data.balanceDue.toLocaleString()}</strong></td></tr>
-            <tr><td class="label-cell">Total</td><td class="value-cell">R${data.totalPrice.toLocaleString()}</td></tr>
-          </table>
-        </div>
-        ${data.balanceDue > 0 ? '<p style="font-size: 13px; color: #6b7280; margin-top: 8px;">The remaining balance is payable on the day of your appointment.</p>' : ''}
+        ${paymentSummaryHtml}
       </div>
 
       <div class="footer">
