@@ -221,7 +221,6 @@ export function ManualBookingModal({
     fetchInitialData()
   }, [prefillCustomerId])
 
-  // Initialise room assignments when prefillRoomId changes or allRooms loads
   useEffect(() => {
     if (!prefillRoomId || allRooms.length === 0) return
     const room = allRooms.find(r => r.id === prefillRoomId)
@@ -230,7 +229,6 @@ export function ManualBookingModal({
     }
   }, [prefillRoomId, allRooms])
 
-  // When there is exactly one room assigned, keep its people count in sync with peopleCount
   useEffect(() => {
     if (roomAssignments.length === 1 && roomAssignments[0].people !== peopleCount) {
       setRoomAssignments(prev => [{ ...prev[0], people: peopleCount }])
@@ -507,6 +505,16 @@ export function ManualBookingModal({
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
+      let resolvedAdminName: string | null = null
+      if (user?.id) {
+        const { data: adminRow } = await supabase
+          .from('admin_users')
+          .select('name, email')
+          .eq('id', user.id)
+          .maybeSingle()
+        resolvedAdminName = adminRow?.name || adminRow?.email || user.email || null
+      }
+
       let customerId = selectedCustomer?.id
 
       if (isNewCustomer) {
@@ -595,6 +603,8 @@ export function ManualBookingModal({
           fullyPaid,
           selectedUpsellsByPerson: upsellsByPersonWithSlugs,
           roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
+          adminUserId: user?.id || null,
+          adminName: resolvedAdminName,
         }),
       })
 

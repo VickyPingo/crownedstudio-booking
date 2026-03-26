@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock, RoomAssignmentInput } from '@/lib/roomAllocation'
-import { writeAuditLogServer, resolveAdminName } from '@/lib/auditLogServer'
+import { writeAuditLogServer } from '@/lib/auditLogServer'
 
 const safeNum = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v)
@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
       fullyPaid,
       selectedUpsellsByPerson,
       pressureByPerson,
+      // Admin identity resolved client-side where the session is available
+      adminUserId: payloadAdminUserId,
+      adminName: payloadAdminName,
       // New: explicit room assignments from admin UI (array of { roomId, people })
       roomAssignments,
       // Legacy fallback — kept for backward compat with any direct API callers
@@ -183,8 +186,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
-    const adminUserId: string | null = user?.id ?? null
+    const adminUserId: string | null = payloadAdminUserId || null
+    const adminName: string | null = payloadAdminName || null
 
     let bookingStatus = 'confirmed'
     if (paymentOption === 'no_payment') {
@@ -359,7 +362,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const adminName = await resolveAdminName(adminUserId)
     await writeAuditLogServer(booking.id, 'booking_created', adminUserId, adminName, {
       booking_type: isCustomBooking ? 'custom' : 'existing_service',
       service: isCustomBooking ? customBookingName : serviceSlug,
