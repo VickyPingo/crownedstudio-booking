@@ -90,16 +90,17 @@ export async function POST(req: NextRequest) {
         voucher_id: voucherId || null,
 
         status: bookingStatus,
-        people_count: safeNum(peopleCount),
+people_count: safeNum(peopleCount),
+room_id: Array.isArray(roomAssignments) && roomAssignments.length > 0 ? roomAssignments[0].roomId : null,
 
-        allergies: allergies || null,
-        massage_pressure: massagePressure || null,
-        pressure_preferences:
-          pressureByPerson && Object.keys(pressureByPerson).length > 0
-            ? pressureByPerson
-            : null,
-        medical_history: medicalHistory || null,
-        internal_notes: internalNotes || null,
+allergies: allergies || null,
+massage_pressure: massagePressure || null,
+pressure_preferences:
+  pressureByPerson && Object.keys(pressureByPerson).length > 0
+    ? pressureByPerson
+    : null,
+medical_history: medicalHistory || null,
+internal_notes: internalNotes || null,
 
         deposit_due: paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit),
         no_payment_required: paymentOption === 'no_payment',
