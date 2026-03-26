@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
       // Legacy fallback — kept for backward compat with any direct API callers
       prefillRoomId,
     } = payload
-
+const adminUserId: string | null = payload.adminUserId || null
+const adminName: string | null = payload.adminName || null
     const explicitRoomIds: string[] = Array.isArray(roomAssignments) && roomAssignments.length > 0
       ? roomAssignments.map((ra: { roomId: string }) => ra.roomId)
       : prefillRoomId ? [prefillRoomId] : []
@@ -277,7 +278,7 @@ await writeAuditLogServer(
   },
   {
     adminId: adminUserId,
-    adminName: payloadAdminName || null,
+    adminName: adminName || null,
   }
 )
     const explicitAssignments: RoomAssignmentInput[] | undefined =
