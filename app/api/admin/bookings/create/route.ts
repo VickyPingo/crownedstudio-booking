@@ -30,32 +30,57 @@ export async function POST(req: NextRequest) {
       customBookingName,
       customDurationMinutes,
       customPrice,
-
-      // 👇 IMPORTANT
       adminUserId,
       adminName,
     } = payload
 
     const safeNum = (val: unknown) =>
-      typeof val === 'number' && !isNaN(val) ? val : 0
+      typeof val === 'number' && !isNaN(val) ? val : Number(val) || 0
+
+    if (!customerId || !selectedDate || !selectedTime || !totalDuration) {
+      return NextResponse.json(
+        { success: false, error: 'Missing required booking fields' },
+        { status: 400 }
+      )
+    }
+
+    const startDateTime = new Date(`${selectedDate}T${selectedTime}:00+02:00`)
+    const endDateTime = new Date(startDateTime.getTime() + safeNum(totalDuration) * 60000)
+
+    if (Number.isNaN(startDateTime.getTime()) || Number.isNaN(endDateTime.getTime())) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid booking date/time' },
+        { status: 400 }
+      )
+    }
 
     const totalPrice = safeNum(pricing?.total)
 
     let bookingStatus = 'confirmed'
-
     if (paymentOption === 'no_payment') {
       bookingStatus = 'confirmed'
+    } else if (fullyPaid === true) {
+      bookingStatus = 'confirmed'
+    } else if (depositPaid === true) {
+      bookingStatus = 'confirmed'
+    } else {
+      bookingStatus = 'pending_payment'
     }
 
-    // -------------------------
-    // CREATE BOOKING
-    // -------------------------
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
       .insert({
         customer_id: customerId,
-        start_time: selectedDate,
-        end_time: selectedDate,
+        service_slug: null,
+        is_custom_booking: !!isCustomBooking,
+        is_manual_booking: true,
+        custom_booking_name: isCustomBooking ? customBookingName || null : null,
+        custom_duration_minutes: isCustomBooking ? safeNum(customDurationMinutes) : null,
+        custom_price: isCustomBooking ? safeNum(customPrice) : null,
+
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+
         total_price: totalPrice,
         base_price: safeNum(pricing?.basePrice),
         upsells_total: safeNum(pricing?.upsellsTotal),
@@ -63,12 +88,28 @@ export async function POST(req: NextRequest) {
         discount_type: null,
         voucher_code: voucherCode || null,
         voucher_id: voucherId || null,
+
         status: bookingStatus,
         people_count: safeNum(peopleCount),
-        allergies,
-        massage_pressure: massagePressure,
-        medical_history: medicalHistory,
+
+        allergies: allergies || null,
+        massage_pressure: massagePressure || null,
+        pressure_preferences:
+          pressureByPerson && Object.keys(pressureByPerson).length > 0
+            ? pressureByPerson
+            : null,
+        medical_history: medicalHistory || null,
         internal_notes: internalNotes || null,
+
+        deposit_due: paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit),
+        no_payment_required: paymentOption === 'no_payment',
+        payment_method_manual:
+          paymentOption !== 'no_payment' ? manualPaymentMethod || null : null,
+        deposit_paid_manually: depositPaid === true,
+        deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
+        balance_paid: fullyPaid === true ? totalPrice : 0,
+        balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
+        balance_paid_by: fullyPaid === true ? adminUserId || null : null,
       })
       .select()
       .single()
@@ -81,11 +122,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // -------------------------
-    // ASSIGN ROOMS
-    // -------------------------
     if (Array.isArray(roomAssignments) && roomAssignments.length > 0) {
-      const roomRows = roomAssignments.map((ra: any) => ({
+      const roomRows = roomAssignments.map((ra: { roomId: string; people: number }) => ({
         booking_id: booking.id,
         room_id: ra.roomId,
         people: ra.people,
@@ -100,24 +138,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // -------------------------
-    // SAVE PRESSURE PER PERSON
-    // -------------------------
-    if (pressureByPerson) {
-      const rows = Object.entries(pressureByPerson).map(([index, pressure]) => ({
-        booking_id: booking.id,
-        person_index: Number(index),
-        pressure,
-      }))
-
-      if (rows.length > 0) {
-        await supabaseAdmin.from('pressure_preferences').insert(rows)
-      }
-    }
-
-    // -------------------------
-    // AUDIT LOG (FIXED)
-    // -------------------------
     await writeAuditLogServer(
       booking.id,
       'booking_created',
