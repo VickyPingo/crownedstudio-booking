@@ -344,7 +344,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
           bookingId: booking.id,
           newRoomId: roomId,
           adminId: user?.id || null,
-          adminName: null,
+          adminName: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || null,
           previousRoomNames,
         }),
       })
