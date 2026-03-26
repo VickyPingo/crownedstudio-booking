@@ -6,6 +6,7 @@ import type { BookingStatus, Room } from '@/types/admin'
 import { getMinimumBookingDate, isSameDayBooking } from '@/lib/timeSlots'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 import { writeAuditLog } from '@/lib/auditLog'
+
 interface BookingDetailDrawerProps {
   bookingId: string | null
   onClose: () => void
@@ -42,11 +43,37 @@ interface BookingData {
   pricing_option_name: string | null
   terms_accepted: boolean | null
   terms_accepted_at: string | null
-  customer?: { id: string; full_name: string; email: string | null; phone: string | null; date_of_birth: string | null } | null
-  service?: { name: string; category: string | null; duration_minutes: number; service_area: string | null } | null
-  voucher?: { code: string; discount_type: string; discount_value: number } | null
-  room?: { id: string; room_name: string; room_area: string; capacity: number } | null
-  assigned_rooms?: Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }>
+  customer?: {
+    id: string
+    full_name: string
+    email: string | null
+    phone: string | null
+    date_of_birth: string | null
+  } | null
+  service?: {
+    name: string
+    category: string | null
+    duration_minutes: number
+    service_area: string | null
+  } | null
+  voucher?: {
+    code: string
+    discount_type: string
+    discount_value: number
+  } | null
+  room?: {
+    id: string
+    room_name: string
+    room_area: string
+    capacity: number
+  } | null
+  assigned_rooms?: Array<{
+    id: string
+    room_name: string
+    room_area: string
+    capacity: number
+    priority: number
+  }>
   booking_upsells: Array<{
     upsell_id: string
     quantity: number
@@ -69,7 +96,22 @@ interface BookingData {
       new_end_time?: string
     }
   }>
-  payment_transactions: Array<{ id: string; status: string; amount: number; created_at: string }>
+  payment_transactions: Array<{
+    id: string
+    status: string
+    amount: number
+    created_at: string
+  }>
+}
+
+interface AuditLogEntry {
+  id: string
+  booking_id: string
+  action_type: string
+  changed_by_admin_id: string | null
+  changed_by_name: string | null
+  details_json: Record<string, unknown> | null
+  created_at: string
 }
 
 const STATUS_OPTIONS: { value: BookingStatus; label: string; color: string }[] = [
@@ -96,11 +138,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const [rooms, setRooms] = useState<Room[]>([])
   const [showRoomSelect, setShowRoomSelect] = useState(false)
   const [updatingRoom, setUpdatingRoom] = useState(false)
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
+  const [loadingAudit, setLoadingAudit] = useState(false)
 
   useEffect(() => {
     if (bookingId) {
-      fetchBooking()
-      fetchRooms()
+      void fetchBooking()
+      void fetchRooms()
+      void fetchAuditLog()
     }
   }, [bookingId])
 
@@ -130,48 +175,91 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         return
       }
 
-      const [customerRes, serviceRes, voucherRes, roomRes, bookingRoomsRes, upsellsRes, notesRes, paymentsRes] = await Promise.all([
-        bookingData.customer_id
-          ? supabase.from('customers').select('id, full_name, email, phone').eq('id', bookingData.customer_id).maybeSingle()
-          : { data: null, error: null },
-        bookingData.service_slug
-          ? supabase.from('services').select('name, category, duration_minutes, service_area').eq('slug', bookingData.service_slug).maybeSingle()
-          : { data: null, error: null },
-        bookingData.voucher_id
-          ? supabase.from('vouchers').select('code, discount_type, discount_value').eq('id', bookingData.voucher_id).maybeSingle()
-          : { data: null, error: null },
-        bookingData.room_id
-          ? supabase.from('rooms').select('id, room_name, room_area, capacity').eq('id', bookingData.room_id).maybeSingle()
-          : { data: null, error: null },
-        supabase.from('booking_rooms').select('room_id').eq('booking_id', bookingId),
-        supabase.from('booking_upsells').select('upsell_id, quantity, price_total, person_number, duration_added_minutes').eq('booking_id', bookingId),
-        supabase.from('booking_notes').select('id, note, created_at, created_by, note_type, metadata').eq('booking_id', bookingId).order('created_at', { ascending: false }),
-        supabase.from('payment_transactions').select('id, status, amount, created_at').eq('booking_id', bookingId).order('created_at', { ascending: false }),
-      ])
+      const [customerRes, serviceRes, voucherRes, roomRes, bookingRoomsRes, upsellsRes, notesRes, paymentsRes] =
+        await Promise.all([
+          bookingData.customer_id
+            ? supabase
+                .from('customers')
+                .select('id, full_name, email, phone, date_of_birth')
+                .eq('id', bookingData.customer_id)
+                .maybeSingle()
+            : { data: null, error: null },
+          bookingData.service_slug
+            ? supabase
+                .from('services')
+                .select('name, category, duration_minutes, service_area')
+                .eq('slug', bookingData.service_slug)
+                .maybeSingle()
+            : { data: null, error: null },
+          bookingData.voucher_id
+            ? supabase
+                .from('vouchers')
+                .select('code, discount_type, discount_value')
+                .eq('id', bookingData.voucher_id)
+                .maybeSingle()
+            : { data: null, error: null },
+          bookingData.room_id
+            ? supabase
+                .from('rooms')
+                .select('id, room_name, room_area, capacity')
+                .eq('id', bookingData.room_id)
+                .maybeSingle()
+            : { data: null, error: null },
+          supabase.from('booking_rooms').select('room_id').eq('booking_id', bookingId),
+          supabase
+            .from('booking_upsells')
+            .select('upsell_id, quantity, price_total, person_number, duration_added_minutes')
+            .eq('booking_id', bookingId),
+          supabase
+            .from('booking_notes')
+            .select('id, note, created_at, created_by, note_type, metadata')
+            .eq('booking_id', bookingId)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('payment_transactions')
+            .select('id, status, amount, created_at')
+            .eq('booking_id', bookingId)
+            .order('created_at', { ascending: false }),
+        ])
 
       let upsellsWithNames = upsellsRes.data || []
       if (upsellsRes.data && upsellsRes.data.length > 0) {
-        const upsellIds = [...new Set(upsellsRes.data.map(u => u.upsell_id))]
+        const upsellIds = [...new Set(upsellsRes.data.map((u) => u.upsell_id))]
         const { data: upsellData } = await supabase.from('upsells').select('id, name, slug').in('id', upsellIds)
-        const upsellMap = new Map((upsellData || []).map(u => [u.id, u]))
-        upsellsWithNames = upsellsRes.data.map(u => ({
+        const upsellMap = new Map((upsellData || []).map((u) => [u.id, u]))
+        upsellsWithNames = upsellsRes.data.map((u) => ({
           ...u,
           upsell_name: upsellMap.get(u.upsell_id)?.name,
           upsell_slug: upsellMap.get(u.upsell_id)?.slug,
         }))
       }
 
-      let assignedRooms: Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }> = []
+      let assignedRooms: Array<{
+        id: string
+        room_name: string
+        room_area: string
+        capacity: number
+        priority: number
+      }> = []
+
       if (bookingRoomsRes.data && bookingRoomsRes.data.length > 0) {
-        const roomIds = bookingRoomsRes.data.map(br => br.room_id)
+        const roomIds = bookingRoomsRes.data.map((br) => br.room_id)
         const { data: roomsData } = await supabase
           .from('rooms')
           .select('id, room_name, room_area, capacity, priority')
           .in('id', roomIds)
           .order('priority', { ascending: true })
-        assignedRooms = (roomsData || []) as Array<{ id: string; room_name: string; room_area: string; capacity: number; priority: number }>
-      } else if (bookingData.room_id) {
-        assignedRooms = roomRes.data ? [{ ...roomRes.data, priority: 0 }] : []
+
+        assignedRooms =
+          (roomsData as Array<{
+            id: string
+            room_name: string
+            room_area: string
+            capacity: number
+            priority: number
+          }>) || []
+      } else if (bookingData.room_id && roomRes.data) {
+        assignedRooms = [{ ...roomRes.data, priority: 0 }]
       }
 
       const enrichedBooking: BookingData = {
@@ -196,15 +284,25 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   }
 
   const fetchRooms = async () => {
-    const { data } = await supabase
-      .from('rooms')
-      .select('*')
-      .eq('active', true)
-      .order('priority', { ascending: true })
+    const { data } = await supabase.from('rooms').select('*').eq('active', true).order('priority', { ascending: true })
 
     if (data) {
       setRooms(data as Room[])
     }
+  }
+
+  const fetchAuditLog = async () => {
+    if (!bookingId) return
+
+    setLoadingAudit(true)
+    const { data } = await supabase
+      .from('booking_audit_log')
+      .select('*')
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: true })
+
+    setAuditLog((data as AuditLogEntry[]) || [])
+    setLoadingAudit(false)
   }
 
   const handleRoomChange = async (roomId: string | null) => {
@@ -213,52 +311,58 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     setUpdatingRoom(true)
 
     if (roomId === null) {
-      const { error } = await supabase
-        .from('bookings')
-        .update({ room_id: null })
-        .eq('id', booking.id)
-      if (!error) {
-  await writeAuditLog(booking.id, 'room_changed', {
-    from_room_id: booking.room_id,
-    to_room_id: null,
-    from_rooms: booking.assigned_rooms?.map(r => r.room_name) || [],
-    to_rooms: [],
-  })
+      const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
+      const { error } = await supabase.from('bookings').update({ room_id: null }).eq('id', booking.id)
 
-  fetchBooking()
-  onUpdate()
-  setShowRoomSelect(false)
-}
+      if (!error) {
+        await writeAuditLog(booking.id, 'room_changed', {
+          from: previousRoomNames.join(', ') || 'unknown',
+          to: 'unassigned',
+        })
+
+        await fetchBooking()
+        await fetchAuditLog()
+        onUpdate()
+        setShowRoomSelect(false)
+      }
+
       setUpdatingRoom(false)
       return
     }
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
+
       const res = await fetch('/api/admin/bookings/reassign-room', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id, newRoomId: roomId }),
+        body: JSON.stringify({
+          bookingId: booking.id,
+          newRoomId: roomId,
+          adminId: user?.id || null,
+          adminName: null,
+          previousRoomNames,
+        }),
       })
+
       const data = await res.json()
+
       if (!res.ok || !data.success) {
-  alert(data.error || 'Failed to reassign room')
-} else {
-  const newRoom = rooms.find(r => r.id === roomId)
-
-  await writeAuditLog(booking.id, 'room_changed', {
-    from_room_id: booking.room_id,
-    to_room_id: roomId,
-    from_rooms: booking.assigned_rooms?.map(r => r.room_name) || [],
-    to_rooms: newRoom ? [newRoom.room_name] : [],
-  })
-
-  fetchBooking()
-  onUpdate()
-  setShowRoomSelect(false)
-}
+        alert(data.error || 'Failed to reassign room')
+      } else {
+        await fetchBooking()
+        await fetchAuditLog()
+        onUpdate()
+        setShowRoomSelect(false)
+      }
     } catch {
       alert('Network error — room reassignment failed')
     }
+
     setUpdatingRoom(false)
   }
 
@@ -266,43 +370,58 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     if (!booking) return
 
     setUpdatingStatus(true)
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: newStatus })
-      .eq('id', booking.id)
+    const previousStatus = booking.status
+
+    const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.id)
 
     if (!error) {
-  await writeAuditLog(booking.id, 'status_changed', {
-    from_status: booking.status,
-    to_status: newStatus,
-  })
+      const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
+        cancelled: 'cancelled',
+        completed: 'completed',
+        no_show: 'no_show',
+      }
 
-  setBooking({ ...booking, status: newStatus })
-  onUpdate()
-}
+      const actionType = actionTypeMap[newStatus] || 'status_changed'
+
+      await writeAuditLog(booking.id, actionType, {
+        from: previousStatus,
+        to: newStatus,
+      })
+
+      setBooking({ ...booking, status: newStatus })
+      await fetchAuditLog()
+      onUpdate()
+    }
+
+    setUpdatingStatus(false)
+  }
 
   const handleAddNote = async () => {
     if (!booking || !newNote.trim()) return
 
     setAddingNote(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    const { error } = await supabase
-      .from('booking_notes')
-      .insert({
-        booking_id: booking.id,
-        note: newNote.trim(),
-        created_by: user?.id || null,
-      })
+    const { error } = await supabase.from('booking_notes').insert({
+      booking_id: booking.id,
+      note: newNote.trim(),
+      created_by: user?.id || null,
+    })
 
     if (!error) {
-  await writeAuditLog(booking.id, 'note_added', {
-    note: newNote.trim(),
-  })
+      await writeAuditLog(booking.id, 'note_added', {
+        note_preview: newNote.trim().slice(0, 100),
+      })
 
-  setNewNote('')
-  await fetchBooking()
-}
+      setNewNote('')
+      await fetchBooking()
+      await fetchAuditLog()
+    }
+
+    setAddingNote(false)
+  }
 
   const handleReschedule = async () => {
     if (!booking || !rescheduleDate || !rescheduleTime) return
@@ -329,6 +448,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     const baseDuration = booking.is_custom_booking
       ? (booking.custom_duration_minutes || 60)
       : (booking.service?.duration_minutes || 60)
+
     const upsellDuration = booking.booking_upsells.reduce((total, bu) => total + (bu.duration_added_minutes || 0), 0)
     const totalDuration = baseDuration + upsellDuration
     const endDate = new Date(startDate.getTime() + totalDuration * 60000)
@@ -342,7 +462,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       .eq('id', booking.id)
 
     if (!error) {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
       const oldDate = new Date(oldStartTime)
       const newDate = new Date(startDate)
@@ -389,6 +511,11 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
         created_by: user?.id || null,
       })
 
+      await writeAuditLog(booking.id, 'rescheduled', {
+        from: oldStartTime,
+        to: startDate.toISOString(),
+      })
+
       if (booking.customer?.email) {
         try {
           await fetch('/api/bookings/send-reschedule-email', {
@@ -408,7 +535,8 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       setShowReschedule(false)
       setRescheduleDate('')
       setRescheduleTime('')
-      fetchBooking()
+      await fetchBooking()
+      await fetchAuditLog()
       onUpdate()
     }
   }
@@ -420,7 +548,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
     if (payment.balanceDue <= 0) return
 
     setMarkingBalancePaid(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     const newBalancePaid = (booking.balance_paid || 0) + payment.balanceDue
     const updates: Record<string, unknown> = {
@@ -429,26 +559,41 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       balance_paid_by: user?.id || null,
     }
 
-    // Change status from pending_payment to confirmed when balance is paid
     if (booking.status === 'pending_payment') {
       updates.status = 'confirmed'
     }
 
-    const { error } = await supabase
-      .from('bookings')
-      .update(updates)
-      .eq('id', booking.id)
+    const { error } = await supabase.from('bookings').update(updates).eq('id', booking.id)
 
     if (!error) {
-      fetchBooking()
+      await writeAuditLog(booking.id, 'payment_updated', {
+        action: 'balance_paid',
+        amount: payment.balanceDue,
+        new_balance_paid: (booking.balance_paid || 0) + payment.balanceDue,
+        total_price: booking.total_price,
+      })
+
+      await fetchBooking()
+      await fetchAuditLog()
       onUpdate()
     }
+
     setMarkingBalancePaid(false)
   }
 
   if (!bookingId) return null
 
-  const payment = booking ? getPaymentState(booking) : { state: 'pending' as const, totalPaid: 0, depositPaid: 0, balancePaid: 0, balanceDue: 0 }
+  const payment = booking
+    ? getPaymentState(booking)
+    : {
+        state: 'pending' as const,
+        totalPaid: 0,
+        depositPaid: 0,
+        balancePaid: 0,
+        balanceDue: 0,
+        rawDepositPaid: 0,
+        rawBalancePaid: 0,
+      }
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
@@ -456,10 +601,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
       <div className="absolute right-0 top-0 bottom-0 w-full max-w-xl bg-white shadow-xl overflow-y-auto">
         <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
           <h2 className="text-lg font-semibold text-gray-900">Booking Details</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -507,28 +649,27 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   </div>
                 )}
                 <p className="font-medium text-gray-900">
-                  {booking.is_custom_booking
-                    ? (booking.custom_booking_name || 'Custom Booking')
-                    : booking.service?.name}
+                  {booking.is_custom_booking ? booking.custom_booking_name || 'Custom Booking' : booking.service?.name}
                 </p>
                 {!booking.is_custom_booking && booking.pricing_option_name && (
                   <p className="text-sm text-blue-700 font-medium">{booking.pricing_option_name}</p>
                 )}
-                {!booking.is_custom_booking && (
-                  <p className="text-sm text-gray-600">{booking.service?.category}</p>
-                )}
+                {!booking.is_custom_booking && <p className="text-sm text-gray-600">{booking.service?.category}</p>}
                 {booking.is_custom_booking && booking.custom_price != null && (
                   <p className="text-sm text-gray-600">Base price: R{booking.custom_price.toLocaleString()}</p>
                 )}
                 <p className="text-sm text-gray-600">
                   {booking.people_count} person(s) -{' '}
                   {booking.is_custom_booking
-                    ? (booking.custom_duration_minutes || Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000))
-                    : Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)
-                  } min
-                  {!booking.is_custom_booking && Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000) > (booking.service?.duration_minutes || 0) && (
-                    <span className="text-gray-500"> (includes add-ons)</span>
-                  )}
+                    ? booking.custom_duration_minutes ||
+                      Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)
+                    : Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000)}{' '}
+                  min
+                  {!booking.is_custom_booking &&
+                    Math.round((new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime()) / 60000) >
+                      (booking.service?.duration_minutes || 0) && (
+                      <span className="text-gray-500"> (includes add-ons)</span>
+                    )}
                   {booking.is_custom_booking && booking.booking_upsells.length > 0 && (
                     <span className="text-gray-500"> (includes add-ons)</span>
                   )}
@@ -551,8 +692,8 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
                     hour: '2-digit',
                     minute: '2-digit',
-                  })}
-                  {' - '}
+                  })}{' '}
+                  -{' '}
                   {new Date(booking.end_time).toLocaleTimeString('en-ZA', {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -567,11 +708,13 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 {!booking.is_custom_booking && (
                   <div className="mb-3 flex items-center gap-2">
                     <span className="text-xs text-gray-500">Required area:</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      booking.service?.service_area === 'public'
-                        ? 'bg-teal-100 text-teal-800'
-                        : 'bg-blue-100 text-blue-800'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        booking.service?.service_area === 'public'
+                          ? 'bg-teal-100 text-teal-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
                       {booking.service?.service_area || 'treatment'}
                     </span>
                   </div>
@@ -590,17 +733,17 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                             <div key={room.id} className={index > 0 ? 'pt-2 border-t border-gray-200' : ''}>
                               <div className="flex items-center gap-2">
                                 <p className="font-medium text-gray-900">{room.room_name}</p>
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                  room.room_area === 'public'
-                                    ? 'bg-teal-100 text-teal-800'
-                                    : 'bg-blue-100 text-blue-800'
-                                }`}>
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded-full ${
+                                    room.room_area === 'public'
+                                      ? 'bg-teal-100 text-teal-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
                                   {room.room_area}
                                 </span>
                                 {booking.assigned_rooms && booking.assigned_rooms.length > 1 && (
-                                  <span className="text-xs text-gray-500">
-                                    (Priority {room.priority})
-                                  </span>
+                                  <span className="text-xs text-gray-500">(Priority {room.priority})</span>
                                 )}
                               </div>
                               <p className="text-sm text-gray-600">Capacity: {room.capacity}</p>
@@ -627,7 +770,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   <div className="space-y-3">
                     <div className="space-y-2">
                       {rooms.map((room) => {
-                        const isMatchingArea = booking.is_custom_booking || room.room_area === (booking.service?.service_area || 'treatment')
+                        const isMatchingArea =
+                          booking.is_custom_booking || room.room_area === (booking.service?.service_area || 'treatment')
+
                         return (
                           <button
                             key={room.id}
@@ -644,17 +789,21 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                             <div className="flex justify-between items-center">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium">{room.room_name}</span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                  booking.room_id === room.id
-                                    ? 'bg-gray-700 text-gray-300'
-                                    : room.room_area === 'public'
-                                      ? 'bg-teal-100 text-teal-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                }`}>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded ${
+                                    booking.room_id === room.id
+                                      ? 'bg-gray-700 text-gray-300'
+                                      : room.room_area === 'public'
+                                        ? 'bg-teal-100 text-teal-800'
+                                        : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
                                   {room.room_area}
                                 </span>
                               </div>
-                              <span className={`text-sm ${booking.room_id === room.id ? 'text-gray-300' : 'text-gray-500'}`}>
+                              <span
+                                className={`text-sm ${booking.room_id === room.id ? 'text-gray-300' : 'text-gray-500'}`}
+                              >
                                 Cap: {room.capacity}
                               </span>
                             </div>
@@ -689,23 +838,26 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
               {booking.booking_upsells && booking.booking_upsells.length > 0 ? (
                 <div className="bg-gray-50 rounded-lg p-4 space-y-4">
                   {(() => {
-                    const grouped = booking.booking_upsells.reduce((acc, upsell) => {
-                      const person = upsell.person_number || 1
-                      if (!acc[person]) acc[person] = []
-                      acc[person].push(upsell)
-                      return acc
-                    }, {} as Record<number, typeof booking.booking_upsells>)
+                    const grouped = booking.booking_upsells.reduce(
+                      (acc, upsell) => {
+                        const person = upsell.person_number || 1
+                        if (!acc[person]) acc[person] = []
+                        acc[person].push(upsell)
+                        return acc
+                      },
+                      {} as Record<number, typeof booking.booking_upsells>
+                    )
 
-                    const sortedPersons = Object.keys(grouped).map(Number).sort((a, b) => a - b)
+                    const sortedPersons = Object.keys(grouped)
+                      .map(Number)
+                      .sort((a, b) => a - b)
                     const upsellsTotal = booking.booking_upsells.reduce((sum, u) => sum + (u.price_total || 0), 0)
 
                     return (
                       <>
                         {sortedPersons.map((personNum) => (
                           <div key={personNum}>
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                              Person {personNum}
-                            </p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Person {personNum}</p>
                             <div className="space-y-1.5">
                               {grouped[personNum].map((upsell, idx) => (
                                 <div key={idx} className="flex justify-between text-sm">
@@ -741,7 +893,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-700">Discount Applied</span>
-                    <span className="text-green-700 font-medium">-R{(booking.voucher_discount || 0).toLocaleString()}</span>
+                    <span className="text-green-700 font-medium">
+                      -R{(booking.voucher_discount || 0).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </section>
@@ -754,11 +908,14 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                   <div>
                     <p className="text-xs text-gray-500 uppercase">Date of Birth</p>
                     <p className="text-sm text-gray-900">
-                      {new Date(booking.customer_date_of_birth || booking.customer?.date_of_birth || '').toLocaleDateString('en-ZA', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
+                      {new Date(booking.customer_date_of_birth || booking.customer?.date_of_birth || '').toLocaleDateString(
+                        'en-ZA',
+                        {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        }
+                      )}
                     </p>
                   </div>
                 )}
@@ -818,14 +975,24 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     {booking.terms_accepted ? (
                       <>
                         <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
                         </svg>
                         <span className="text-sm font-medium text-green-700">Yes</span>
                       </>
                     ) : (
                       <>
                         <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
                         </svg>
                         <span className="text-sm text-gray-500">No</span>
                       </>
@@ -854,8 +1021,10 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
                 {payment.state === 'not_required' ? (
                   <div className="flex items-center gap-2">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES['not_required']}`}>
-                      {PAYMENT_STATE_LABELS['not_required']}
+                    <span
+                      className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES.not_required}`}
+                    >
+                      {PAYMENT_STATE_LABELS.not_required}
                     </span>
                     <span className="text-sm text-gray-500">No payment was required for this booking.</span>
                   </div>
@@ -880,7 +1049,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                       </span>
                     </div>
                     <div className="pt-2">
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES[payment.state]}`}>
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${PAYMENT_STATE_STYLES[payment.state]}`}
+                      >
                         {PAYMENT_STATE_LABELS[payment.state]}
                       </span>
                     </div>
@@ -893,21 +1064,25 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Status</h3>
               {NON_EDITABLE_STATUSES.includes(booking.status as BookingStatus) ? (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
-                    booking.status === 'expired' || booking.status === 'cancelled_expired'
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span
+                    className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium ${
+                      booking.status === 'expired' || booking.status === 'cancelled_expired'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
                     {booking.status === 'expired' ? 'Expired' : 'Expired (Legacy)'}
                   </span>
-                  <p className="text-xs text-gray-500 mt-2">Payment window lapsed. This booking is kept for audit purposes and does not block any rooms.</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Payment window lapsed. This booking is kept for audit purposes and does not block any rooms.
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {STATUS_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
-                      onClick={() => handleStatusChange(opt.value)}
+                      onClick={() => void handleStatusChange(opt.value)}
                       disabled={updatingStatus || booking.status === opt.value}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                         booking.status === opt.value
@@ -931,15 +1106,18 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                       <div
                         key={note.id}
                         className={`rounded-lg p-3 ${
-                          note.note_type === 'reschedule'
-                            ? 'bg-amber-50 border border-amber-200'
-                            : 'bg-gray-50'
+                          note.note_type === 'reschedule' ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'
                         }`}
                       >
                         {note.note_type === 'reschedule' && (
                           <div className="flex items-center gap-1.5 mb-1.5">
                             <svg className="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                              />
                             </svg>
                             <span className="text-xs font-semibold text-amber-800 uppercase">Rescheduled</span>
                           </div>
@@ -972,7 +1150,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-500"
                   />
                   <button
-                    onClick={handleAddNote}
+                    onClick={() => void handleAddNote()}
                     disabled={addingNote || !newNote.trim()}
                     className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
                   >
@@ -1024,7 +1202,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                         Cancel
                       </button>
                       <button
-                        onClick={handleReschedule}
+                        onClick={() => void handleReschedule()}
                         disabled={!rescheduleDate || !rescheduleTime}
                         className="flex-1 px-3 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium disabled:opacity-50"
                       >
@@ -1036,7 +1214,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
                 {!booking.no_payment_required && payment.balanceDue > 0 && (
                   <button
-                    onClick={handleMarkBalancePaid}
+                    onClick={() => void handleMarkBalancePaid()}
                     disabled={markingBalancePaid}
                     className="w-full px-4 py-2.5 bg-white border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors disabled:opacity-50"
                   >
@@ -1045,7 +1223,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 )}
 
                 <button
-                  onClick={() => handleStatusChange('no_show')}
+                  onClick={() => void handleStatusChange('no_show')}
                   disabled={booking.status === 'no_show'}
                   className="w-full px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
@@ -1053,7 +1231,7 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 </button>
 
                 <button
-                  onClick={() => handleStatusChange('cancelled')}
+                  onClick={() => void handleStatusChange('cancelled')}
                   disabled={booking.status === 'cancelled'}
                   className="w-full px-4 py-2.5 bg-white border border-red-300 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
                 >
@@ -1061,13 +1239,122 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                 </button>
 
                 <button
-                  onClick={() => handleStatusChange('completed')}
+                  onClick={() => void handleStatusChange('completed')}
                   disabled={booking.status === 'completed'}
                   className="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
                   Mark as Completed
                 </button>
               </div>
+            </section>
+
+            <section className="border-t pt-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Admin Activity Log</h3>
+              {loadingAudit ? (
+                <p className="text-sm text-gray-500">Loading activity...</p>
+              ) : auditLog.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">No activity recorded yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {auditLog.map((entry) => {
+                    const d = entry.details_json || {}
+                    const who = entry.changed_by_name || 'Admin'
+                    const when = new Date(entry.created_at).toLocaleString('en-ZA', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'Africa/Johannesburg',
+                    })
+
+                    let description = ''
+                    switch (entry.action_type) {
+                      case 'booking_created':
+                        description = `created this booking`
+                        if (d.service) description += ` (${String(d.service)})`
+                        break
+                      case 'status_changed':
+                        description = `changed status from ${String(d.from)} to ${String(d.to)}`
+                        break
+                      case 'rescheduled': {
+                        const fromDate = d.from
+                          ? new Date(String(d.from)).toLocaleString('en-ZA', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              timeZone: 'Africa/Johannesburg',
+                            })
+                          : '?'
+                        const toDate = d.to
+                          ? new Date(String(d.to)).toLocaleString('en-ZA', {
+                              day: 'numeric',
+                              month: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              timeZone: 'Africa/Johannesburg',
+                            })
+                          : '?'
+                        description = `rescheduled from ${fromDate} to ${toDate}`
+                        break
+                      }
+                      case 'room_changed':
+                        description = `changed room from "${String(d.from || '')}" to "${String(d.to || '')}"`
+                        break
+                      case 'payment_updated':
+                        if (d.action === 'balance_paid') {
+                          description = `marked balance paid (R${String(d.amount)})`
+                        } else {
+                          description = `updated payment`
+                        }
+                        break
+                      case 'cancelled':
+                        description = `cancelled the booking`
+                        break
+                      case 'completed':
+                        description = `marked booking as completed`
+                        break
+                      case 'no_show':
+                        description = `marked booking as no-show`
+                        break
+                      case 'note_added':
+                        description = `added a note`
+                        if (d.note_preview) description += `: "${String(d.note_preview)}"`
+                        break
+                      default:
+                        description = entry.action_type.replace(/_/g, ' ')
+                    }
+
+                    const iconMap: Record<string, string> = {
+                      booking_created: 'bg-blue-400',
+                      status_changed: 'bg-gray-400',
+                      rescheduled: 'bg-amber-400',
+                      room_changed: 'bg-teal-400',
+                      payment_updated: 'bg-green-400',
+                      cancelled: 'bg-red-400',
+                      completed: 'bg-green-600',
+                      no_show: 'bg-gray-500',
+                      note_added: 'bg-gray-400',
+                    }
+
+                    const dotClass = iconMap[entry.action_type] || 'bg-gray-400'
+
+                    return (
+                      <div key={entry.id} className="flex items-start gap-3">
+                        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${dotClass}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900">
+                            <span className="font-medium">{who}</span>{' '}
+                            <span className="text-gray-600">{description}</span>
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">{when}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </section>
           </div>
         )}
