@@ -265,7 +265,7 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
           <p style="margin: 4px 0;">Phone: 069 863 7240</p>
         </div>
         <p class="footer-text" style="margin-top: 24px;">
-          We look forward to seeing you! If you need to make any changes to your booking, please contact us at least 24 hours in advance.
+          We look forward to seeing you! If you need to make any changes to your booking, please contact us at least 48 hours in advance.
         </p>
       </div>
     </div>
