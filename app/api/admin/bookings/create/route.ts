@@ -1,39 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { writeAuditLogServer } from '@/lib/auditLogServer'
+import { assignRoomsToBooking, RoomAssignmentInput } from '@/lib/roomAllocation'
 
 export async function POST(req: NextRequest) {
   try {
     const payload = await req.json()
 
     const {
-  customerId,
-  serviceSlug,
-  selectedDate,
-  selectedTime,
-  peopleCount,
-  totalDuration,
-  pricing,
-  allergies,
-  massagePressure,
-  pressureByPerson,
-  medicalHistory,
-  internalNotes,
-  voucherCode,
-  voucherId,
-  paymentOption,
-  manualPaymentMethod,
-  depositPaid,
-  fullyPaid,
-  selectedUpsellsByPerson,
-  roomAssignments,
-  isCustomBooking,
-  customBookingName,
-  customDurationMinutes,
-  customPrice,
-  adminUserId,
-  adminName,
-} = payload
+      customerId,
+      serviceSlug,
+      selectedDate,
+      selectedTime,
+      peopleCount,
+      totalDuration,
+      pricing,
+      allergies,
+      massagePressure,
+      pressureByPerson,
+      medicalHistory,
+      internalNotes,
+      voucherCode,
+      voucherId,
+      paymentOption,
+      manualPaymentMethod,
+      depositPaid,
+      fullyPaid,
+      selectedUpsellsByPerson,
+      roomAssignments,
+      isCustomBooking,
+      customBookingName,
+      customDurationMinutes,
+      customPrice,
+      adminUserId,
+      adminName,
+    } = payload
 
     const safeNum = (val: unknown) =>
       typeof val === 'number' && !isNaN(val) ? val : Number(val) || 0
@@ -41,6 +42,20 @@ export async function POST(req: NextRequest) {
     if (!customerId || !selectedDate || !selectedTime || !totalDuration) {
       return NextResponse.json(
         { success: false, error: 'Missing required booking fields' },
+        { status: 400 }
+      )
+    }
+
+    if (!isCustomBooking && !serviceSlug) {
+      return NextResponse.json(
+        { success: false, error: 'Missing service slug for existing service booking' },
+        { status: 400 }
+      )
+    }
+
+    if (!Array.isArray(roomAssignments) || roomAssignments.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'At least one room assignment is required' },
         { status: 400 }
       )
     }
@@ -68,6 +83,11 @@ export async function POST(req: NextRequest) {
       bookingStatus = 'pending_payment'
     }
 
+    const primaryRoomId =
+      Array.isArray(roomAssignments) && roomAssignments.length > 0
+        ? roomAssignments[0].roomId
+        : null
+
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
       .insert({
@@ -91,17 +111,17 @@ export async function POST(req: NextRequest) {
         voucher_id: voucherId || null,
 
         status: bookingStatus,
-people_count: safeNum(peopleCount),
-room_id: Array.isArray(roomAssignments) && roomAssignments.length > 0 ? roomAssignments[0].roomId : null,
+        people_count: safeNum(peopleCount),
+        room_id: primaryRoomId,
 
-allergies: allergies || null,
-massage_pressure: massagePressure || null,
-pressure_preferences:
-  pressureByPerson && Object.keys(pressureByPerson).length > 0
-    ? pressureByPerson
-    : null,
-medical_history: medicalHistory || null,
-internal_notes: internalNotes || null,
+        allergies: allergies || null,
+        massage_pressure: massagePressure || null,
+        pressure_preferences:
+          pressureByPerson && Object.keys(pressureByPerson).length > 0
+            ? pressureByPerson
+            : null,
+        medical_history: medicalHistory || null,
+        internal_notes: internalNotes || null,
 
         deposit_due: paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit),
         no_payment_required: paymentOption === 'no_payment',
@@ -124,20 +144,24 @@ internal_notes: internalNotes || null,
       )
     }
 
-    if (Array.isArray(roomAssignments) && roomAssignments.length > 0) {
-      const roomRows = roomAssignments.map((ra: { roomId: string; people: number }) => ({
-        booking_id: booking.id,
-        room_id: ra.roomId,
+    const explicitAssignments: RoomAssignmentInput[] = roomAssignments.map(
+      (ra: { roomId: string; people: number }) => ({
+        roomId: ra.roomId,
         people: ra.people,
-      }))
+      })
+    )
 
-      const { error: roomError } = await supabaseAdmin
-        .from('booking_rooms')
-        .insert(roomRows)
+    const assignResult = await assignRoomsToBooking(
+      booking.id,
+      explicitAssignments.map((ra) => ra.roomId),
+      explicitAssignments
+    ).catch((err) => {
+      console.error('[CreateBooking] assignRoomsToBooking threw:', err)
+      return { success: false, error: String(err) }
+    })
 
-      if (roomError) {
-        console.error('[CreateBooking] Room assignment failed:', roomError)
-      }
+    if (!assignResult.success) {
+      console.error('[CreateBooking] assignRoomsToBooking failed:', assignResult.error)
     }
 
     await writeAuditLogServer(
@@ -145,12 +169,16 @@ internal_notes: internalNotes || null,
       'booking_created',
       {
         booking_type: isCustomBooking ? 'custom' : 'existing_service',
-        service: isCustomBooking ? customBookingName : 'service',
+        service: isCustomBooking ? customBookingName : serviceSlug,
         people_count: safeNum(peopleCount),
         date: selectedDate,
         time: selectedTime,
         total_price: totalPrice,
         status: bookingStatus,
+        rooms: roomAssignments.map((ra: { roomId: string; people: number }) => ({
+          roomId: ra.roomId,
+          people: ra.people,
+        })),
       },
       {
         adminId: adminUserId || null,
