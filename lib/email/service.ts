@@ -17,7 +17,7 @@ import {
 } from './templates'
 
 type EmailType = 'new_booking_spa' | 'booking_request' | 'booking_confirmation' | 'payment_received_spa' | 'payment_confirmation' | 'reminder_24h'
-
+const bookingEmailsEnabled = process.env.SEND_BOOKING_EMAILS === 'true'
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -148,9 +148,13 @@ export async function sendBookingRequestToClient(data: BookingEmailData): Promis
 }
 
 export async function sendBookingConfirmationToClient(data: BookingEmailData): Promise<boolean> {
+  if (!bookingEmailsEnabled) {
+    console.log('[Email] Booking emails disabled')
+    return true
+  }
+
   const emailType: EmailType = 'booking_confirmation'
   console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
-
   if (!data.clientEmail) {
     console.log(`[Email] No client email provided for booking ${data.bookingId}, skipping ${emailType}`)
     return false
