@@ -81,20 +81,55 @@ function scoreSlot(slot: string, activeGroupBookings: RoomBooking[]): number {
   return -100000 - Math.abs(delta)
 }
 
-function selectBestSlots(slots: string[], activeGroupBookings: RoomBooking[]): string[] {
-  if (slots.length === 0) return []
+function selectBestSlots(
+  allValidSlots: string[],
+  roomBookings: any[],
+  rooms: any[]
+): string[] {
+  console.log('[SlotRanking] START FIXED LOGIC')
 
-  const scored = Array.from(new Set(slots))
-    .filter((slot) => HHMM_RE.test(slot))
-    .map((slot) => ({
-      slot,
-      score: scoreSlot(slot, activeGroupBookings),
-    }))
-    .sort((a, b) => b.score - a.score || timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
+  // STEP 1: sort rooms by priority (lowest = highest priority)
+  const sortedRooms = [...rooms].sort((a, b) => a.priority - b.priority)
 
-  return scored.slice(0, 3).map((item) => item.slot)
+  console.log('[SlotRanking] Sorted rooms:', sortedRooms.map(r => ({
+    name: r.room_name,
+    priority: r.priority
+  })))
+
+  const selectedSlots: string[] = []
+
+  // STEP 2: loop per room (NOT per time)
+  for (const room of sortedRooms) {
+    console.log(`[SlotRanking] Checking room ${room.room_name}`)
+
+    for (const slot of allValidSlots) {
+      const slotStart = new Date(slot)
+
+      // check if room is free at this slot
+      const isBlocked = roomBookings.some(b => {
+        if (b.room_id !== room.id) return false
+
+        const start = new Date(b.start_time)
+        const end = new Date(b.end_time)
+
+        return slotStart >= start && slotStart < end
+      })
+
+      if (!isBlocked) {
+        console.log(`[SlotRanking] FOUND slot for ${room.room_name}:`, slot)
+
+        selectedSlots.push(slot)
+        break // IMPORTANT → only FIRST slot per room
+      }
+    }
+
+    if (selectedSlots.length === 3) break
+  }
+
+  console.log('[SlotRanking] FINAL:', selectedSlots)
+
+  return selectedSlots
 }
-
 function sanitizeHHMM(value: string): string {
   if (!value) return ''
   const [h = '00', m = '00'] = value.split(':')
@@ -294,7 +329,11 @@ export async function POST(request: NextRequest) {
         ? roomBookings.filter((booking) => activeRoomIdSet.has(booking.room_id))
         : roomBookings
 
-    const availableSlots = selectBestSlots(allValidSlots, activeGroupBookings)
+const availableSlots = selectBestSlots(
+  allValidSlots,
+  activeGroupBookings,
+  activeRooms // <-- IMPORTANT (you already have this)
+)
 
 console.log(
   `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
