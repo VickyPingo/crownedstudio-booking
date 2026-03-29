@@ -25,6 +25,12 @@ export interface SchedulingTimeBlock {
   room_id?: string | null
 }
 
+export interface ActiveGroupAvailabilityResult {
+  slots: string[]
+  activeGroup: number | null
+  activeRoomIds: string[]
+}
+
 const HHMM_RE = /^\d{2}:\d{2}$/
 
 function sanitizeHHMM(value: string): string {
@@ -272,7 +278,6 @@ function calculateValidSlotsForGroupWithAnchor(
       continue
     }
 
-    // CRITICAL: Anchor room MUST be free
     const anchorRoomFree = isRoomFreeAtTime(
       anchorRoomId,
       bookings,
@@ -281,10 +286,9 @@ function calculateValidSlotsForGroupWithAnchor(
     )
 
     if (!anchorRoomFree) {
-      continue // Skip this slot - anchor room is not available
+      continue
     }
 
-    // Calculate total capacity including anchor + other free rooms
     let availableCapacity = 0
 
     for (const room of groupRooms) {
@@ -345,18 +349,7 @@ export function findRoomCombinationInGroup(
  * Converts room-specific time blocks into synthetic RoomBooking entries so
  * that `calculateValidSlotsForGroup` treats blocked rooms as occupied.
  *
- * - Full-day global blocks: every room in `allRooms` gets a synthetic all-day booking
- * - Full-day room-specific blocks: the specific room gets a synthetic all-day booking
- * - Partial global blocks (room_id IS NULL): every room gets a synthetic booking for that window
- * - Partial room-specific blocks: only that room gets a synthetic booking for that window
- *
- * IMPORTANT: No booking buffer is added to time block entries — time blocks use
- * strict (no-buffer) overlap so a booking starting exactly when a block ends is allowed.
- * To prevent the booking buffer from incorrectly extending into blocked time, we set
- * the synthetic booking end time to 1ms before the block end. isRoomFreeAtTime adds
- * BOOKING_BUFFER_MINUTES to the end, which would otherwise make the room appear busy
- * beyond the block boundary. Instead, we subtract the buffer so the net effect is the
- * block's true end time.
+ * IMPORTANT: No booking buffer is added to time block entries.
  */
 function convertTimeBlocksToSyntheticBookings(
   date: string,
@@ -403,18 +396,13 @@ function convertTimeBlocksToSyntheticBookings(
   return synthetic
 }
 
-export function findAllAvailableSlotsInActiveGroup(
+function buildMergedBookingsForScheduling(
   date: string,
   rooms: Room[],
   bookings: RoomBooking[],
-  serviceDurationMinutes: number,
-  peopleCount: number,
-  businessStartTime: string,
-  businessEndTime: string,
   timeBlocks?: SchedulingTimeBlock[]
-): string[] {
+) {
   const activeRooms = rooms.filter((room) => room.active && room.room_area === 'treatment')
-  const groupedRooms = groupRoomsByPriority(activeRooms)
   const allRoomIds = activeRooms.map((r) => r.id)
 
   const syntheticBlockBookings = timeBlocks && timeBlocks.length > 0
@@ -431,6 +419,31 @@ export function findAllAvailableSlotsInActiveGroup(
       ` with ${bookings.length} real booking(s) for date ${date}`
     )
   }
+
+  return {
+    activeRooms,
+    mergedBookings,
+  }
+}
+
+export function findAllAvailableSlotsInActiveGroupWithMeta(
+  date: string,
+  rooms: Room[],
+  bookings: RoomBooking[],
+  serviceDurationMinutes: number,
+  peopleCount: number,
+  businessStartTime: string,
+  businessEndTime: string,
+  timeBlocks?: SchedulingTimeBlock[]
+): ActiveGroupAvailabilityResult {
+  const { activeRooms, mergedBookings } = buildMergedBookingsForScheduling(
+    date,
+    rooms,
+    bookings,
+    timeBlocks
+  )
+
+  const groupedRooms = groupRoomsByPriority(activeRooms)
 
   for (const groupNumber of [1, 2, 3, 4]) {
     const groupRooms = groupedRooms.get(groupNumber) || []
@@ -453,21 +466,45 @@ export function findAllAvailableSlotsInActiveGroup(
     )
 
     if (validSlots.length > 0) {
-      return validSlots.filter((slot) => HHMM_RE.test(slot))
+      return {
+        slots: validSlots.filter((slot) => HHMM_RE.test(slot)),
+        activeGroup: groupNumber,
+        activeRoomIds: groupRooms.map((room) => room.id),
+      }
     }
   }
 
-  return []
+  return {
+    slots: [],
+    activeGroup: null,
+    activeRoomIds: [],
+  }
+}
+
+export function findAllAvailableSlotsInActiveGroup(
+  date: string,
+  rooms: Room[],
+  bookings: RoomBooking[],
+  serviceDurationMinutes: number,
+  peopleCount: number,
+  businessStartTime: string,
+  businessEndTime: string,
+  timeBlocks?: SchedulingTimeBlock[]
+): string[] {
+  return findAllAvailableSlotsInActiveGroupWithMeta(
+    date,
+    rooms,
+    bookings,
+    serviceDurationMinutes,
+    peopleCount,
+    businessStartTime,
+    businessEndTime,
+    timeBlocks
+  ).slots
 }
 
 /**
  * ROOM-ANCHORED availability for admin manual bookings.
- *
- * Returns slots where the anchor room MUST be free and the total capacity
- * (including the anchor room + supplementary rooms from the same group) >= peopleCount.
- *
- * Use this when a booking is initiated from a specific room in the admin calendar
- * to ensure that room participates in the allocation.
  */
 export function findAvailableSlotsAnchoredToRoom(
   date: string,
@@ -480,16 +517,19 @@ export function findAvailableSlotsAnchoredToRoom(
   businessEndTime: string,
   timeBlocks?: SchedulingTimeBlock[]
 ): string[] {
-  const activeRooms = rooms.filter((room) => room.active && room.room_area === 'treatment')
+  const { activeRooms, mergedBookings } = buildMergedBookingsForScheduling(
+    date,
+    rooms,
+    bookings,
+    timeBlocks
+  )
 
-  // Find the anchor room
   const anchorRoom = activeRooms.find((r) => r.id === anchorRoomId)
   if (!anchorRoom) {
     console.log(`[ControlledScheduling] Anchor room ${anchorRoomId} not found or not active`)
     return []
   }
 
-  // Determine which group the anchor room belongs to
   const anchorGroup = getRoomGroup(anchorRoom.priority)
   const groupedRooms = groupRoomsByPriority(activeRooms)
   const groupRooms = groupedRooms.get(anchorGroup) || []
@@ -497,23 +537,6 @@ export function findAvailableSlotsAnchoredToRoom(
   if (groupRooms.length === 0) {
     console.log(`[ControlledScheduling] No rooms in group ${anchorGroup} for anchor room`)
     return []
-  }
-
-  const allRoomIds = activeRooms.map((r) => r.id)
-
-  const syntheticBlockBookings = timeBlocks && timeBlocks.length > 0
-    ? convertTimeBlocksToSyntheticBookings(date, timeBlocks, allRoomIds)
-    : []
-
-  const mergedBookings = syntheticBlockBookings.length > 0
-    ? [...bookings, ...syntheticBlockBookings]
-    : bookings
-
-  if (syntheticBlockBookings.length > 0) {
-    console.log(
-      `[ControlledScheduling][RoomAnchored] Merged ${syntheticBlockBookings.length} synthetic time-block booking(s)` +
-      ` with ${bookings.length} real booking(s) for date ${date}`
-    )
   }
 
   const validSlots = calculateValidSlotsForGroupWithAnchor(
