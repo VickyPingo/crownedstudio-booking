@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { Room, RoomBooking, SchedulingTimeBlock } from '@/lib/controlledScheduling'
+import {
+  findAllAvailableSlotsInActiveGroupWithMeta,
+  Room,
+  RoomBooking,
+  SchedulingTimeBlock,
+} from '@/lib/controlledScheduling'
 import { isActiveBooking } from '@/lib/bookingFilters'
 
 interface AvailabilityRequest {
@@ -60,7 +65,7 @@ function minutesToHHMM(minutes: number): string {
 function getUtcRangeForSastDate(date: string) {
   return {
     start: new Date(`${date}T00:00:00+02:00`).toISOString(),
-    end: new Date(`${date}T23:59:59.999+02:00`).toISOString()
+    end: new Date(`${date}T23:59:59.999+02:00`).toISOString(),
   }
 }
 
@@ -80,6 +85,12 @@ function getBucket(slot: string): 'morning' | 'midMorning' | 'afternoon' | null 
 
 function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart < bEnd && bStart < aEnd
+}
+
+function sanitizeHHMM(value: string): string {
+  if (!value) return ''
+  const [h = '00', m = '00'] = value.split(':')
+  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
 }
 
 function buildCandidateSlots(
@@ -241,10 +252,9 @@ function rankSlotsForRoom(
     .sort((a, b) => a.startMin - b.startMin)
 
   if (roomOccs.length === 0) {
+    // Empty room: earliest first
     return [...validSlots].sort((a, b) => timeHHMMToMinutes(a) - timeHHMMToMinutes(b))
   }
-
-  const firstStart = roomOccs[0].startMin
 
   return [...validSlots].sort((a, b) => {
     const aMin = timeHHMMToMinutes(a)
@@ -263,7 +273,7 @@ function rankSlotsForRoom(
     const aHasPostBookingGap = aGaps.length > 0
     const bHasPostBookingGap = bGaps.length > 0
 
-    // Prefer slots that continue filling after an occupied block
+    // Prefer slots that continue downward filling after an existing booking/block
     if (aHasPostBookingGap && !bHasPostBookingGap) return -1
     if (!aHasPostBookingGap && bHasPostBookingGap) return 1
 
@@ -274,25 +284,20 @@ function rankSlotsForRoom(
       return aMin - bMin
     }
 
-    // If both are before the room's first occupancy, prefer the later one less?
-    // No — for empty-leading options, choose earliest time.
-    const aBeforeFirst = aMin < firstStart
-    const bBeforeFirst = bMin < firstStart
-    if (aBeforeFirst && bBeforeFirst) return aMin - bMin
-
+    // Otherwise earliest first
     return aMin - bMin
   })
 }
 
 function pickFinalSlots(
-  rooms: Room[],
+  activeRooms: Room[],
   roomToRankedSlots: Map<string, string[]>
 ): string[] {
   const selected: string[] = []
   const used = new Set<string>()
 
-  // Rule 1: Fill first rooms first
-  for (const room of rooms) {
+  // STEP 1: first unique slot per room, in priority order
+  for (const room of activeRooms) {
     const ranked = roomToRankedSlots.get(room.id) || []
     const firstUnique = ranked.find((slot) => !used.has(slot))
     if (firstUnique) {
@@ -302,7 +307,7 @@ function pickFinalSlots(
     if (selected.length >= 3) break
   }
 
-  // Rule 2: Always try to show morning, mid-morning, afternoon where possible
+  // STEP 2: try to ensure coverage across buckets, but ONLY within these same active rooms
   if (selected.length < 3) {
     const existingBuckets = new Set(selected.map(getBucket).filter(Boolean))
     const desiredBuckets: Array<'morning' | 'midMorning' | 'afternoon'> = ['morning', 'midMorning', 'afternoon']
@@ -313,7 +318,7 @@ function pickFinalSlots(
 
       let picked: string | null = null
 
-      for (const room of rooms) {
+      for (const room of activeRooms) {
         const ranked = roomToRankedSlots.get(room.id) || []
         const match = ranked.find((slot) => !used.has(slot) && getBucket(slot) === bucket)
         if (match) {
@@ -330,9 +335,9 @@ function pickFinalSlots(
     }
   }
 
-  // Rule 3 fallback: if still under 3, fill remaining with best unused options by room priority
+  // STEP 3: still under 3? keep filling ONLY from the same active rooms
   if (selected.length < 3) {
-    for (const room of rooms) {
+    for (const room of activeRooms) {
       const ranked = roomToRankedSlots.get(room.id) || []
       for (const slot of ranked) {
         if (selected.length >= 3) break
@@ -383,9 +388,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const rooms = ((roomsData || []) as Room[])
-      .filter((room) => room.capacity >= peopleCount)
-      .sort((a, b) => a.priority - b.priority)
+    const allTreatmentRooms = (roomsData || []) as Room[]
 
     const { data: bookingsData, error: bookingsError } = await supabase
       .from('bookings')
@@ -436,7 +439,7 @@ export async function POST(request: NextRequest) {
           roomBookings.push({
             room_id: booking.room_id,
             start_time: booking.start_time,
-            end_time: booking.end_time
+            end_time: booking.end_time,
           })
         }
       }
@@ -449,7 +452,7 @@ export async function POST(request: NextRequest) {
           roomBookings.push({
             room_id: extraRoom.room_id,
             start_time: booking.start_time,
-            end_time: booking.end_time
+            end_time: booking.end_time,
           })
         }
       }
@@ -462,16 +465,51 @@ export async function POST(request: NextRequest) {
 
     const timeBlocks: SchedulingTimeBlock[] = (timeBlocksRaw || []) as SchedulingTimeBlock[]
 
-    const candidateSlots = buildCandidateSlots(roomBookings, timeBlocks)
-    const occupancies = buildRoomOccupancies(
+    // This is the IMPORTANT lock:
+    // find the FIRST active group that can serve the booking.
+    // We only expose options from this group.
+    const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
+      date,
+      allTreatmentRooms,
       roomBookings,
-      timeBlocks,
-      rooms.map((r) => r.id)
+      serviceDurationMinutes,
+      peopleCount,
+      sanitizeHHMM(NORMAL_HOURS_START),
+      sanitizeHHMM(NORMAL_HOURS_END),
+      timeBlocks
+    )
+
+    const activeRoomIdSet = new Set(slotResult.activeRoomIds)
+
+    const activeRooms = allTreatmentRooms
+      .filter((room) => activeRoomIdSet.has(room.id))
+      .sort((a, b) => a.priority - b.priority)
+
+    if (activeRooms.length === 0) {
+      return NextResponse.json({
+        availableSlots: [],
+        isFullyBlocked: true,
+      })
+    }
+
+    const activeGroupBookings = roomBookings.filter((booking) =>
+      activeRoomIdSet.has(booking.room_id)
+    )
+
+    const activeGroupTimeBlocks = timeBlocks.filter(
+      (block) => !block.room_id || activeRoomIdSet.has(block.room_id)
+    )
+
+    const candidateSlots = buildCandidateSlots(activeGroupBookings, activeGroupTimeBlocks)
+    const occupancies = buildRoomOccupancies(
+      activeGroupBookings,
+      activeGroupTimeBlocks,
+      activeRooms.map((r) => r.id)
     )
 
     const roomToRankedSlots = new Map<string, string[]>()
 
-    for (const room of rooms) {
+    for (const room of activeRooms) {
       const validSlots = candidateSlots.filter((slot) =>
         isRoomFreeForSlot(room.id, slot, serviceDurationMinutes, occupancies)
       )
@@ -479,7 +517,7 @@ export async function POST(request: NextRequest) {
       const rankedSlots = rankSlotsForRoom(room.id, validSlots, occupancies)
       roomToRankedSlots.set(room.id, rankedSlots)
 
-      console.log('[Availability][Room]', {
+      console.log('[Availability][ActiveGroupRoom]', {
         room: room.room_name,
         priority: room.priority,
         validSlots,
@@ -487,20 +525,20 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const availableSlots = pickFinalSlots(rooms, roomToRankedSlots)
+    const availableSlots = pickFinalSlots(activeRooms, roomToRankedSlots)
 
+    console.log('[Availability] ACTIVE GROUP', slotResult.activeGroup, slotResult.activeRoomIds)
     console.log('[Availability] FINAL selected slots', availableSlots)
-    console.log('[Availability] candidateSlots', candidateSlots)
     console.log('[Availability] selected date/service/people', {
       date,
       serviceSlug,
       serviceDurationMinutes,
-      peopleCount
+      peopleCount,
     })
 
     return NextResponse.json({
       availableSlots,
-      isFullyBlocked: availableSlots.length === 0
+      isFullyBlocked: availableSlots.length === 0,
     })
   } catch (error) {
     console.error('[Availability] unexpected error', error)
