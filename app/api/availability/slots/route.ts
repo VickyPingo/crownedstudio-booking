@@ -40,8 +40,8 @@ const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const HHMM_RE = /^\d{2}:\d{2}$/
 
 const BUCKET_MORNING_START = 8 * 60 + 30   // 08:30
-const BUCKET_MID_START     = 11 * 60        // 11:00
-const BUCKET_AFT_START     = 14 * 60        // 14:00
+const BUCKET_MID_START     = 11 * 60       // 11:00
+const BUCKET_AFT_START     = 14 * 60       // 14:00
 const BUCKET_AFT_END       = 17 * 60 + 30  // 17:30
 
 function timeHHMMToMinutes(hhmm: string): number {
@@ -79,12 +79,10 @@ function scoreSlot(slot: string, roomBookings: RoomBooking[]): number {
 function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[] {
   if (slots.length === 0) return []
 
-  // CORE RULE: If 08:30 is available, it ALWAYS gets highest priority
-  // This applies to both weekdays and weekends
-  const START_OF_DAY = '08:30'
-  const hasStartOfDay = slots.includes(START_OF_DAY)
-
-  interface ScoredSlot { slot: string; score: number }
+  interface ScoredSlot {
+    slot: string
+    score: number
+  }
 
   const morning: ScoredSlot[] = []
   const midMorning: ScoredSlot[] = []
@@ -94,6 +92,7 @@ function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[]
   for (const slot of slots) {
     const scored: ScoredSlot = { slot, score: scoreSlot(slot, roomBookings) }
     const bucket = getBucket(slot)
+
     if (bucket === 'morning') morning.push(scored)
     else if (bucket === 'midMorning') midMorning.push(scored)
     else if (bucket === 'afternoon') afternoon.push(scored)
@@ -105,12 +104,6 @@ function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[]
 
   const selectedScored: ScoredSlot[] = []
   const used = new Set<string>()
-
-  // PRIORITY: If 08:30 is available, add it first and mark as used
-  if (hasStartOfDay) {
-    selectedScored.push({ slot: START_OF_DAY, score: scoreSlot(START_OF_DAY, roomBookings) })
-    used.add(START_OF_DAY)
-  }
 
   const bucketBests = [best(morning), best(midMorning), best(afternoon)]
   for (const pick of bucketBests) {
@@ -135,22 +128,12 @@ function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[]
 
   if (selectedScored.length === 0) return []
 
-  // PRIORITY: If 08:30 was added, it's already first in selectedScored
-  // If not, use the existing logic to find the overall best
-  if (hasStartOfDay) {
-    // 08:30 is guaranteed to be first, rest sorted by time
-    const rest = selectedScored
-      .slice(1)
-      .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
-    return [START_OF_DAY, ...rest.map((s) => s.slot)]
-  } else {
-    // Original logic: best by score, then rest by time
-    const overallBest = selectedScored.reduce((a, b) => (b.score > a.score ? b : a))
-    const rest = selectedScored
-      .filter((s) => s.slot !== overallBest.slot)
-      .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
-    return [overallBest.slot, ...rest.map((s) => s.slot)]
-  }
+  const overallBest = selectedScored.reduce((a, b) => (b.score > a.score ? b : a))
+  const rest = selectedScored
+    .filter((s) => s.slot !== overallBest.slot)
+    .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
+
+  return [overallBest.slot, ...rest.map((s) => s.slot)]
 }
 
 function sanitizeHHMM(value: string): string {
@@ -165,8 +148,6 @@ function getUtcRangeForSastDate(date: string) {
     end: new Date(`${date}T23:59:59.999+02:00`).toISOString()
   }
 }
-
-// Removed: now using shared helper from @/lib/bookingFilters
 
 async function getEveningAvailability(
   date: string,
@@ -234,7 +215,6 @@ export async function POST(request: NextRequest) {
 
     const { start, end } = getUtcRangeForSastDate(date)
 
-    // 1. Load treatment rooms in priority order
     const { data: roomsData, error: roomsError } = await supabase
       .from('rooms')
       .select('id, room_name, room_area, capacity, priority, active')
@@ -252,7 +232,6 @@ export async function POST(request: NextRequest) {
 
     const rooms = (roomsData || []) as Room[]
 
-    // 2. Load bookings for the selected day
     const { data: bookingsData, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, start_time, end_time, room_id, status, payment_expires_at')
@@ -273,7 +252,6 @@ export async function POST(request: NextRequest) {
 
     const bookingIds = activeBookings.map((booking) => booking.id)
 
-    // 3. Load split-room assignments
     let bookingRoomsData: BookingRoomRow[] = []
     if (bookingIds.length > 0) {
       const { data: splitRooms, error: bookingRoomsError } = await supabase
@@ -292,7 +270,6 @@ export async function POST(request: NextRequest) {
       bookingRoomsData = (splitRooms || []) as BookingRoomRow[]
     }
 
-    // 4. Build a flat room booking list from BOTH legacy room_id and booking_rooms
     const roomBookings: RoomBooking[] = []
     const seen = new Set<string>()
 
@@ -323,9 +300,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Load time blocks for this date — passed into scheduling so room-specific
-    //    blocks correctly restrict the group that owns those rooms, preventing
-    //    spillover into unrelated groups.
     const { data: timeBlocksRaw } = await supabase
       .from('time_blocks')
       .select('id, block_date, start_time, end_time, is_full_day, reason, room_id')
@@ -337,8 +311,6 @@ export async function POST(request: NextRequest) {
       console.log('[Availability] Passing', timeBlocks.length, 'time block(s) into slot scheduler for date', date)
     }
 
-    // 6. Controlled scheduling — time blocks are fed in so room-specific blocks
-    //    are treated as room occupancy within their group. No group spillover.
     const rawSlots = findAllAvailableSlotsInActiveGroup(
       date,
       rooms,
@@ -352,7 +324,6 @@ export async function POST(request: NextRequest) {
 
     console.log('[Availability] RAW SLOTS (after group+time-block scheduling)', rawSlots)
 
-    // 7. Score and bucket-select best 3 slots spread across the day
     const allValidSlots = rawSlots.filter(
       (slot) => typeof slot === 'string' && HHMM_RE.test(slot)
     )
