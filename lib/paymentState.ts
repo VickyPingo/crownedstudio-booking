@@ -21,16 +21,15 @@ export interface PaymentStateResult {
 }
 
 export function getPaymentState(booking: PaymentStateInput): PaymentStateResult {
-  const completedTxns = (booking.payment_transactions || []).filter((p) => p.status === 'complete')
+  const completedTxns = (booking.payment_transactions || []).filter(
+    (p) => p.status === 'complete'
+  )
   const txnTotal = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
 
   const depositDue = booking.deposit_due || 0
   const rawBalancePaid = booking.balance_paid || 0
   const totalPrice = booking.total_price || 0
 
-  // Fallback for older/manual bookings:
-  // if deposit was marked as manually paid but there is no readable payment transaction,
-  // still treat the deposit as paid.
   const rawDepositPaid =
     txnTotal > 0
       ? txnTotal
@@ -38,7 +37,6 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
         ? depositDue
         : 0
 
-  // Total paid must be deposit + balance, not the larger of the two.
   const totalPaid = rawDepositPaid + rawBalancePaid
 
   if (booking.no_payment_required === true || totalPrice <= 0) {
