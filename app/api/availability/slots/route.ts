@@ -296,15 +296,24 @@ export async function POST(request: NextRequest) {
 
     const availableSlots = selectBestSlots(allValidSlots, activeGroupBookings)
 
-    console.log(
-      `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
-      availableSlots
-    )
+console.log(
+  `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
+  availableSlots
+)
 
-    return NextResponse.json({
-      availableSlots,
-      isFullyBlocked: availableSlots.length === 0
-    })
+console.log('[Availability] raw slot result', slotResult)
+console.log('[Availability] roomBookings', roomBookings)
+console.log('[Availability] selected date/service/people', {
+  date,
+  serviceSlug,
+  serviceDurationMinutes,
+  peopleCount
+})
+
+return NextResponse.json({
+  availableSlots,
+  isFullyBlocked: availableSlots.length === 0
+})
   } catch (error) {
     console.error('[Availability] unexpected error', error)
     return NextResponse.json(
