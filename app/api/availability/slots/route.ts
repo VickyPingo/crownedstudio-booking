@@ -38,98 +38,113 @@ const EVENING_MAX_BOOKINGS = 2
 const EVENING_MAX_PEOPLE = 4
 const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const HHMM_RE = /^\d{2}:\d{2}$/
+const BOOKING_BUFFER_MINUTES = 10
 
 function timeHHMMToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return h * 60 + m
 }
 
+function getBookingStartMinutes(booking: RoomBooking): number {
+  const startMs = new Date(booking.start_time).getTime()
+  return Math.floor(startMs / 60000) % (24 * 60)
+}
+
 function getBookingEndWithBufferMinutes(booking: RoomBooking): number {
   const endMs = new Date(booking.end_time).getTime()
   const endMinutes = Math.floor(endMs / 60000) % (24 * 60)
-  return endMinutes + 10
+  return endMinutes + BOOKING_BUFFER_MINUTES
+}
+
+function isRoomFreeAtSlot(roomId: string, slot: string, roomBookings: RoomBooking[]): boolean {
+  const slotMin = timeHHMMToMinutes(slot)
+
+  for (const booking of roomBookings) {
+    if (booking.room_id !== roomId) continue
+
+    const bookingStartMin = getBookingStartMinutes(booking)
+    const bookingEndWithBufferMin = getBookingEndWithBufferMinutes(booking)
+
+    if (slotMin >= bookingStartMin && slotMin < bookingEndWithBufferMin) {
+      return false
+    }
+  }
+
+  return true
 }
 
 /**
- * DOWNWARD-FILL scoring.
+ * BUSINESS RULE:
+ * Fill the first rooms first, always.
  *
- * Rule:
- * - If the active group already has bookings, strongly prefer the earliest slot
- *   at or after the latest booking end + buffer in that SAME group.
- * - Earlier “backfill” slots are deliberately penalized.
- * - If the active group has no bookings, prefer the earliest slots.
+ * We therefore:
+ * 1. Take only the active group chosen by controlled scheduling
+ * 2. Sort those rooms by priority
+ * 3. For each room, find that room's earliest valid slot
+ * 4. Return the first 3 unique slots in room-priority order
+ *
+ * Example:
+ * - Room 3 earliest = 11:10
+ * - Room 4 earliest = 11:40
+ * - Room 1 earliest = 08:30
+ * => ["11:10", "11:40", "08:30"]
  */
-function scoreSlot(slot: string, activeGroupBookings: RoomBooking[]): number {
-  const slotMin = timeHHMMToMinutes(slot)
-
-  if (activeGroupBookings.length === 0) {
-    return 100000 - slotMin
-  }
-
-  const latestEndWithBuffer = Math.max(
-    ...activeGroupBookings.map(getBookingEndWithBufferMinutes)
-  )
-
-  const delta = slotMin - latestEndWithBuffer
-
-  if (delta >= 0) {
-    // Earliest valid slot after the active group's current tail wins
-    return 100000 - delta
-  }
-
-  // Strongly de-prioritize going backwards earlier in the day
-  return -100000 - Math.abs(delta)
-}
-
 function selectBestSlots(
   allValidSlots: string[],
-  roomBookings: any[],
-  rooms: any[]
+  activeGroupBookings: RoomBooking[],
+  activeRooms: Room[]
 ): string[] {
-  console.log('[SlotRanking] START FIXED LOGIC')
+  console.log('[SlotRanking] START ROOM-FIRST LOGIC')
 
-  // STEP 1: sort rooms by priority (lowest = highest priority)
-  const sortedRooms = [...rooms].sort((a, b) => a.priority - b.priority)
+  const uniqueSortedSlots = Array.from(new Set(allValidSlots))
+    .filter((slot) => HHMM_RE.test(slot))
+    .sort((a, b) => timeHHMMToMinutes(a) - timeHHMMToMinutes(b))
 
-  console.log('[SlotRanking] Sorted rooms:', sortedRooms.map(r => ({
-    name: r.room_name,
-    priority: r.priority
-  })))
+  const sortedRooms = [...activeRooms].sort((a, b) => a.priority - b.priority)
+
+  console.log(
+    '[SlotRanking] Active rooms by priority:',
+    sortedRooms.map((r) => ({ room_name: r.room_name, priority: r.priority }))
+  )
+  console.log('[SlotRanking] Candidate slots:', uniqueSortedSlots)
 
   const selectedSlots: string[] = []
+  const usedSlots = new Set<string>()
 
-  // STEP 2: loop per room (NOT per time)
   for (const room of sortedRooms) {
-    console.log(`[SlotRanking] Checking room ${room.room_name}`)
+    const firstRoomSlot = uniqueSortedSlots.find((slot) =>
+      isRoomFreeAtSlot(room.id, slot, activeGroupBookings)
+    )
 
-    for (const slot of allValidSlots) {
-      const slotStart = new Date(slot)
+    console.log('[SlotRanking] Room result', {
+      room: room.room_name,
+      firstRoomSlot: firstRoomSlot || null
+    })
 
-      // check if room is free at this slot
-      const isBlocked = roomBookings.some(b => {
-        if (b.room_id !== room.id) return false
-
-        const start = new Date(b.start_time)
-        const end = new Date(b.end_time)
-
-        return slotStart >= start && slotStart < end
-      })
-
-      if (!isBlocked) {
-        console.log(`[SlotRanking] FOUND slot for ${room.room_name}:`, slot)
-
-        selectedSlots.push(slot)
-        break // IMPORTANT → only FIRST slot per room
-      }
+    if (firstRoomSlot && !usedSlots.has(firstRoomSlot)) {
+      selectedSlots.push(firstRoomSlot)
+      usedSlots.add(firstRoomSlot)
     }
 
-    if (selectedSlots.length === 3) break
+    if (selectedSlots.length >= 3) break
   }
 
-  console.log('[SlotRanking] FINAL:', selectedSlots)
+  // If fewer than 3 unique room-first slots were found, fill from the remaining
+  // valid slots in chronological order.
+  if (selectedSlots.length < 3) {
+    for (const slot of uniqueSortedSlots) {
+      if (selectedSlots.length >= 3) break
+      if (!usedSlots.has(slot)) {
+        selectedSlots.push(slot)
+        usedSlots.add(slot)
+      }
+    }
+  }
 
+  console.log('[SlotRanking] FINAL selected slots:', selectedSlots)
   return selectedSlots
 }
+
 function sanitizeHHMM(value: string): string {
   if (!value) return ''
   const [h = '00', m = '00'] = value.split(':')
@@ -324,35 +339,41 @@ export async function POST(request: NextRequest) {
     )
 
     const activeRoomIdSet = new Set(slotResult.activeRoomIds)
+
     const activeGroupBookings =
       activeRoomIdSet.size > 0
         ? roomBookings.filter((booking) => activeRoomIdSet.has(booking.room_id))
         : roomBookings
 
-const availableSlots = selectBestSlots(
-  allValidSlots,
-  activeGroupBookings,
-  activeRooms // <-- IMPORTANT (you already have this)
-)
+    const activeRooms =
+      activeRoomIdSet.size > 0
+        ? rooms.filter((room) => activeRoomIdSet.has(room.id))
+        : rooms
 
-console.log(
-  `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
-  availableSlots
-)
+    const availableSlots = selectBestSlots(
+      allValidSlots,
+      activeGroupBookings,
+      activeRooms
+    )
 
-console.log('[Availability] raw slot result', slotResult)
-console.log('[Availability] roomBookings', roomBookings)
-console.log('[Availability] selected date/service/people', {
-  date,
-  serviceSlug,
-  serviceDurationMinutes,
-  peopleCount
-})
+    console.log(
+      `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
+      availableSlots
+    )
 
-return NextResponse.json({
-  availableSlots,
-  isFullyBlocked: availableSlots.length === 0
-})
+    console.log('[Availability] raw slot result', slotResult)
+    console.log('[Availability] roomBookings', roomBookings)
+    console.log('[Availability] selected date/service/people', {
+      date,
+      serviceSlug,
+      serviceDurationMinutes,
+      peopleCount
+    })
+
+    return NextResponse.json({
+      availableSlots,
+      isFullyBlocked: availableSlots.length === 0
+    })
   } catch (error) {
     console.error('[Availability] unexpected error', error)
     return NextResponse.json(
