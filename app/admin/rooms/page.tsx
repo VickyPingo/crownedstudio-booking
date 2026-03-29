@@ -23,6 +23,8 @@ interface RoomBooking {
   status: string
   people_count: number
   total_price: number
+  deposit_due?: number
+  deposit_paid_manually?: boolean
   balance_paid: number
   no_payment_required: boolean
   is_custom_booking: boolean
@@ -211,15 +213,16 @@ export default function RoomsCalendarPage() {
       supabase
         .from('bookings')
         .select(`
-          id, start_time, end_time, room_id, status, people_count, total_price,
-          balance_paid, no_payment_required,
-          is_custom_booking, custom_booking_name, payment_expires_at,
-          allergies, medical_history, massage_pressure, is_pregnant,
-          customer:customers(full_name),
-          service:services(name),
-          payment_transactions(status, amount),
-          booking_upsells(upsell:upsells(name))
-        `)
+  id, start_time, end_time, room_id, status, people_count, total_price,
+  deposit_due, deposit_paid_manually,
+  balance_paid, no_payment_required,
+  is_custom_booking, custom_booking_name, payment_expires_at,
+  allergies, medical_history, massage_pressure, is_pregnant,
+  customer:customers(full_name),
+  service:services(name),
+  payment_transactions(status, amount),
+  booking_upsells(upsell:upsells(name))
+`)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
         .in('status', ACTIVE_BOOKING_STATUSES),
