@@ -71,6 +71,8 @@ export async function POST(req: NextRequest) {
     }
 
     const totalPrice = safeNum(pricing?.total)
+    const depositAmount = paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit)
+    const remainingBalance = Math.max(0, totalPrice - depositAmount)
 
     let bookingStatus = 'confirmed'
     if (paymentOption === 'no_payment') {
@@ -87,6 +89,14 @@ export async function POST(req: NextRequest) {
       Array.isArray(roomAssignments) && roomAssignments.length > 0
         ? roomAssignments[0].roomId
         : null
+
+    // IMPORTANT:
+    // - deposit is represented by a completed payment transaction
+    // - balance_paid stores the non-deposit portion already received
+    // This prevents payment summary code from seeing "deposit paid" as R0,
+    // and also avoids double-counting full manual payments.
+    const depositWasPaid = paymentOption !== 'no_payment' && (depositPaid === true || fullyPaid === true)
+    const balanceAlreadyPaid = fullyPaid === true ? remainingBalance : 0
 
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
@@ -123,15 +133,17 @@ export async function POST(req: NextRequest) {
         medical_history: medicalHistory || null,
         internal_notes: internalNotes || null,
 
-        deposit_due: paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit),
+        deposit_due: depositAmount,
         no_payment_required: paymentOption === 'no_payment',
         payment_method_manual:
           paymentOption !== 'no_payment' ? manualPaymentMethod || null : null,
-        deposit_paid_manually: depositPaid === true,
-        deposit_paid_at: depositPaid === true ? new Date().toISOString() : null,
-        balance_paid: fullyPaid === true ? totalPrice : 0,
-        balance_paid_at: fullyPaid === true ? new Date().toISOString() : null,
-        balance_paid_by: fullyPaid === true ? adminUserId || null : null,
+        deposit_paid_manually: depositWasPaid,
+        deposit_paid_at: depositWasPaid ? new Date().toISOString() : null,
+
+        // only store the balance portion here, not the full amount
+        balance_paid: balanceAlreadyPaid,
+        balance_paid_at: balanceAlreadyPaid > 0 ? new Date().toISOString() : null,
+        balance_paid_by: balanceAlreadyPaid > 0 ? adminUserId || null : null,
       })
       .select()
       .single()
@@ -142,6 +154,24 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Failed to create booking' },
         { status: 500 }
       )
+    }
+
+    // Create a completed manual payment transaction for the deposit portion.
+    // This is what allows the UI/payment helper to see that the deposit was actually paid.
+    if (depositWasPaid && depositAmount > 0) {
+      const { error: paymentInsertError } = await supabaseAdmin
+        .from('payment_transactions')
+        .insert({
+          booking_id: booking.id,
+          status: 'complete',
+          amount: depositAmount,
+          payment_method: manualPaymentMethod || 'manual',
+          created_at: new Date().toISOString(),
+        })
+
+      if (paymentInsertError) {
+        console.error('[CreateBooking] Failed to create manual payment transaction:', paymentInsertError)
+      }
     }
 
     const explicitAssignments: RoomAssignmentInput[] = roomAssignments.map(
@@ -175,6 +205,11 @@ export async function POST(req: NextRequest) {
         time: selectedTime,
         total_price: totalPrice,
         status: bookingStatus,
+        payment_option: paymentOption || null,
+        deposit_paid: depositWasPaid,
+        fully_paid: fullyPaid === true,
+        deposit_amount: depositAmount,
+        balance_paid: balanceAlreadyPaid,
         rooms: roomAssignments.map((ra: { roomId: string; people: number }) => ({
           roomId: ra.roomId,
           people: ra.people,
