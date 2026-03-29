@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import {
-  findAllAvailableSlotsInActiveGroup,
+  findAllAvailableSlotsInActiveGroupWithMeta,
   Room,
   RoomBooking,
   SchedulingTimeBlock
 } from '@/lib/controlledScheduling'
-import { isActiveBooking, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
+import { isActiveBooking } from '@/lib/bookingFilters'
 
 interface AvailabilityRequest {
   date: string
@@ -39,101 +39,60 @@ const EVENING_MAX_PEOPLE = 4
 const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const HHMM_RE = /^\d{2}:\d{2}$/
 
-const BUCKET_MORNING_START = 8 * 60 + 30   // 08:30
-const BUCKET_MID_START     = 11 * 60       // 11:00
-const BUCKET_AFT_START     = 14 * 60       // 14:00
-const BUCKET_AFT_END       = 17 * 60 + 30  // 17:30
-
 function timeHHMMToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
   return h * 60 + m
 }
 
-function getBucket(slot: string): 'morning' | 'midMorning' | 'afternoon' | null {
-  const min = timeHHMMToMinutes(slot)
-  if (min >= BUCKET_MORNING_START && min < BUCKET_MID_START) return 'morning'
-  if (min >= BUCKET_MID_START && min < BUCKET_AFT_START) return 'midMorning'
-  if (min >= BUCKET_AFT_START && min < BUCKET_AFT_END) return 'afternoon'
-  return null
+function getBookingEndWithBufferMinutes(booking: RoomBooking): number {
+  const endMs = new Date(booking.end_time).getTime()
+  const endMinutes = Math.floor(endMs / 60000) % (24 * 60)
+  return endMinutes + 10
 }
 
-function scoreSlot(slot: string, roomBookings: RoomBooking[]): number {
+/**
+ * DOWNWARD-FILL scoring.
+ *
+ * Rule:
+ * - If the active group already has bookings, strongly prefer the earliest slot
+ *   at or after the latest booking end + buffer in that SAME group.
+ * - Earlier “backfill” slots are deliberately penalized.
+ * - If the active group has no bookings, prefer the earliest slots.
+ */
+function scoreSlot(slot: string, activeGroupBookings: RoomBooking[]): number {
   const slotMin = timeHHMMToMinutes(slot)
 
-  for (const booking of roomBookings) {
-    const endMs = new Date(booking.end_time).getTime()
-    const endMinutes = Math.floor(endMs / 60000) % (24 * 60)
-    const bufferEnd = endMinutes + 10
-
-    const gap = slotMin - bufferEnd
-
-    if (gap === 0) return 10
-    if (gap > 0 && gap <= 10) return 8
-    if (gap > 10 && gap <= 20) return -5
-    if (gap > 20 && gap <= 30) return -10
+  if (activeGroupBookings.length === 0) {
+    return 100000 - slotMin
   }
 
-  return 5
+  const latestEndWithBuffer = Math.max(
+    ...activeGroupBookings.map(getBookingEndWithBufferMinutes)
+  )
+
+  const delta = slotMin - latestEndWithBuffer
+
+  if (delta >= 0) {
+    // Earliest valid slot after the active group's current tail wins
+    return 100000 - delta
+  }
+
+  // Strongly de-prioritize going backwards earlier in the day
+  return -100000 - Math.abs(delta)
 }
 
-function selectBestSlots(slots: string[], roomBookings: RoomBooking[]): string[] {
+function selectBestSlots(slots: string[], activeGroupBookings: RoomBooking[]): string[] {
   if (slots.length === 0) return []
 
-  interface ScoredSlot {
-    slot: string
-    score: number
-  }
+  const scored = Array.from(new Set(slots))
+    .filter((slot) => HHMM_RE.test(slot))
+    .map((slot) => ({
+      slot,
+      score: scoreSlot(slot, activeGroupBookings),
+    }))
+    .sort((a, b) => b.score - a.score || timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
 
-  const morning: ScoredSlot[] = []
-  const midMorning: ScoredSlot[] = []
-  const afternoon: ScoredSlot[] = []
-  const unassigned: ScoredSlot[] = []
-
-  for (const slot of slots) {
-    const scored: ScoredSlot = { slot, score: scoreSlot(slot, roomBookings) }
-    const bucket = getBucket(slot)
-
-    if (bucket === 'morning') morning.push(scored)
-    else if (bucket === 'midMorning') midMorning.push(scored)
-    else if (bucket === 'afternoon') afternoon.push(scored)
-    else unassigned.push(scored)
-  }
-
-  const best = (arr: ScoredSlot[]): ScoredSlot | null =>
-    arr.length === 0 ? null : arr.reduce((a, b) => (b.score > a.score ? b : a))
-
-  const selectedScored: ScoredSlot[] = []
-  const used = new Set<string>()
-
-  const bucketBests = [best(morning), best(midMorning), best(afternoon)]
-  for (const pick of bucketBests) {
-    if (pick && !used.has(pick.slot)) {
-      selectedScored.push(pick)
-      used.add(pick.slot)
-    }
-  }
-
-  if (selectedScored.length < 3) {
-    const allScored = [...morning, ...midMorning, ...afternoon, ...unassigned]
-      .sort((a, b) => b.score - a.score || timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
-
-    for (const s of allScored) {
-      if (selectedScored.length >= 3) break
-      if (!used.has(s.slot)) {
-        selectedScored.push(s)
-        used.add(s.slot)
-      }
-    }
-  }
-
-  if (selectedScored.length === 0) return []
-
-  const overallBest = selectedScored.reduce((a, b) => (b.score > a.score ? b : a))
-  const rest = selectedScored
-    .filter((s) => s.slot !== overallBest.slot)
-    .sort((a, b) => timeHHMMToMinutes(a.slot) - timeHHMMToMinutes(b.slot))
-
-  return [overallBest.slot, ...rest.map((s) => s.slot)]
+  return scored.slice(0, 3).map((item) => item.slot)
 }
 
 function sanitizeHHMM(value: string): string {
@@ -311,7 +270,7 @@ export async function POST(request: NextRequest) {
       console.log('[Availability] Passing', timeBlocks.length, 'time block(s) into slot scheduler for date', date)
     }
 
-    const rawSlots = findAllAvailableSlotsInActiveGroup(
+    const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
       date,
       rooms,
       roomBookings,
@@ -322,14 +281,25 @@ export async function POST(request: NextRequest) {
       timeBlocks
     )
 
-    console.log('[Availability] RAW SLOTS (after group+time-block scheduling)', rawSlots)
+    console.log('[Availability] RAW SLOTS (after group+time-block scheduling)', slotResult.slots)
+    console.log('[Availability] ACTIVE GROUP', slotResult.activeGroup, 'ROOM IDS', slotResult.activeRoomIds)
 
-    const allValidSlots = rawSlots.filter(
+    const allValidSlots = slotResult.slots.filter(
       (slot) => typeof slot === 'string' && HHMM_RE.test(slot)
     )
-    const availableSlots = selectBestSlots(allValidSlots, roomBookings)
 
-    console.log(`[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`, availableSlots)
+    const activeRoomIdSet = new Set(slotResult.activeRoomIds)
+    const activeGroupBookings =
+      activeRoomIdSet.size > 0
+        ? roomBookings.filter((booking) => activeRoomIdSet.has(booking.room_id))
+        : roomBookings
+
+    const availableSlots = selectBestSlots(allValidSlots, activeGroupBookings)
+
+    console.log(
+      `[Availability] FINAL SLOTS (${availableSlots.length} of ${allValidSlots.length} valid)`,
+      availableSlots
+    )
 
     return NextResponse.json({
       availableSlots,
