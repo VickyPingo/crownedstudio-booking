@@ -359,12 +359,12 @@ export function ManualBookingModal({
 
 
   useEffect(() => {
-    if (paymentOption === 'fully_paid') {
-      setInitialAmountPaid(String(pricing.total || ''))
-    } else if (paymentOption === 'no_payment') {
-      setInitialAmountPaid('')
-    }
-  }, [paymentOption, pricing.total])
+  if (paymentOption === 'fully_paid') {
+    setInitialAmountPaid(pricing.total || 0)
+  } else if (paymentOption === 'no_payment') {
+    setInitialAmountPaid('')
+  }
+}, [paymentOption, pricing.total])
 
   const assignedPeopleTotal = useMemo(
     () => roomAssignments.reduce((sum, ra) => sum + ra.people, 0),
