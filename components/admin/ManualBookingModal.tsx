@@ -219,15 +219,6 @@ export function ManualBookingModal({
 
     fetchInitialData()
   }, [prefillCustomerId])
-
-  useEffect(() => {
-    if (paymentOption === 'fully_paid') {
-      setInitialAmountPaid(pricing.total)
-    } else if (paymentOption === 'no_payment') {
-      setInitialAmountPaid('')
-    }
-  }, [paymentOption, pricing.total])
-
   // Initialise room assignments when prefillRoomId changes or allRooms loads
   useEffect(() => {
     if (!prefillRoomId || allRooms.length === 0) return
@@ -365,6 +356,15 @@ export function ManualBookingModal({
 
     return { basePrice, upsellsTotal, surcharge, subtotal, discount, total, deposit }
   }, [selectedService, selectedDate, selectedTime, peopleCount, selectedUpsellsByPerson, upsells, businessHours, voucherData, getServicePrice, bookingType, customPrice])
+
+
+  useEffect(() => {
+    if (paymentOption === 'fully_paid') {
+      setInitialAmountPaid(String(pricing.total || ''))
+    } else if (paymentOption === 'no_payment') {
+      setInitialAmountPaid('')
+    }
+  }, [paymentOption, pricing.total])
 
   const assignedPeopleTotal = useMemo(
     () => roomAssignments.reduce((sum, ra) => sum + ra.people, 0),
