@@ -173,8 +173,7 @@ export function ManualBookingModal({
 
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('deposit_required')
   const [manualPaymentMethod, setManualPaymentMethod] = useState<string>('cash')
-  const [depositPaid, setDepositPaid] = useState(false)
-  const [fullyPaid, setFullyPaid] = useState(false)
+  const [initialAmountPaid, setInitialAmountPaid] = useState<string>('')
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -591,8 +590,7 @@ export function ManualBookingModal({
           voucherId: voucherData?.id || null,
           paymentOption,
           manualPaymentMethod,
-          depositPaid,
-          fullyPaid,
+          initialAmountPaid: paymentOption === 'no_payment' ? 0 : Number(initialAmountPaid || 0),
           selectedUpsellsByPerson: upsellsByPersonWithSlugs,
 roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
 adminUserId: user?.id || null,
@@ -613,7 +611,7 @@ adminName:
       }
 
       const bookingId = result.bookingId
-      const bookingStatus = paymentOption === 'no_payment' || fullyPaid || depositPaid ? 'confirmed' : 'pending_payment'
+      const bookingStatus = paymentOption === 'no_payment' || Number(initialAmountPaid || 0) > 0 ? 'confirmed' : 'pending_payment'
 
       fetch('/api/bookings/send-emails', {
         method: 'POST',
@@ -1222,8 +1220,8 @@ adminName:
                 <h4 className="font-semibold text-gray-900">Payment Handling</h4>
                 {(['deposit_required', 'fully_paid', 'no_payment'] as PaymentOption[]).map((option) => {
                   const labels = {
-                    deposit_required: { title: 'Deposit Required', sub: `Client pays R${pricing.deposit} deposit` },
-                    fully_paid: { title: 'Full Payment', sub: `Client pays R${pricing.total} upfront` },
+                    deposit_required: { title: 'Payment Required', sub: 'Capture any amount already paid' },
+                    fully_paid: { title: 'Full Payment', sub: `Use full amount of R${pricing.total}` },
                     no_payment: { title: 'No Payment Required', sub: 'Complimentary or pay later' },
                   }
                   return (
@@ -1234,7 +1232,16 @@ adminName:
                         type="radio"
                         name="payment"
                         checked={paymentOption === option}
-                        onChange={() => setPaymentOption(option)}
+                        onChange={() => {
+                          setPaymentOption(option)
+                          if (option === 'no_payment') {
+                            setInitialAmountPaid('')
+                          } else if (option === 'fully_paid') {
+                            setInitialAmountPaid(String(pricing.total))
+                          } else if (option === 'deposit_required' && !initialAmountPaid) {
+                            setInitialAmountPaid(String(pricing.deposit))
+                          }
+                        }}
                         className="w-4 h-4 text-gray-900"
                       />
                       <div>
@@ -1260,18 +1267,46 @@ adminName:
                       <option value="eft">EFT / Bank Transfer</option>
                     </select>
                   </div>
-                  {paymentOption === 'deposit_required' && (
-                    <label className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={depositPaid} onChange={(e) => setDepositPaid(e.target.checked)} className="w-4 h-4 text-gray-900" />
-                      <span className="text-gray-900 font-medium">Mark deposit as paid (R{pricing.deposit})</span>
-                    </label>
-                  )}
-                  {paymentOption === 'fully_paid' && (
-                    <label className="flex items-center gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer">
-                      <input type="checkbox" checked={fullyPaid} onChange={(e) => setFullyPaid(e.target.checked)} className="w-4 h-4 text-gray-900" />
-                      <span className="text-gray-900 font-medium">Mark as fully paid (R{pricing.total})</span>
-                    </label>
-                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Amount Already Paid</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={initialAmountPaid}
+                      onChange={(e) => setInitialAmountPaid(e.target.value)}
+                      placeholder="Enter amount already paid"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Enter any amount the client has already paid. This can be less than, equal to, or more than the 50% deposit.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInitialAmountPaid(String(pricing.deposit))}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                    >
+                      Use Deposit (R{pricing.deposit})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInitialAmountPaid(String(pricing.total))}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                    >
+                      Use Full Amount (R{pricing.total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInitialAmountPaid('')}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1290,7 +1325,7 @@ adminName:
                   </p>
                   <p>
                     <strong>Status:</strong>{' '}
-                    {paymentOption === 'no_payment' || fullyPaid || depositPaid ? 'Confirmed' : 'Pending Payment'}
+                    {paymentOption === 'no_payment' || Number(initialAmountPaid || 0) > 0 ? 'Confirmed' : 'Pending Payment'}
                   </p>
                 </div>
               </div>
@@ -1353,3 +1388,4 @@ adminName:
     </div>
   )
 }
+
