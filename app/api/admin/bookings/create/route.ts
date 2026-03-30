@@ -24,8 +24,7 @@ export async function POST(req: NextRequest) {
       voucherId,
       paymentOption,
       manualPaymentMethod,
-      depositPaid,
-      fullyPaid,
+      initialAmountPaid,
       roomAssignments,
       isCustomBooking,
       customBookingName,
@@ -71,27 +70,21 @@ export async function POST(req: NextRequest) {
 
     const totalPrice = safeNum(pricing?.total)
     const depositAmount = paymentOption === 'no_payment' ? 0 : safeNum(pricing?.deposit)
-    const remainingBalance = Math.max(0, totalPrice - depositAmount)
     const nowIso = new Date().toISOString()
+    const initialPaidAmount =
+      paymentOption === 'no_payment'
+        ? 0
+        : Math.max(0, Math.min(totalPrice, safeNum(initialAmountPaid)))
 
-    let bookingStatus = 'confirmed'
-    if (paymentOption === 'no_payment') {
-      bookingStatus = 'confirmed'
-    } else if (fullyPaid === true) {
-      bookingStatus = 'confirmed'
-    } else if (depositPaid === true) {
-      bookingStatus = 'confirmed'
-    } else {
-      bookingStatus = 'pending_payment'
-    }
+    const bookingStatus =
+      paymentOption === 'no_payment' || initialPaidAmount > 0
+        ? 'confirmed'
+        : 'pending_payment'
 
     const primaryRoomId =
       Array.isArray(roomAssignments) && roomAssignments.length > 0
         ? roomAssignments[0].roomId
         : null
-
-    const depositWasPaid = paymentOption !== 'no_payment' && (depositPaid === true || fullyPaid === true)
-    const balanceWasPaid = paymentOption !== 'no_payment' && fullyPaid === true
 
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
@@ -131,15 +124,14 @@ export async function POST(req: NextRequest) {
         deposit_due: depositAmount,
         no_payment_required: paymentOption === 'no_payment',
         payment_method_manual: paymentOption !== 'no_payment' ? manualPaymentMethod || null : null,
-        deposit_paid_manually: depositWasPaid,
-        deposit_paid_at: depositWasPaid ? nowIso : null,
+        deposit_paid_manually: initialPaidAmount >= depositAmount && depositAmount > 0,
+        deposit_paid_at: initialPaidAmount > 0 ? nowIso : null,
 
-        // IMPORTANT:
-        // balance_paid must only store the balance portion already received,
-        // never the full booking amount.
-        balance_paid: balanceWasPaid ? remainingBalance : 0,
-        balance_paid_at: balanceWasPaid ? nowIso : null,
-        balance_paid_by: balanceWasPaid ? adminUserId || null : null,
+        // For manual/custom bookings, payment_transactions is now the source of truth.
+        // Keep balance_paid at 0 for new bookings to avoid double counting.
+        balance_paid: 0,
+        balance_paid_at: null,
+        balance_paid_by: null,
       })
       .select()
       .single()
@@ -152,51 +144,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Create deposit transaction for deposit-paid and fully-paid manual bookings
-    if (depositWasPaid && depositAmount > 0) {
-      const depositTxId = `MANUAL-DEP-${booking.id.replace(/-/g, '')}-${Date.now()}`
+    // Create a single real manual payment transaction for any amount already paid
+    if (initialPaidAmount > 0) {
+      const paymentTxId = `MANUAL-PAY-${booking.id.replace(/-/g, '')}-${Date.now()}`
 
-      const { error: depositTxError } = await supabaseAdmin
+      const { error: paymentTxError } = await supabaseAdmin
         .from('payment_transactions')
         .insert({
           booking_id: booking.id,
-          merchant_transaction_id: depositTxId,
-          item_name: 'Manual Deposit',
+          merchant_transaction_id: paymentTxId,
+          item_name: 'Manual Payment',
           status: 'complete',
-          amount: depositAmount,
+          amount: initialPaidAmount,
           payment_method: manualPaymentMethod || 'manual',
           created_at: nowIso,
         })
 
-      if (depositTxError) {
-        console.error('[CreateBooking] Deposit payment transaction insert failed:', depositTxError)
+      if (paymentTxError) {
+        console.error('[CreateBooking] Manual payment transaction insert failed:', paymentTxError)
         return NextResponse.json(
-          { success: false, error: 'Booking created but failed to record deposit payment' },
-          { status: 500 }
-        )
-      }
-    }
-
-    // Create separate balance transaction only when fully paid
-    if (balanceWasPaid && remainingBalance > 0) {
-      const balanceTxId = `MANUAL-BAL-${booking.id.replace(/-/g, '')}-${Date.now()}`
-
-      const { error: balanceTxError } = await supabaseAdmin
-        .from('payment_transactions')
-        .insert({
-          booking_id: booking.id,
-          merchant_transaction_id: balanceTxId,
-          item_name: 'Manual Balance',
-          status: 'complete',
-          amount: remainingBalance,
-          payment_method: manualPaymentMethod || 'manual',
-          created_at: nowIso,
-        })
-
-      if (balanceTxError) {
-        console.error('[CreateBooking] Balance payment transaction insert failed:', balanceTxError)
-        return NextResponse.json(
-          { success: false, error: 'Booking created but failed to record balance payment' },
+          { success: false, error: 'Booking created but failed to record manual payment' },
           { status: 500 }
         )
       }
@@ -233,9 +200,9 @@ export async function POST(req: NextRequest) {
         time: selectedTime,
         total_price: totalPrice,
         deposit_due: depositAmount,
-        deposit_paid: depositWasPaid,
-        balance_paid: balanceWasPaid ? remainingBalance : 0,
-        fully_paid: balanceWasPaid,
+        initial_amount_paid: initialPaidAmount,
+        deposit_paid: initialPaidAmount >= depositAmount && depositAmount > 0,
+        fully_paid: initialPaidAmount >= totalPrice && totalPrice > 0,
         status: bookingStatus,
         rooms: roomAssignments.map((ra: { roomId: string; people: number }) => ({
           roomId: ra.roomId,
@@ -257,3 +224,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
