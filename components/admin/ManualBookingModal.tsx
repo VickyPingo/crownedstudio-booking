@@ -173,7 +173,7 @@ export function ManualBookingModal({
 
   const [paymentOption, setPaymentOption] = useState<PaymentOption>('deposit_required')
   const [manualPaymentMethod, setManualPaymentMethod] = useState<string>('cash')
-  const [initialAmountPaid, setInitialAmountPaid] = useState<string>('')
+  const [initialAmountPaid, setInitialAmountPaid] = useState<number | ''>('')
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -219,6 +219,14 @@ export function ManualBookingModal({
 
     fetchInitialData()
   }, [prefillCustomerId])
+
+  useEffect(() => {
+    if (paymentOption === 'fully_paid') {
+      setInitialAmountPaid(pricing.total)
+    } else if (paymentOption === 'no_payment') {
+      setInitialAmountPaid('')
+    }
+  }, [paymentOption, pricing.total])
 
   // Initialise room assignments when prefillRoomId changes or allRooms loads
   useEffect(() => {
@@ -590,15 +598,15 @@ export function ManualBookingModal({
           voucherId: voucherData?.id || null,
           paymentOption,
           manualPaymentMethod,
-          initialAmountPaid: paymentOption === 'no_payment' ? 0 : Number(initialAmountPaid || 0),
+          initialAmountPaid: Number(initialAmountPaid || 0),
           selectedUpsellsByPerson: upsellsByPersonWithSlugs,
-roomAssignments: roomAssignments.map(ra => ({ roomId: ra.roomId, people: ra.people })),
-adminUserId: user?.id || null,
-adminName:
-  user?.user_metadata?.full_name ||
-  user?.user_metadata?.name ||
-  user?.email ||
-  null,
+          roomAssignments: roomAssignments.map((ra) => ({ roomId: ra.roomId, people: ra.people })),
+          adminUserId: user?.id || null,
+          adminName:
+            user?.user_metadata?.full_name ||
+            user?.user_metadata?.name ||
+            user?.email ||
+            null,
         }),
       })
 
@@ -611,7 +619,10 @@ adminName:
       }
 
       const bookingId = result.bookingId
-      const bookingStatus = paymentOption === 'no_payment' || Number(initialAmountPaid || 0) > 0 ? 'confirmed' : 'pending_payment'
+      const bookingStatus =
+        paymentOption === 'no_payment' || Number(initialAmountPaid || 0) > 0
+          ? 'confirmed'
+          : 'pending_payment'
 
       fetch('/api/bookings/send-emails', {
         method: 'POST',
@@ -1232,16 +1243,7 @@ adminName:
                         type="radio"
                         name="payment"
                         checked={paymentOption === option}
-                        onChange={() => {
-                          setPaymentOption(option)
-                          if (option === 'no_payment') {
-                            setInitialAmountPaid('')
-                          } else if (option === 'fully_paid') {
-                            setInitialAmountPaid(String(pricing.total))
-                          } else if (option === 'deposit_required' && !initialAmountPaid) {
-                            setInitialAmountPaid(String(pricing.deposit))
-                          }
-                        }}
+                        onChange={() => setPaymentOption(option)}
                         className="w-4 h-4 text-gray-900"
                       />
                       <div>
@@ -1275,11 +1277,11 @@ adminName:
                       min="0"
                       step="0.01"
                       value={initialAmountPaid}
-                      onChange={(e) => setInitialAmountPaid(e.target.value)}
-                      placeholder="Enter amount already paid"
+                      onChange={(e) => setInitialAmountPaid(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                      placeholder="0"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-2 text-sm text-gray-500">
                       Enter any amount the client has already paid. This can be less than, equal to, or more than the 50% deposit.
                     </p>
                   </div>
@@ -1287,22 +1289,22 @@ adminName:
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setInitialAmountPaid(String(pricing.deposit))}
-                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                      onClick={() => setInitialAmountPaid(pricing.deposit)}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-medium transition-colors"
                     >
                       Use Deposit (R{pricing.deposit})
                     </button>
                     <button
                       type="button"
-                      onClick={() => setInitialAmountPaid(String(pricing.total))}
-                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                      onClick={() => setInitialAmountPaid(pricing.total)}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-medium transition-colors"
                     >
                       Use Full Amount (R{pricing.total})
                     </button>
                     <button
                       type="button"
                       onClick={() => setInitialAmountPaid('')}
-                      className="px-3 py-2 text-sm bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200"
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-800 font-medium transition-colors"
                     >
                       Clear
                     </button>
@@ -1388,4 +1390,3 @@ adminName:
     </div>
   )
 }
-
