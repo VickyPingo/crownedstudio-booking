@@ -28,24 +28,22 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
   const txnTotal = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
   const totalPrice = booking.total_price || 0
   const fallbackBalancePaid = booking.balance_paid || 0
+  const depositDue = booking.deposit_due || 0
 
-  // For the new manual/custom flow, completed transactions are the source of truth.
-  // For older bookings with no transactions, fall back safely to existing fields.
-  const totalPaid =
-    txnTotal > 0
-      ? txnTotal
-      : booking.deposit_paid_manually
-        ? Math.max(booking.deposit_due || 0, fallbackBalancePaid)
-        : fallbackBalancePaid
+  // Hybrid-safe:
+  // - old/manual bookings may rely on balance_paid fallback
+  // - newer/manual bookings may also have payment_transactions
+  // Use the higher trusted paid figure, not txn-only.
+  const totalPaid = Math.max(txnTotal, fallbackBalancePaid)
 
   const rawDepositPaid =
-    txnTotal > 0
-      ? txnTotal
-      : booking.deposit_paid_manually === true && (booking.deposit_due || 0) > 0
-        ? booking.deposit_due || 0
+    totalPaid > 0
+      ? Math.min(totalPaid, depositDue || totalPaid)
+      : booking.deposit_paid_manually === true && depositDue > 0
+        ? depositDue
         : 0
 
-  const rawBalancePaid = fallbackBalancePaid
+  const rawBalancePaid = Math.max(0, totalPaid - rawDepositPaid)
 
   if (booking.no_payment_required === true || totalPrice <= 0) {
     return {
@@ -65,8 +63,8 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
     return {
       state: 'fully_paid',
       totalPaid,
-      depositPaid: totalPaid,
-      balancePaid: 0,
+      depositPaid: rawDepositPaid,
+      balancePaid: rawBalancePaid,
       balanceDue: 0,
       rawDepositPaid,
       rawBalancePaid,
@@ -77,8 +75,8 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
     return {
       state: 'partially_paid',
       totalPaid,
-      depositPaid: totalPaid,
-      balancePaid: 0,
+      depositPaid: rawDepositPaid,
+      balancePaid: rawBalancePaid,
       balanceDue,
       rawDepositPaid,
       rawBalancePaid,
