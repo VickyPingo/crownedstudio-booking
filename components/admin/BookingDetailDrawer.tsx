@@ -135,7 +135,9 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [markingBalancePaid, setMarkingBalancePaid] = useState(false)
-  const [rooms, setRooms] = useState<Room[]>([])
+const [manualAmount, setManualAmount] = useState('')
+const [addingPayment, setAddingPayment] = useState(false)
+const [rooms, setRooms] = useState<Room[]>([])
   const [showRoomSelect, setShowRoomSelect] = useState(false)
   const [updatingRoom, setUpdatingRoom] = useState(false)
   const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
@@ -580,7 +582,46 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
 
     setMarkingBalancePaid(false)
   }
+const handleAddManualPayment = async () => {
+  if (!booking || !manualAmount) return
 
+  const amount = Number(manualAmount)
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    alert('Please enter a valid payment amount')
+    return
+  }
+
+  setAddingPayment(true)
+
+  try {
+    const res = await fetch('/api/admin/bookings/add-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId: booking.id,
+        amount,
+        paymentMethod: 'manual',
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok || !data.success) {
+      alert(data.error || 'Failed to add payment')
+    } else {
+      setManualAmount('')
+      await fetchBooking()
+      await fetchAuditLog()
+      onUpdate()
+    }
+  } catch (err) {
+    console.error('Failed to add manual payment:', err)
+    alert('Network error — failed to add payment')
+  } finally {
+    setAddingPayment(false)
+  }
+}
   if (!bookingId) return null
 
   const payment = booking
@@ -1221,7 +1262,31 @@ export function BookingDetailDrawer({ bookingId, onClose, onUpdate }: BookingDet
                     {markingBalancePaid ? 'Processing...' : `Mark Balance Paid (R${payment.balanceDue.toLocaleString()})`}
                   </button>
                 )}
+{(booking.is_manual_booking || booking.is_custom_booking) && !booking.no_payment_required && (
+  <div className="w-full border border-gray-200 rounded-lg p-3 bg-gray-50">
+    <p className="text-sm font-medium text-gray-900 mb-2">Add Manual Payment</p>
 
+    <div className="flex gap-2">
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        value={manualAmount}
+        onChange={(e) => setManualAmount(e.target.value)}
+        placeholder="Amount"
+        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+      />
+
+      <button
+        onClick={() => void handleAddManualPayment()}
+        disabled={addingPayment || !manualAmount}
+        className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+      >
+        {addingPayment ? 'Adding...' : 'Add Payment'}
+      </button>
+    </div>
+  </div>
+)}
                 <button
                   onClick={() => void handleStatusChange('no_show')}
                   disabled={booking.status === 'no_show'}
