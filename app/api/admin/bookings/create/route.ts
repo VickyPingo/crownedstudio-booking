@@ -122,16 +122,17 @@ export async function POST(req: NextRequest) {
         internal_notes: internalNotes || null,
 
         deposit_due: depositAmount,
-        no_payment_required: paymentOption === 'no_payment',
-        payment_method_manual: paymentOption !== 'no_payment' ? manualPaymentMethod || null : null,
-        deposit_paid_manually: initialPaidAmount >= depositAmount && depositAmount > 0,
-        deposit_paid_at: initialPaidAmount > 0 ? nowIso : null,
+no_payment_required: paymentOption === 'no_payment',
+payment_method_manual: paymentOption !== 'no_payment' ? manualPaymentMethod || null : null,
+deposit_paid_manually: initialPaidAmount >= depositAmount && depositAmount > 0,
+deposit_paid_at: initialPaidAmount > 0 ? nowIso : null,
 
-        // For manual/custom bookings, payment_transactions is now the source of truth.
-        // Keep balance_paid at 0 for new bookings to avoid double counting.
-        balance_paid: 0,
-        balance_paid_at: null,
-        balance_paid_by: null,
+// Fallback source of truth for manual/custom bookings.
+// This ensures the booking still reflects money received even if
+// payment_transactions insert fails for any reason.
+balance_paid: initialPaidAmount > 0 ? initialPaidAmount : 0,
+balance_paid_at: initialPaidAmount > 0 ? nowIso : null,
+balance_paid_by: initialPaidAmount > 0 ? adminUserId || null : null,
       })
       .select()
       .single()
@@ -161,12 +162,10 @@ export async function POST(req: NextRequest) {
         })
 
       if (paymentTxError) {
-        console.error('[CreateBooking] Manual payment transaction insert failed:', paymentTxError)
-        return NextResponse.json(
-          { success: false, error: 'Booking created but failed to record manual payment' },
-          { status: 500 }
-        )
-      }
+  console.error('[CreateBooking] Manual payment transaction insert failed:', paymentTxError)
+  // Do NOT fail the whole booking at this point.
+  // The booking already exists, and balance_paid now stores the amount received.
+}
     }
 
     const explicitAssignments: RoomAssignmentInput[] = roomAssignments.map(
