@@ -1,14 +1,51 @@
+export type PaymentState = 'pending' | 'partially_paid' | 'fully_paid' | 'not_required'
+
+export interface PaymentStateInput {
+  total_price: number
+  deposit_due?: number
+  balance_paid?: number
+  no_payment_required?: boolean
+  status?: string
+  deposit_paid_manually?: boolean
+  payment_transactions?: Array<{ status: string; amount: number }>
+}
+
+export interface PaymentStateResult {
+  state: PaymentState
+  totalPaid: number
+  depositPaid: number
+  balancePaid: number
+  balanceDue: number
+  rawDepositPaid: number
+  rawBalancePaid: number
+}
+
 export function getPaymentState(booking: PaymentStateInput): PaymentStateResult {
   const completedTxns = (booking.payment_transactions || []).filter(
     (p) => p.status === 'complete'
   )
 
   const txnTotal = completedTxns.reduce((sum, p) => sum + (p.amount || 0), 0)
-
   const totalPrice = booking.total_price || 0
+  const fallbackBalancePaid = booking.balance_paid || 0
 
-  // 🔥 NEW LOGIC
-  const totalPaid = txnTotal > 0 ? txnTotal : (booking.balance_paid || 0)
+  // For the new manual/custom flow, completed transactions are the source of truth.
+  // For older bookings with no transactions, fall back safely to existing fields.
+  const totalPaid =
+    txnTotal > 0
+      ? txnTotal
+      : booking.deposit_paid_manually
+        ? Math.max(booking.deposit_due || 0, fallbackBalancePaid)
+        : fallbackBalancePaid
+
+  const rawDepositPaid =
+    txnTotal > 0
+      ? txnTotal
+      : booking.deposit_paid_manually === true && (booking.deposit_due || 0) > 0
+        ? booking.deposit_due || 0
+        : 0
+
+  const rawBalancePaid = fallbackBalancePaid
 
   if (booking.no_payment_required === true || totalPrice <= 0) {
     return {
@@ -17,8 +54,8 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
       depositPaid: 0,
       balancePaid: 0,
       balanceDue: 0,
-      rawDepositPaid: txnTotal,
-      rawBalancePaid: booking.balance_paid || 0,
+      rawDepositPaid,
+      rawBalancePaid,
     }
   }
 
@@ -31,8 +68,8 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
       depositPaid: totalPaid,
       balancePaid: 0,
       balanceDue: 0,
-      rawDepositPaid: txnTotal,
-      rawBalancePaid: booking.balance_paid || 0,
+      rawDepositPaid,
+      rawBalancePaid,
     }
   }
 
@@ -43,8 +80,8 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
       depositPaid: totalPaid,
       balancePaid: 0,
       balanceDue,
-      rawDepositPaid: txnTotal,
-      rawBalancePaid: booking.balance_paid || 0,
+      rawDepositPaid,
+      rawBalancePaid,
     }
   }
 
@@ -54,7 +91,21 @@ export function getPaymentState(booking: PaymentStateInput): PaymentStateResult 
     depositPaid: 0,
     balancePaid: 0,
     balanceDue: totalPrice,
-    rawDepositPaid: txnTotal,
-    rawBalancePaid: booking.balance_paid || 0,
+    rawDepositPaid,
+    rawBalancePaid,
   }
+}
+
+export const PAYMENT_STATE_LABELS: Record<PaymentState, string> = {
+  pending: 'Pending',
+  partially_paid: 'Partially Paid',
+  fully_paid: 'Fully Paid',
+  not_required: 'No Payment',
+}
+
+export const PAYMENT_STATE_STYLES: Record<PaymentState, string> = {
+  pending: 'bg-amber-100 text-amber-800',
+  partially_paid: 'bg-blue-100 text-blue-800',
+  fully_paid: 'bg-green-100 text-green-800',
+  not_required: 'bg-gray-100 text-gray-600',
 }
