@@ -31,12 +31,13 @@ export async function POST(request: NextRequest) {
     const { error: insertError } = await supabase
       .from('payment_transactions')
       .insert({
-        booking_id: booking.id,
-        merchant_transaction_id: merchantTransactionId,
-        amount: depositAmount,
-        status: 'initiated',
-        payment_status: 'PENDING',
-      })
+  booking_id: booking.id,
+  merchant_transaction_id: merchantTransactionId,
+  amount: depositAmount,
+  status: 'initiated',
+  payment_status: 'PENDING',
+  item_name: booking.service_name || booking.service_slug || 'Spa Booking',
+})
 
     if (insertError) {
       console.error('Failed to create transaction:', insertError)
