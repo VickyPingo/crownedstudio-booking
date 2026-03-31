@@ -175,24 +175,6 @@ export default function AdminDashboardPage() {
   }
 }, [])
 
-      const totalRevenue = monthlyPayments.data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
-      const spaVoucherTotal = spaVouchers.data?.reduce((sum, b) => sum + (Number(b.voucher_discount) || 0), 0) || 0
-      const eventVoucherTotal = eventVouchers.data?.reduce((sum, b) => sum + (b.voucher_discount || 0), 0) || 0
-
-      setStats({
-        todayBookings: bookingsToday.count || 0,
-        pendingPayments: pendingPayments.count || 0,
-        totalClients: clients.count || 0,
-        monthlyRevenue: totalRevenue,
-        voucherSavings: spaVoucherTotal + eventVoucherTotal,
-      })
-    } catch (error) {
-      console.error('Error fetching dashboard stats:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
   const fetchRoomStatuses = useCallback(async () => {
     setRoomsLoading(true)
     try {
