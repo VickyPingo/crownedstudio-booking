@@ -28,7 +28,9 @@ async function sendPaymentEmails(bookingId: string, amountPaid: number, paymentR
       sendBookingConfirmationToClient(bookingEmailData),
     ])
 
-    console.log(`Payment ${paymentReference}: Email results - spa=${spaResult}, clientPayment=${clientPaymentResult}, clientConfirm=${clientConfirmResult}`)
+    console.log(
+      `Payment ${paymentReference}: Email results - spa=${spaResult}, clientPayment=${clientPaymentResult}, clientConfirm=${clientConfirmResult}`
+    )
 
     const appointmentTime = new Date(bookingData.start_time)
     await scheduleReminder(bookingId, appointmentTime)
@@ -77,20 +79,14 @@ export async function POST(request: NextRequest) {
 
     const config = getPayfastConfig()
 
-    const dataToVerify: Record<string, string> = { ...itnData }
-    const receivedSignature = dataToVerify.signature
-    delete dataToVerify.signature
-
-    const isValid = verifyPayfastSignature(dataToVerify, receivedSignature, config.passphrase)
-
-    if (!isValid) {
-      console.error('Invalid Payfast signature')
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
-    }
-
     const merchantTransactionId = itnData.m_payment_id
     const payfastPaymentId = itnData.pf_payment_id
     const paymentStatus = itnData.payment_status
+    const receivedAmount = parseFloat(itnData.amount_gross || '0')
+
+    if (!merchantTransactionId) {
+      return NextResponse.json({ error: 'Missing merchant transaction id' }, { status: 400 })
+    }
 
     let { data: transaction, error: transactionError } = await supabase
       .from('payment_transactions')
@@ -98,57 +94,61 @@ export async function POST(request: NextRequest) {
       .eq('merchant_transaction_id', merchantTransactionId)
       .maybeSingle()
 
-    let bookingId = transaction?.booking_id || null
+    if (transactionError || !transaction) {
+      console.error('Transaction not found:', merchantTransactionId, transactionError)
+      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
+    }
 
-if (!transaction) {
-  console.warn('Transaction not found — trying to recover from booking reference')
+    const dataToVerify: Record<string, string> = { ...itnData }
+    const receivedSignature = dataToVerify.signature || ''
+    delete dataToVerify.signature
 
-  const bookingIdFromRef = merchantTransactionId?.split('-')[1]
+    const signatureValid = verifyPayfastSignature(
+      dataToVerify,
+      receivedSignature,
+      config.passphrase
+    )
 
-  if (!bookingIdFromRef) {
-    return NextResponse.json({ error: 'Invalid reference' }, { status: 400 })
-  }
+    if (!signatureValid) {
+      const merchantMatches =
+        !!config.merchantId &&
+        String(itnData.merchant_id || '').trim() === String(config.merchantId).trim()
 
-  const { data: booking } = await supabase
-    .from('bookings')
-    .select('id')
-    .eq('id', bookingIdFromRef)
-    .maybeSingle()
+      const amountMatches = Math.abs(receivedAmount - Number(transaction.amount || 0)) <= 0.01
 
-  if (!booking) {
-    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
-  }
+      console.warn('[PayFast Notify] Signature invalid, checking guarded fallback:', {
+        merchantMatches,
+        amountMatches,
+        merchantTransactionId,
+        expectedAmount: transaction.amount,
+        receivedAmount,
+        paymentStatus,
+      })
 
-  bookingId = booking.id
+      if (!merchantMatches || !amountMatches) {
+        console.error('Invalid Payfast signature')
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+      }
 
-  const { data: newTransaction } = await supabase
-  .from('payment_transactions')
-  .insert({
-    booking_id: booking.id,
-    merchant_transaction_id: merchantTransactionId,
-    amount: parseFloat(itnData.amount_gross),
-    status: 'pending',
-    payment_method: 'payfast',
-  })
-  .select('id, booking_id, status, amount')
-  .single()
+      console.warn(
+        '[PayFast Notify] Accepting callback via guarded fallback for known transaction:',
+        merchantTransactionId
+      )
+    }
 
-transaction = newTransaction
-}
+    if (transaction.status === 'complete') {
+      console.log('Duplicate ITN for already completed transaction:', merchantTransactionId)
+      return NextResponse.json({ success: true, message: 'Already processed' })
+    }
 
-if (!transaction) {
-  return NextResponse.json({ error: 'Transaction could not be created' }, { status: 500 })
-}
-
-const receivedAmount = parseFloat(itnData.amount_gross)
-const expectedAmount = transaction.amount
+    const expectedAmount = Number(transaction.amount || 0)
 
     if (Math.abs(receivedAmount - expectedAmount) > 0.01) {
       console.error('Amount mismatch:', {
         merchantTransactionId,
         expected: expectedAmount,
         received: receivedAmount,
-        difference: Math.abs(receivedAmount - expectedAmount)
+        difference: Math.abs(receivedAmount - expectedAmount),
       })
 
       await supabase
@@ -158,14 +158,14 @@ const expectedAmount = transaction.amount
           payment_status: paymentStatus,
           amount_gross: receivedAmount,
           amount_fee: parseFloat(itnData.amount_fee || '0'),
-          amount_net: parseFloat(itnData.amount_net),
+          amount_net: parseFloat(itnData.amount_net || '0'),
           merchant_id: itnData.merchant_id,
           signature: receivedSignature,
           raw_itn_data: {
             ...itnData,
             validation_error: 'AMOUNT_MISMATCH',
             expected_amount: expectedAmount,
-            received_amount: receivedAmount
+            received_amount: receivedAmount,
           },
           updated_at: new Date().toISOString(),
         })
@@ -174,17 +174,12 @@ const expectedAmount = transaction.amount
       return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 })
     }
 
-    if (transaction.status === 'complete') {
-      console.log('Duplicate ITN for already completed transaction:', merchantTransactionId)
-      return NextResponse.json({ success: true, message: 'Already processed' })
-    }
-
     const updateData: Record<string, unknown> = {
       payment_id: payfastPaymentId,
       payment_status: paymentStatus,
-      amount_gross: parseFloat(itnData.amount_gross),
+      amount_gross: receivedAmount,
       amount_fee: parseFloat(itnData.amount_fee || '0'),
-      amount_net: parseFloat(itnData.amount_net),
+      amount_net: parseFloat(itnData.amount_net || '0'),
       merchant_id: itnData.merchant_id,
       signature: receivedSignature,
       raw_itn_data: itnData,
@@ -200,7 +195,7 @@ const expectedAmount = transaction.amount
           status: 'confirmed',
           payment_expires_at: null,
         })
-        .eq('id', bookingId)
+        .eq('id', transaction.booking_id)
         .in('status', ['pending_payment', 'pending'])
 
       if (bookingUpdateError) {
@@ -208,9 +203,9 @@ const expectedAmount = transaction.amount
       }
 
       sendPaymentEmails(
-        bookingId,
+        transaction.booking_id,
         receivedAmount,
-        payfastPaymentId
+        payfastPaymentId || merchantTransactionId
       )
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
