@@ -136,8 +136,12 @@ if (!transaction) {
 transaction = newTransaction
 }
 
-    const receivedAmount = parseFloat(itnData.amount_gross)
-    const expectedAmount = transaction.amount
+if (!transaction) {
+  return NextResponse.json({ error: 'Transaction could not be created' }, { status: 500 })
+}
+
+const receivedAmount = parseFloat(itnData.amount_gross)
+const expectedAmount = transaction.amount
 
     if (Math.abs(receivedAmount - expectedAmount) > 0.01) {
       console.error('Amount mismatch:', {
