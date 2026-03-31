@@ -98,10 +98,43 @@ export async function POST(request: NextRequest) {
       .eq('merchant_transaction_id', merchantTransactionId)
       .maybeSingle()
 
-    if (transactionError || !transaction) {
-      console.error('Transaction not found:', merchantTransactionId)
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
-    }
+    let bookingId = transaction?.booking_id || null
+
+if (!transaction) {
+  console.warn('Transaction not found — trying to recover from booking reference')
+
+  const bookingIdFromRef = merchantTransactionId?.split('-')[1]
+
+  if (!bookingIdFromRef) {
+    return NextResponse.json({ error: 'Invalid reference' }, { status: 400 })
+  }
+
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('id', bookingIdFromRef)
+    .maybeSingle()
+
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  }
+
+  bookingId = booking.id
+
+  const { data: newTransaction } = await supabase
+    .from('payment_transactions')
+    .insert({
+      booking_id: booking.id,
+      merchant_transaction_id: merchantTransactionId,
+      amount: parseFloat(itnData.amount_gross),
+      status: 'pending',
+      payment_method: 'payfast',
+    })
+    .select('id, booking_id, status, amount')
+    .single()
+
+  transaction = newTransaction
+}
 
     const receivedAmount = parseFloat(itnData.amount_gross)
     const expectedAmount = transaction.amount
@@ -163,7 +196,7 @@ export async function POST(request: NextRequest) {
           status: 'confirmed',
           payment_expires_at: null,
         })
-        .eq('id', transaction.booking_id)
+        .eq('id', bookingId)
         .in('status', ['pending_payment', 'pending'])
 
       if (bookingUpdateError) {
@@ -171,7 +204,7 @@ export async function POST(request: NextRequest) {
       }
 
       sendPaymentEmails(
-        transaction.booking_id,
+        bookingId,
         receivedAmount,
         payfastPaymentId
       )
