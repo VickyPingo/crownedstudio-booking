@@ -196,8 +196,6 @@ export async function POST(request: NextRequest) {
     payment_expires_at: null,
   })
   .eq('id', transaction.booking_id)
-  .eq('status', 'pending_payment')
-
       if (bookingUpdateError) {
         console.error('Failed to update booking:', bookingUpdateError)
       }
