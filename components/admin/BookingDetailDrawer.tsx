@@ -263,7 +263,9 @@ const [rooms, setRooms] = useState<Room[]>([])
       } else if (bookingData.room_id && roomRes.data) {
         assignedRooms = [{ ...roomRes.data, priority: 0 }]
       }
-
+if (paymentsRes.error) {
+  console.error('Payments fetch failed:', paymentsRes.error)
+}
       const enrichedBooking: BookingData = {
         ...bookingData,
         customer: customerRes.data || undefined,
