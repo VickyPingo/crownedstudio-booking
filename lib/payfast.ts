@@ -133,30 +133,35 @@ export function verifyPayfastSignature(
   const dataWithoutSignature = { ...data }
   delete dataWithoutSignature.signature
 
-  const orderedPairs: string[] = []
+  const pairs: string[] = []
 
-  for (const key of PAYFAST_FIELD_ORDER) {
-    if (dataWithoutSignature[key] !== undefined && dataWithoutSignature[key] !== '') {
-      const value = String(dataWithoutSignature[key])
-      orderedPairs.push(`${key}=${encodeURIComponent(value).replace(/%20/g, '+')}`)
-    }
-  }
-
+  // IMPORTANT:
+  // For PayFast notify verification, use the fields in the exact order
+  // they were received from PayFast. Do not reorder them using the
+  // checkout field order.
   for (const key of Object.keys(dataWithoutSignature)) {
-    if (!PAYFAST_FIELD_ORDER.includes(key) && dataWithoutSignature[key] !== undefined && dataWithoutSignature[key] !== '') {
-      const value = String(dataWithoutSignature[key])
-      orderedPairs.push(`${key}=${encodeURIComponent(value).replace(/%20/g, '+')}`)
-    }
+    const rawValue = dataWithoutSignature[key]
+
+    if (rawValue === undefined || rawValue === null) continue
+
+    const value = String(rawValue).trim()
+    if (value === '') continue
+
+    pairs.push(`${key}=${encodeURIComponent(value).replace(/%20/g, '+')}`)
   }
 
-  let signatureString = orderedPairs.join('&')
+  let signatureString = pairs.join('&')
 
   if (passphrase && passphrase.length > 0) {
-    signatureString += `&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, '+')}`
+    signatureString += `&passphrase=${encodeURIComponent(passphrase.trim()).replace(/%20/g, '+')}`
   }
 
-  const calculatedSignature = crypto.createHash('md5').update(signatureString).digest('hex')
+  const calculatedSignature = crypto
+    .createHash('md5')
+    .update(signatureString)
+    .digest('hex')
 
+  console.log('[PayFast Verify] Fields used:', pairs)
   console.log('[PayFast Verify] Received signature:', receivedSignature)
   console.log('[PayFast Verify] Calculated signature:', calculatedSignature)
   console.log('[PayFast Verify] Match:', calculatedSignature === receivedSignature)
