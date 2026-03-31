@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     const payfastPaymentId = itnData.pf_payment_id
     const paymentStatus = itnData.payment_status
 
-    const { data: transaction, error: transactionError } = await supabase
+    let { data: transaction, error: transactionError } = await supabase
       .from('payment_transactions')
       .select('id, booking_id, status, amount')
       .eq('merchant_transaction_id', merchantTransactionId)
@@ -122,18 +122,18 @@ if (!transaction) {
   bookingId = booking.id
 
   const { data: newTransaction } = await supabase
-    .from('payment_transactions')
-    .insert({
-      booking_id: booking.id,
-      merchant_transaction_id: merchantTransactionId,
-      amount: parseFloat(itnData.amount_gross),
-      status: 'pending',
-      payment_method: 'payfast',
-    })
-    .select('id, booking_id, status, amount')
-    .single()
+  .from('payment_transactions')
+  .insert({
+    booking_id: booking.id,
+    merchant_transaction_id: merchantTransactionId,
+    amount: parseFloat(itnData.amount_gross),
+    status: 'pending',
+    payment_method: 'payfast',
+  })
+  .select('id, booking_id, status, amount')
+  .single()
 
-  transaction = newTransaction
+transaction = newTransaction
 }
 
     const receivedAmount = parseFloat(itnData.amount_gross)
