@@ -21,16 +21,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/booking/failed?reason=transaction_not_found', request.url))
     }
 
-    // If notify already completed it, just go to success
+    // Already confirmed by notify
     if (transaction.status === 'complete') {
       return NextResponse.redirect(
         new URL(`/booking/success?booking_id=${transaction.booking_id}`, request.url)
       )
     }
 
-    // Emergency fallback:
-    // If customer returned from PayFast and the transaction is still not complete,
-    // mark it complete here so the booking is not left stuck in pending_payment.
+    // Emergency fallback for tonight:
+    // if customer returned from PayFast and notify has not completed yet,
+    // confirm it here so the booking does not stay stuck on pending.
     const nowIso = new Date().toISOString()
 
     const { error: txUpdateError } = await supabase
