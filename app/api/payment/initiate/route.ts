@@ -1,76 +1,72 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const supabase = supabaseAdmin
-    const searchParams = request.nextUrl.searchParams
-    const transactionId = searchParams.get('transaction_id')
+    const body = await request.json()
+    const { bookingId } = body
 
-    if (!transactionId) {
-      return NextResponse.redirect(new URL('/booking/failed?reason=missing_transaction', request.url))
+    if (!bookingId) {
+      return NextResponse.json({ error: 'Missing bookingId' }, { status: 400 })
     }
 
-    const { data: transaction, error: transactionError } = await supabase
-      .from('payment_transactions')
-      .select('id, booking_id, status')
-      .eq('merchant_transaction_id', transactionId)
-      .maybeSingle()
-
-    if (transactionError || !transaction) {
-      return NextResponse.redirect(new URL('/booking/failed?reason=transaction_not_found', request.url))
-    }
-
-    // Already confirmed by notify
-    if (transaction.status === 'complete') {
-      return NextResponse.redirect(
-        new URL(`/booking/success?booking_id=${transaction.booking_id}`, request.url)
-      )
-    }
-
-    // Emergency fallback for tonight:
-    // if customer returned from PayFast and notify has not completed yet,
-    // confirm it here so the booking does not stay stuck on pending.
-    const nowIso = new Date().toISOString()
-
-    const { error: txUpdateError } = await supabase
-      .from('payment_transactions')
-      .update({
-        status: 'complete',
-        payment_status: 'COMPLETE',
-        updated_at: nowIso,
-      })
-      .eq('id', transaction.id)
-      .in('status', ['initiated', 'pending'])
-
-    if (txUpdateError) {
-      console.error('Return fallback failed to update transaction:', txUpdateError)
-      return NextResponse.redirect(
-        new URL(`/booking/pending?booking_id=${transaction.booking_id}&reason=tx_update_failed`, request.url)
-      )
-    }
-
-    const { error: bookingUpdateError } = await supabase
+    // Get booking
+    const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .update({
-        status: 'confirmed',
-        payment_expires_at: null,
-      })
-      .eq('id', transaction.booking_id)
-      .in('status', ['pending_payment', 'pending'])
+      .select('*')
+      .eq('id', bookingId)
+      .single()
 
-    if (bookingUpdateError) {
-      console.error('Return fallback failed to update booking:', bookingUpdateError)
-      return NextResponse.redirect(
-        new URL(`/booking/pending?booking_id=${transaction.booking_id}&reason=booking_update_failed`, request.url)
-      )
+    if (bookingError || !booking) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
     }
 
-    return NextResponse.redirect(
-      new URL(`/booking/success?booking_id=${transaction.booking_id}`, request.url)
-    )
+    const depositAmount = booking.deposit_due
+
+    // Create merchant reference
+    const merchantTransactionId = `BKG-${booking.id.slice(0, 8)}-${Date.now()}`
+
+    // Store transaction
+    const { error: insertError } = await supabase
+      .from('payment_transactions')
+      .insert({
+        booking_id: booking.id,
+        merchant_transaction_id: merchantTransactionId,
+        amount: depositAmount,
+        status: 'initiated',
+        payment_status: 'PENDING',
+      })
+
+    if (insertError) {
+      console.error('Failed to create transaction:', insertError)
+      return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
+    }
+
+    // PayFast config
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
+
+    const paymentData = {
+      merchant_id: process.env.PAYFAST_MERCHANT_ID!,
+      merchant_key: process.env.PAYFAST_MERCHANT_KEY!,
+      return_url: `${baseUrl}/api/payment/return?transaction_id=${merchantTransactionId}`,
+      cancel_url: `${baseUrl}/booking/cancelled`,
+      notify_url: `${baseUrl}/api/payment/notify`,
+      name_first: booking.client_name || 'Client',
+      email_address: booking.client_email,
+      m_payment_id: merchantTransactionId,
+      amount: depositAmount.toFixed(2),
+      item_name: booking.service_name || 'Spa Booking',
+    }
+
+    const query = new URLSearchParams(paymentData).toString()
+
+    return NextResponse.json({
+      paymentUrl: `https://www.payfast.co.za/eng/process?${query}`,
+    })
+
   } catch (error) {
-    console.error('Return URL handler error:', error)
-    return NextResponse.redirect(new URL('/booking/failed?reason=system_error', request.url))
+    console.error('Initiate payment error:', error)
+    return NextResponse.json({ error: 'Failed to initiate payment' }, { status: 500 })
   }
 }
