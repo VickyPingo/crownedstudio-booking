@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout'
 import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { getPaymentState } from '@/lib/paymentState'
 
 interface DashboardStats {
   todayBookings: number
@@ -37,7 +38,22 @@ interface RoomStatus {
   currentBooking: RoomBooking | null
   nextBooking: RoomBooking | null
 }
-
+interface DashboardBooking {
+  id: string
+  total_price: number
+  deposit_due: number
+  balance_paid: number
+  no_payment_required: boolean
+  status: string
+  start_time: string
+  voucher_discount: number
+  payment_transactions: {
+    id: string
+    status: string
+    amount: number
+    created_at: string
+  }[]
+}
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     todayBookings: 0,
@@ -53,40 +69,111 @@ export default function AdminDashboardPage() {
   const [roomsLoading, setRoomsLoading] = useState(true)
 
   const fetchStats = useCallback(async () => {
-    try {
-      const today = new Date()
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
-      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString()
-      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString()
+  try {
+    const today = new Date()
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+    const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString()
 
-      const [bookingsToday, pendingPayments, clients, monthlyPayments, spaVouchers, eventVouchers] = await Promise.all([
-        supabase
-          .from('bookings')
-          .select('id', { count: 'exact' })
-          .gte('start_time', todayStart)
-          .lt('start_time', todayEnd)
-          .in('status', ['confirmed', 'completed']),
-        supabase
-          .from('payment_transactions')
-          .select('booking_id', { count: 'exact' })
-          .eq('status', 'pending'),
-        supabase
-          .from('customers')
-          .select('id', { count: 'exact' }),
-        supabase
-          .from('payment_transactions')
-          .select('amount')
-          .eq('status', 'complete')
-          .gte('created_at', startOfMonth),
-        supabase
-          .from('bookings')
-          .select('voucher_discount')
-          .gt('voucher_discount', 0),
-        supabase
-          .from('event_bookings')
-          .select('voucher_discount')
-          .gt('voucher_discount', 0),
-      ])
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    const startOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+
+    const [bookingsToday, clients, spaBookingsRes, eventBookingsRes, spaVouchers, eventVouchers] = await Promise.all([
+      supabase
+        .from('bookings')
+        .select('id', { count: 'exact' })
+        .gte('start_time', todayStart)
+        .lt('start_time', todayEnd)
+        .in('status', ['confirmed', 'completed']),
+
+      supabase
+        .from('customers')
+        .select('id', { count: 'exact' }),
+
+      supabase
+        .from('bookings')
+        .select(`
+          id,
+          total_price,
+          deposit_due,
+          balance_paid,
+          no_payment_required,
+          status,
+          start_time,
+          voucher_discount,
+          payment_transactions(id, status, amount, created_at)
+        `)
+        .not('status', 'in', '(expired,cancelled_expired)'),
+
+      supabase
+        .from('event_bookings')
+        .select(`
+          total_amount,
+          payment_status,
+          created_at,
+          voucher_discount
+        `),
+
+      supabase
+        .from('bookings')
+        .select('voucher_discount')
+        .gt('voucher_discount', 0),
+
+      supabase
+        .from('event_bookings')
+        .select('voucher_discount')
+        .gt('voucher_discount', 0),
+    ])
+
+    const spaBookings = (spaBookingsRes.data || []) as unknown as DashboardBooking[]
+    const eventBookings = eventBookingsRes.data || []
+
+    const pendingPayments = spaBookings.reduce((sum, booking) => {
+      const payment = getPaymentState(booking)
+      return sum + payment.balanceDue
+    }, 0)
+
+    const monthlySpaRevenue = spaBookings.reduce((sum, booking) => {
+      const payment = getPaymentState(booking)
+      const bookingDate = new Date(booking.start_time)
+
+      const isCurrentMonth =
+        bookingDate >= startOfMonth &&
+        bookingDate < startOfNextMonth
+
+      return isCurrentMonth ? sum + payment.totalPaid : sum
+    }, 0)
+
+    const monthlyEventRevenue = eventBookings.reduce((sum, booking) => {
+      const bookingDate = new Date(booking.created_at)
+      const isCurrentMonth =
+        bookingDate >= startOfMonth &&
+        bookingDate < startOfNextMonth
+
+      if (!isCurrentMonth) return sum
+      if (booking.payment_status !== 'paid') return sum
+
+      return sum + (booking.total_amount || 0)
+    }, 0)
+
+    const spaVoucherTotal =
+      spaVouchers.data?.reduce((sum, b) => sum + (Number(b.voucher_discount) || 0), 0) || 0
+
+    const eventVoucherTotal =
+      eventVouchers.data?.reduce((sum, b) => sum + (b.voucher_discount || 0), 0) || 0
+
+    setStats({
+      todayBookings: bookingsToday.count || 0,
+      pendingPayments,
+      totalClients: clients.count || 0,
+      monthlyRevenue: monthlySpaRevenue + monthlyEventRevenue,
+      voucherSavings: spaVoucherTotal + eventVoucherTotal,
+    })
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error)
+  } finally {
+    setLoading(false)
+  }
+}, [])
 
       const totalRevenue = monthlyPayments.data?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
       const spaVoucherTotal = spaVouchers.data?.reduce((sum, b) => sum + (Number(b.voucher_discount) || 0), 0) || 0
