@@ -377,16 +377,24 @@ const handleStatusChange = async (newStatus: BookingStatus) => {
   const previousStatus = booking.status
 
   try {
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: newStatus })
-      .eq('id', booking.id)
+    const { data, error } = await supabase
+  .from('bookings')
+  .update({ status: newStatus })
+  .eq('id', booking.id)
+  .select('id, status')
+  .single()
 
-    if (error) {
-      console.error('Failed to update booking status:', error)
-      alert('Failed to update booking status')
-      return
-    }
+if (error) {
+  console.error('Failed to update booking status:', error)
+  alert(`Failed to update booking status: ${error.message}`)
+  return
+}
+
+if (!data || data.status !== newStatus) {
+  console.error('Booking status did not actually change:', data)
+  alert('Status update did not apply to the booking record.')
+  return
+}
 
     const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
       cancelled: 'cancelled',
