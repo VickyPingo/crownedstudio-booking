@@ -396,6 +396,8 @@ if (!data || data.status !== newStatus) {
   return
 }
 
+    setBooking(prev => prev ? { ...prev, status: newStatus } : prev)
+    
     const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
       cancelled: 'cancelled',
       completed: 'completed',
