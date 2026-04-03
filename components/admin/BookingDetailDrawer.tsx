@@ -402,8 +402,9 @@ const handleStatusChange = async (newStatus: BookingStatus) => {
     })
 
     await fetchBooking()
-    await fetchAuditLog()
-    onUpdate()
+await fetchAuditLog()
+onUpdate()
+window.location.reload()
   } catch (err) {
     console.error('Unexpected error updating booking status:', err)
     alert('An unexpected error occurred while updating the booking status')
