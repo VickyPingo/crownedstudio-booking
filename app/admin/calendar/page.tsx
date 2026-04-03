@@ -7,7 +7,6 @@ import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { TimeBlock } from '@/types/admin'
-import { DISPLAY_BOOKING_STATUSES } from '@/lib/bookingFilters'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface Booking {
@@ -31,6 +30,26 @@ interface Booking {
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+// Only statuses that must remain visible on the calendar
+const CALENDAR_DISPLAY_STATUSES = ['confirmed', 'completed', 'pending_payment', 'no_show']
+
+function getSastDateString(isoString: string): string {
+  return new Date(isoString).toLocaleDateString('sv-SE', {
+    timeZone: 'Africa/Johannesburg',
+  })
+}
+
+function getMonthUtcRange(year: number, month: number) {
+  const monthStartLocal = new Date(year, month, 1, 0, 0, 0, 0)
+  const monthEndLocal = new Date(year, month + 1, 0, 23, 59, 59, 999)
+  const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
+
+  return {
+    startUtcIso: new Date(monthStartLocal.getTime() - SAST_OFFSET_MS).toISOString(),
+    endUtcIso: new Date(monthEndLocal.getTime() - SAST_OFFSET_MS).toISOString(),
+  }
+}
 
 export default function AdminCalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -59,12 +78,16 @@ export default function AdminCalendarPage() {
       const lastDay = new Date(year, month + 1, 0).getDate()
       const endOfMonth = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
+      const { startUtcIso, endUtcIso } = getMonthUtcRange(year, month)
+
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id, total_price, balance_paid, no_payment_required, payment_transactions(status, amount)')
-        .gte('start_time', `${startOfMonth}T00:00:00`)
-        .lte('start_time', `${endOfMonth}T23:59:59`)
-        .in('status', DISPLAY_BOOKING_STATUSES)
+        .select(
+          'id, customer_id, service_slug, is_custom_booking, custom_booking_name, status, start_time, people_count, room_id, total_price, balance_paid, no_payment_required, payment_transactions(status, amount)'
+        )
+        .gte('start_time', startUtcIso)
+        .lte('start_time', endUtcIso)
+        .in('status', CALENDAR_DISPLAY_STATUSES)
         .order('start_time')
 
       if (bookingsError) {
@@ -86,27 +109,27 @@ export default function AdminCalendarPage() {
       }
 
       if (bookingsData && bookingsData.length > 0) {
-        const customerIds = [...new Set(bookingsData.filter(b => b.customer_id).map(b => b.customer_id))]
-        const serviceSlugs = [...new Set(bookingsData.filter(b => b.service_slug).map(b => b.service_slug))]
-        const roomIds = [...new Set(bookingsData.filter(b => b.room_id).map(b => b.room_id))]
+        const customerIds = [...new Set(bookingsData.filter((b) => b.customer_id).map((b) => b.customer_id))]
+        const serviceSlugs = [...new Set(bookingsData.filter((b) => b.service_slug).map((b) => b.service_slug))]
+        const roomIds = [...new Set(bookingsData.filter((b) => b.room_id).map((b) => b.room_id))]
 
         const [customersRes, servicesRes, roomsRes] = await Promise.all([
           customerIds.length > 0
             ? supabase.from('customers').select('id, full_name').in('id', customerIds)
-            : { data: [], error: null },
+            : Promise.resolve({ data: [], error: null }),
           serviceSlugs.length > 0
             ? supabase.from('services').select('slug, name').in('slug', serviceSlugs)
-            : { data: [], error: null },
+            : Promise.resolve({ data: [], error: null }),
           roomIds.length > 0
             ? supabase.from('rooms').select('id, room_name').in('id', roomIds)
-            : { data: [], error: null },
+            : Promise.resolve({ data: [], error: null }),
         ])
 
-        const customerMap = new Map((customersRes.data || []).map(c => [c.id, c.full_name]))
-        const serviceMap = new Map((servicesRes.data || []).map(s => [s.slug, s.name]))
-        const roomMap = new Map((roomsRes.data || []).map(r => [r.id, r.room_name]))
+        const customerMap = new Map((customersRes.data || []).map((c) => [c.id, c.full_name]))
+        const serviceMap = new Map((servicesRes.data || []).map((s) => [s.slug, s.name]))
+        const roomMap = new Map((roomsRes.data || []).map((r) => [r.id, r.room_name]))
 
-        const enrichedBookings: Booking[] = bookingsData.map(b => ({
+        const enrichedBookings: Booking[] = bookingsData.map((b) => ({
           ...b,
           customer_name: b.customer_id ? customerMap.get(b.customer_id) : undefined,
           service_name: b.service_slug ? serviceMap.get(b.service_slug) : undefined,
@@ -160,17 +183,12 @@ export default function AdminCalendarPage() {
 
   const getBookingsForDate = (day: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    return bookings.filter((b) => b.start_time.startsWith(dateStr))
+    return bookings.filter((b) => getSastDateString(b.start_time) === dateStr)
   }
 
   const getBlocksForDate = (day: number) => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     return timeBlocks.filter((b) => b.block_date === dateStr)
-  }
-
-  const isDateBlocked = (day: number) => {
-    const blocks = getBlocksForDate(day)
-    return blocks.some(b => b.is_full_day && !b.room_id)
   }
 
   const goToPrevMonth = () => {
@@ -204,7 +222,7 @@ export default function AdminCalendarPage() {
     day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
 
   const selectedDateBookings = selectedDate
-    ? bookings.filter((b) => b.start_time.startsWith(selectedDate))
+    ? bookings.filter((b) => getSastDateString(b.start_time) === selectedDate)
     : []
 
   const selectedDateBlocks = selectedDate
@@ -215,7 +233,6 @@ export default function AdminCalendarPage() {
     const styles: Record<string, string> = {
       confirmed: 'bg-blue-100 text-blue-800',
       completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
       pending_payment: 'bg-amber-100 text-amber-800',
       no_show: 'bg-gray-200 text-gray-700',
     }
@@ -223,7 +240,7 @@ export default function AdminCalendarPage() {
   }
 
   const formatStatus = (status: string) => {
-    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    return status.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
   }
 
   const getBookingPaymentState = (booking: Booking) =>
@@ -330,8 +347,8 @@ export default function AdminCalendarPage() {
 
                   const dayBookings = getBookingsForDate(day)
                   const dayBlocks = getBlocksForDate(day)
-                  const hasFullDayBlock = dayBlocks.some(b => b.is_full_day && !b.room_id)
-                  const hasPartialBlock = dayBlocks.some(b => !b.is_full_day || b.room_id)
+                  const hasFullDayBlock = dayBlocks.some((b) => b.is_full_day && !b.room_id)
+                  const hasPartialBlock = dayBlocks.some((b) => !b.is_full_day || b.room_id)
                   const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
                   return (
@@ -342,18 +359,21 @@ export default function AdminCalendarPage() {
                         hasFullDayBlock
                           ? 'bg-gray-200 border-gray-300'
                           : isToday(day)
-                          ? 'bg-gray-900 text-white border-gray-900'
-                          : selectedDate === dateStr
-                          ? 'bg-gray-100 border-gray-300'
-                          : 'bg-white border-gray-200 hover:bg-gray-50'
+                            ? 'bg-gray-900 text-white border-gray-900'
+                            : selectedDate === dateStr
+                              ? 'bg-gray-100 border-gray-300'
+                              : 'bg-white border-gray-200 hover:bg-gray-50'
                       }`}
                     >
-                      <span className={`text-xs sm:text-sm font-medium ${
-                        hasFullDayBlock ? 'text-gray-500' :
-                        isToday(day) ? 'text-white' : 'text-gray-900'
-                      }`}>
+                      <span
+                        className={`text-xs sm:text-sm font-medium ${
+                          hasFullDayBlock ? 'text-gray-500' :
+                          isToday(day) ? 'text-white' : 'text-gray-900'
+                        }`}
+                      >
                         {day}
                       </span>
+
                       {hasFullDayBlock && (
                         <div className="mt-0.5 sm:mt-1">
                           <span className="hidden sm:inline-block px-2 py-0.5 text-xs rounded-full bg-gray-400 text-white">
@@ -362,9 +382,11 @@ export default function AdminCalendarPage() {
                           <span className="sm:hidden inline-block w-2 h-2 bg-gray-400 rounded-full" />
                         </div>
                       )}
+
                       {hasPartialBlock && !hasFullDayBlock && (
                         <div className="absolute top-1 right-1 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-gray-400 rounded-full" />
                       )}
+
                       {dayBookings.length > 0 && !hasFullDayBlock && (
                         <div className="mt-0.5 sm:mt-1">
                           <span
@@ -459,44 +481,43 @@ export default function AdminCalendarPage() {
               <p className="text-gray-600">No bookings for this date.</p>
             ) : (
               <div className="space-y-3">
-                {selectedDateBookings.map((booking) => (
-                  <button
-                    key={booking.id}
-                    onClick={() => setSelectedBookingId(booking.id)}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-900">
-                      {booking.is_custom_booking
-                        ? (booking.custom_booking_name || 'Custom Booking')
-                        : (booking.service_name || booking.service_slug || '-')}
-                    </p>
-                      <p className="text-sm text-gray-600">
-                        {booking.customer_name || 'Unknown'} at{' '}
-                        {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                      {booking.room_name && (
-                        <p className="text-xs text-gray-500 mt-0.5">{booking.room_name}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1 items-end">
-                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>
-                        {formatStatus(booking.status)}
-                      </span>
-                      {(() => {
-                        const ps = getBookingPaymentState(booking)
-                        return (
-                          <span className={`px-2 py-1 text-xs rounded-full ${PAYMENT_STATE_STYLES[ps.state]}`}>
-                            {PAYMENT_STATE_LABELS[ps.state]}
-                          </span>
-                        )
-                      })()}
-                    </div>
-                  </button>
-                ))}
+                {selectedDateBookings.map((booking) => {
+                  const paymentState = getBookingPaymentState(booking)
+
+                  return (
+                    <button
+                      key={booking.id}
+                      onClick={() => setSelectedBookingId(booking.id)}
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {booking.is_custom_booking
+                            ? booking.custom_booking_name || 'Custom Booking'
+                            : booking.service_name || booking.service_slug || '-'}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {booking.customer_name || 'Unknown'} at{' '}
+                          {new Date(booking.start_time).toLocaleTimeString('en-ZA', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                        {booking.room_name && (
+                          <p className="text-xs text-gray-500 mt-0.5">{booking.room_name}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1 items-end">
+                        <span className={`px-2 py-1 text-xs rounded-full ${getStatusBadge(booking.status)}`}>
+                          {formatStatus(booking.status)}
+                        </span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${PAYMENT_STATE_STYLES[paymentState.state]}`}>
+                          {PAYMENT_STATE_LABELS[paymentState.state]}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>
