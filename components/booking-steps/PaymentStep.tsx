@@ -231,8 +231,8 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   const subtotal = servicePrice + upsellsTotal + afterHoursSurcharge + weekendSurcharge
 
   const repeatCustomerDiscount = isRepeatCustomer && !appliedVoucher
-    ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
-    : 0
+  ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
+  : 0
 
   console.log('[RepeatDiscount] Calculation:', {
     isRepeatCustomer,
