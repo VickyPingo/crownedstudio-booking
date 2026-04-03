@@ -185,33 +185,46 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   )
 
   const checkRepeatCustomer = useCallback(async () => {
-    if (!formData.clientEmail && !formData.clientPhone) {
-      setIsRepeatCustomer(false)
-      setRepeatCheckDone(true)
-      return
-    }
+  const email = formData.clientEmail?.trim()
+  const phone = formData.clientPhone?.trim()
 
-    console.log('[RepeatDiscount] Checking repeat customer status for:', formData.clientEmail, formData.clientPhone)
-
-    const { data: confirmedBookings, error } = await supabase
-      .from('bookings')
-      .select('id, customers!inner(email, phone)')
-      .eq('status', 'confirmed')
-      .or(`email.eq.${formData.clientEmail},phone.eq.${formData.clientPhone}`, { referencedTable: 'customers' })
-      .limit(1)
-
-    if (error) {
-      console.error('[RepeatDiscount] Error checking repeat customer:', error)
-      setIsRepeatCustomer(false)
-      setRepeatCheckDone(true)
-      return
-    }
-
-    const isRepeat = confirmedBookings !== null && confirmedBookings.length > 0
-    console.log('[RepeatDiscount] Is repeat customer:', isRepeat, 'Found bookings:', confirmedBookings?.length || 0)
-    setIsRepeatCustomer(isRepeat)
+  if (!email && !phone) {
+    setIsRepeatCustomer(false)
     setRepeatCheckDone(true)
-  }, [formData.clientEmail, formData.clientPhone])
+    return
+  }
+
+  console.log('[RepeatDiscount] Checking repeat customer status for:', email, phone)
+
+  let query = supabase
+    .from('bookings')
+    .select('id, customer_id, customers!inner(email, phone)')
+    .eq('status', 'confirmed')
+    .limit(1)
+
+  if (email && phone) {
+    query = query.or(`email.eq.${email},phone.eq.${phone}`, { referencedTable: 'customers' })
+  } else if (email) {
+    query = query.eq('email', email, { referencedTable: 'customers' })
+  } else if (phone) {
+    query = query.eq('phone', phone, { referencedTable: 'customers' })
+  }
+
+  const { data: confirmedBookings, error } = await query
+
+  if (error) {
+    console.error('[RepeatDiscount] Error checking repeat customer:', error)
+    setIsRepeatCustomer(false)
+    setRepeatCheckDone(true)
+    return
+  }
+
+  const isRepeat = Array.isArray(confirmedBookings) && confirmedBookings.length > 0
+  console.log('[RepeatDiscount] Is repeat customer:', isRepeat, 'Found bookings:', confirmedBookings?.length || 0)
+
+  setIsRepeatCustomer(isRepeat)
+  setRepeatCheckDone(true)
+}, [formData.clientEmail, formData.clientPhone])
 
   useEffect(() => {
     checkRepeatCustomer()
