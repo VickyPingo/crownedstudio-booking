@@ -371,14 +371,45 @@ if (paymentsRes.error) {
   }
 
   const handleStatusChange = async (newStatus: BookingStatus) => {
-    if (!booking) return
+  if (!booking) return
 
-    setUpdatingStatus(true)
-    const previousStatus = booking.status
+  setUpdatingStatus(true)
+  const previousStatus = booking.status
 
-    const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.id)
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: newStatus })
+      .eq('id', booking.id)
 
-  setUpdatingStatus(false)
+    if (error) {
+      console.error('Failed to update booking status:', error)
+      alert('Failed to update booking status')
+      return
+    }
+
+    const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
+      cancelled: 'cancelled',
+      completed: 'completed',
+      no_show: 'no_show',
+    }
+
+    const actionType = actionTypeMap[newStatus] || 'status_changed'
+
+    await writeAuditLog(booking.id, actionType, {
+      from: previousStatus,
+      to: newStatus,
+    })
+
+    await fetchBooking()
+    await fetchAuditLog()
+    onUpdate()
+  } catch (err) {
+    console.error('Unexpected error updating booking status:', err)
+    alert('An unexpected error occurred while updating the booking status')
+  } finally {
+    setUpdatingStatus(false)
+  }
 }
 
   const handleAddNote = async () => {
