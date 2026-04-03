@@ -674,7 +674,9 @@ const bookingIds = visibleBookings.map(b => b.id)
                                     </span>
                                   </div>
                                 )}
-                                <p className="font-medium text-sm truncate">{booking.customer?.full_name}</p>
+                                <p className="font-medium text-sm truncate">
+  {booking.customer?.full_name} [{booking.status}]
+</p>
                                 <p className="text-xs truncate opacity-80">
                                   {booking.is_custom_booking
                                     ? (booking.custom_booking_name || 'Custom Booking')
