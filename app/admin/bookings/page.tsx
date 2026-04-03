@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface Booking {
+  created_at?: string
   id: string
   customer_id: string | null
   service_slug: string | null
@@ -58,22 +59,23 @@ export default function AdminBookingsPage() {
       let query = supabase
         .from('bookings')
         .select(`
-          id,
-          customer_id,
-          service_slug,
-          is_custom_booking,
-          custom_booking_name,
-          people_count,
-          status,
-          start_time,
-          total_price,
-          deposit_due,
-          balance_paid,
-          no_payment_required,
-          room_id,
-          pricing_option_name
-        `)
-        .order('start_time', { ascending: false })
+  id,
+  created_at,
+  customer_id,
+  service_slug,
+  is_custom_booking,
+  custom_booking_name,
+  people_count,
+  status,
+  start_time,
+  total_price,
+  deposit_due,
+  balance_paid,
+  no_payment_required,
+  room_id,
+  pricing_option_name
+`)
+.order('created_at', { ascending: false })
 
       if (filter !== 'all') {
         query = query.eq('status', filter)
@@ -309,9 +311,26 @@ export default function AdminBookingsPage() {
                         >
                           <td className="px-6 py-4">
                             <div>
-                              <p className="font-medium text-gray-900">{booking.customer_name || 'Unknown'}</p>
-                              <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
-                            </div>
+                              <div className="flex items-center gap-2">
+  <p className="font-medium text-gray-900">
+    {booking.customer_name || 'Unknown'}
+  </p>
+
+  {booking.created_at && (
+    (() => {
+      const created = new Date(booking.created_at)
+      const now = new Date()
+      const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+
+      return diffHours <= 48 ? (
+        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
+          New
+        </span>
+      ) : null
+    })()
+  )}
+</div>
+                            
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 mb-0.5">
