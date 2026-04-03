@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
       customerId = newCustomer.id
     }
 
-    const hasVoucher = payload.voucherId && payload.voucherCode && payload.voucherDiscount
+    const hasVoucher = !!(payload.voucherId || payload.voucherCode)
 
     const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
