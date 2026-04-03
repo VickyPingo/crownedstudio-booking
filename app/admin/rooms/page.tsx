@@ -7,7 +7,6 @@ import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { TimeBlockModal } from '@/components/admin/TimeBlockModal'
 import { supabase } from '@/lib/supabase/client'
 import type { Room, TimeBlock } from '@/types/admin'
-import { DISPLAY_BOOKING_STATUSES } from '@/lib/bookingFilters'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface BookingRoomAllocation {
