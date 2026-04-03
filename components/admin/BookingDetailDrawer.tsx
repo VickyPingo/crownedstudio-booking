@@ -295,111 +295,82 @@ if (paymentsRes.error) {
     }
   }
 
-  const fetchAuditLog = async () => {
-    const handleStatusChange = async (newStatus: BookingStatus) => {
+ const fetchAuditLog = async () => {
+  if (!bookingId) return
+
+  setLoadingAudit(true)
+  const { data } = await supabase
+    .from('booking_audit_log')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: true })
+
+  setAuditLog((data as AuditLogEntry[]) || [])
+  setLoadingAudit(false)
+}
+
+const handleRoomChange = async (roomId: string | null) => {
   if (!booking) return
 
-  setUpdatingStatus(true)
-  const previousStatus = booking.status
+  setUpdatingRoom(true)
 
-  try {
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: newStatus })
-      .eq('id', booking.id)
+  if (roomId === null) {
+    const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
+    const { error } = await supabase.from('bookings').update({ room_id: null }).eq('id', booking.id)
 
-    if (error) {
-      console.error('Failed to update booking status:', error)
-      alert('Failed to update booking status')
-      return
-    }
-
-    const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
-      cancelled: 'cancelled',
-      completed: 'completed',
-      no_show: 'no_show',
-    }
-
-    const actionType = actionTypeMap[newStatus] || 'status_changed'
-
-    await writeAuditLog(booking.id, actionType, {
-      from: previousStatus,
-      to: newStatus,
-    })
-
-    await fetchBooking()
-    await fetchAuditLog()
-    onUpdate()
-  } catch (err) {
-    console.error('Unexpected error updating booking status:', err)
-    alert('An unexpected error occurred while updating the booking status')
-  } finally {
-    setUpdatingStatus(false)
-  }
-}
-  
-  const handleRoomChange = async (roomId: string | null) => {
-    if (!booking) return
-
-    setUpdatingRoom(true)
-
-    if (roomId === null) {
-      const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
-      const { error } = await supabase.from('bookings').update({ room_id: null }).eq('id', booking.id)
-
-      if (!error) {
-        await writeAuditLog(booking.id, 'room_changed', {
-          from: previousRoomNames.join(', ') || 'unknown',
-          to: 'unassigned',
-        })
-
-        await fetchBooking()
-        await fetchAuditLog()
-        onUpdate()
-        setShowRoomSelect(false)
-      }
-
-      setUpdatingRoom(false)
-      return
-    }
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
-
-      const res = await fetch('/api/admin/bookings/reassign-room', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookingId: booking.id,
-          newRoomId: roomId,
-          adminId: user?.id || null,
-          adminName: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || null,
-          previousRoomNames,
-        }),
+    if (!error) {
+      await writeAuditLog(booking.id, 'room_changed', {
+        from: previousRoomNames.join(', ') || 'unknown',
+        to: 'unassigned',
       })
 
-      const data = await res.json()
-
-      if (!res.ok || !data.success) {
-        alert(data.error || 'Failed to reassign room')
-      } else {
-        await fetchBooking()
-        await fetchAuditLog()
-        onUpdate()
-        setShowRoomSelect(false)
-      }
-    } catch {
-      alert('Network error — room reassignment failed')
+      await fetchBooking()
+      await fetchAuditLog()
+      onUpdate()
+      setShowRoomSelect(false)
     }
 
     setUpdatingRoom(false)
+    return
   }
 
-  const handleStatusChange = async (newStatus: BookingStatus) => {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const previousRoomNames = (booking.assigned_rooms || []).map((r) => r.room_name)
+
+    const res = await fetch('/api/admin/bookings/reassign-room', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bookingId: booking.id,
+        newRoomId: roomId,
+        adminId: user?.id || null,
+        adminName: user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || null,
+        previousRoomNames,
+      }),
+    })
+
+    const data = await res.json()
+
+    if (!res.ok || !data.success) {
+      alert(data.error || 'Failed to reassign room')
+    } else {
+      await fetchBooking()
+      await fetchAuditLog()
+      onUpdate()
+      setShowRoomSelect(false)
+    }
+  } catch {
+    alert('Network error — room reassignment failed')
+  }
+
+  setUpdatingRoom(false)
+}
+
+const handleStatusChange = async (newStatus: BookingStatus) => {
   if (!booking) return
 
   setUpdatingStatus(true)
