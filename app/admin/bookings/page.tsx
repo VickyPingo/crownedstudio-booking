@@ -310,28 +310,28 @@ export default function AdminBookingsPage() {
                           className="hover:bg-gray-50 cursor-pointer"
                         >
                           <td className="px-6 py-4">
-                            <div>
-                              <div className="flex items-center gap-2">
-  <p className="font-medium text-gray-900">
-    {booking.customer_name || 'Unknown'}
-  </p>
+  <div>
+    <div className="flex items-center gap-2">
+      <p className="font-medium text-gray-900">
+        {booking.customer_name || 'Unknown'}
+      </p>
 
-  {booking.created_at && (
-    (() => {
-      const created = new Date(booking.created_at)
-      const now = new Date()
-      const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+      {booking.created_at && (() => {
+        const created = new Date(booking.created_at)
+        const now = new Date()
+        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
 
-      return diffHours <= 48 ? (
-        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
-          New
-        </span>
-      ) : null
-    })()
-  )}
-</div>
-                            
-                          </td>
+        return diffHours <= 48 ? (
+          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
+            New
+          </span>
+        ) : null
+      })()}
+    </div>
+
+    <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
+  </div>
+</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 mb-0.5">
                               <p className="text-gray-900">
