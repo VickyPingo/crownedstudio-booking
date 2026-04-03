@@ -413,8 +413,7 @@ if (!data || data.status !== newStatus) {
 
     await fetchBooking()
 await fetchAuditLog()
-onUpdate()
-window.location.reload()
+onUpdate?.()
   } catch (err) {
     console.error('Unexpected error updating booking status:', err)
     alert('An unexpected error occurred while updating the booking status')
