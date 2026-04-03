@@ -225,7 +225,7 @@ export default function RoomsCalendarPage() {
 `)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
-        .in('status', ACTIVE_BOOKING_STATUSES),
+        .in('status', [...ACTIVE_BOOKING_STATUSES, 'no_show']),
       supabase
         .from('time_blocks')
         .select('*')
@@ -234,10 +234,14 @@ export default function RoomsCalendarPage() {
 
     let enrichedBookings: RoomBooking[] = []
     if (bookingsRes.data && bookingsRes.data.length > 0) {
-      // Filter out expired pending_payment bookings and cancelled bookings
-      const activeBookings = filterActiveBookings(bookingsRes.data as any[])
+      // Keep no-show bookings visible in the room calendar,
+// but still exclude other inactive bookings.
+const visibleBookings = (bookingsRes.data as any[]).filter((booking) => {
+  if (booking.status === 'no_show') return true
+  return filterActiveBookings([booking]).length > 0
+})
 
-      const bookingIds = activeBookings.map(b => b.id)
+const bookingIds = visibleBookings.map(b => b.id)
       const { data: bookingRoomsData } = await supabase
         .from('booking_rooms')
         .select('booking_id, room_id, capacity_used')
@@ -258,7 +262,7 @@ export default function RoomsCalendarPage() {
         })
       }
 
-      enrichedBookings = activeBookings.map(b => {
+      enrichedBookings = visibleBookings.map(b => {
         const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
         const bookingRoomsAllocations = bookingRoomsAllocationsMap.get(b.id)
         return {
@@ -693,6 +697,13 @@ export default function RoomsCalendarPage() {
                                     </span>
                                   )}
                                 </div>
+                                {booking.status === 'no_show' && (
+  <div className="mt-1">
+    <span className="inline-flex items-center rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">
+      No-show
+    </span>
+  </div>
+)}
                                 {height > 80 && (
                                   <div className="mt-1 pt-1 border-t border-black border-opacity-10 space-y-0.5">
                                     {booking.allergies && (
