@@ -7,7 +7,7 @@ import { ManualBookingModal } from '@/components/admin/ManualBookingModal'
 import { TimeBlockModal } from '@/components/admin/TimeBlockModal'
 import { supabase } from '@/lib/supabase/client'
 import type { Room, TimeBlock } from '@/types/admin'
-import { filterActiveBookings, ACTIVE_BOOKING_STATUSES } from '@/lib/bookingFilters'
+import { DISPLAY_BOOKING_STATUSES } from '@/lib/bookingFilters'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
 interface BookingRoomAllocation {
@@ -225,7 +225,7 @@ export default function RoomsCalendarPage() {
 `)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
-        .in('status', [...ACTIVE_BOOKING_STATUSES, 'no_show']),
+        .in('status', DISPLAY_BOOKING_STATUSES),
       supabase
         .from('time_blocks')
         .select('*')
@@ -236,11 +236,7 @@ export default function RoomsCalendarPage() {
     if (bookingsRes.data && bookingsRes.data.length > 0) {
       // Keep no-show bookings visible in the room calendar,
 // but still exclude other inactive bookings.
-const visibleBookings = (bookingsRes.data as any[]).filter((booking) => {
-  if (booking.status === 'no_show') return true
-  return filterActiveBookings([booking]).length > 0
-})
-
+const visibleBookings = bookingsRes.data as any[]
 const bookingIds = visibleBookings.map(b => b.id)
       const { data: bookingRoomsData } = await supabase
         .from('booking_rooms')
