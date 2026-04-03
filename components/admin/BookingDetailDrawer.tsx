@@ -378,27 +378,41 @@ if (paymentsRes.error) {
 
     const { error } = await supabase.from('bookings').update({ status: newStatus }).eq('id', booking.id)
 
-    if (!error) {
-      const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
-        cancelled: 'cancelled',
-        completed: 'completed',
-        no_show: 'no_show',
-      }
+    const handleStatusChange = async (newStatus: BookingStatus) => {
+  if (!booking) return
 
-      const actionType = actionTypeMap[newStatus] || 'status_changed'
+  setUpdatingStatus(true)
+  const previousStatus = booking.status
 
-      await writeAuditLog(booking.id, actionType, {
-        from: previousStatus,
-        to: newStatus,
-      })
+  const { error } = await supabase
+    .from('bookings')
+    .update({ status: newStatus })
+    .eq('id', booking.id)
 
-      setBooking({ ...booking, status: newStatus })
-      await fetchAuditLog()
-      onUpdate()
+  if (!error) {
+    const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
+      cancelled: 'cancelled',
+      completed: 'completed',
+      no_show: 'no_show',
     }
 
-    setUpdatingStatus(false)
+    const actionType = actionTypeMap[newStatus] || 'status_changed'
+
+    await writeAuditLog(booking.id, actionType, {
+      from: previousStatus,
+      to: newStatus,
+    })
+
+    // Re-fetch the booking itself so the drawer is using DB truth
+    await fetchBooking()
+    await fetchAuditLog()
+
+    // Re-fetch the room calendar and wait for it to finish
+    await Promise.resolve(onUpdate())
   }
+
+  setUpdatingStatus(false)
+}
 
   const handleAddNote = async () => {
     if (!booking || !newNote.trim()) return
