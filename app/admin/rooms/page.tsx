@@ -224,7 +224,7 @@ export default function RoomsCalendarPage() {
 `)
         .gte('start_time', dayStart)
         .lte('start_time', dayEnd)
-        .in('status', ['confirmed', 'completed', 'pending_payment', 'no_show'])
+        .in('status', ['confirmed', 'completed', 'pending_payment', 'no_show']),
       supabase
         .from('time_blocks')
         .select('*')
