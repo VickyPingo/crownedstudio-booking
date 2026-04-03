@@ -296,19 +296,48 @@ if (paymentsRes.error) {
   }
 
   const fetchAuditLog = async () => {
-    if (!bookingId) return
+    const handleStatusChange = async (newStatus: BookingStatus) => {
+  if (!booking) return
 
-    setLoadingAudit(true)
-    const { data } = await supabase
-      .from('booking_audit_log')
-      .select('*')
-      .eq('booking_id', bookingId)
-      .order('created_at', { ascending: true })
+  setUpdatingStatus(true)
+  const previousStatus = booking.status
 
-    setAuditLog((data as AuditLogEntry[]) || [])
-    setLoadingAudit(false)
+  try {
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: newStatus })
+      .eq('id', booking.id)
+
+    if (error) {
+      console.error('Failed to update booking status:', error)
+      alert('Failed to update booking status')
+      return
+    }
+
+    const actionTypeMap: Partial<Record<BookingStatus, import('@/lib/auditLog').AuditActionType>> = {
+      cancelled: 'cancelled',
+      completed: 'completed',
+      no_show: 'no_show',
+    }
+
+    const actionType = actionTypeMap[newStatus] || 'status_changed'
+
+    await writeAuditLog(booking.id, actionType, {
+      from: previousStatus,
+      to: newStatus,
+    })
+
+    await fetchBooking()
+    await fetchAuditLog()
+    onUpdate()
+  } catch (err) {
+    console.error('Unexpected error updating booking status:', err)
+    alert('An unexpected error occurred while updating the booking status')
+  } finally {
+    setUpdatingStatus(false)
   }
-
+}
+  
   const handleRoomChange = async (roomId: string | null) => {
     if (!booking) return
 
