@@ -25,18 +25,38 @@ function getSupabaseAdmin() {
   )
 }
 
-async function hasEmailBeenSent(bookingId: string, emailType: EmailType): Promise<boolean> {
+async function logEmailAttempt(
+  bookingId: string,
+  emailType: EmailType,
+  recipientEmail: string,
+  recipientType: 'client' | 'spa',
+  payload?: Record<string, unknown>
+): Promise<string> {
   const supabase = getSupabaseAdmin()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('email_logs')
+    .insert({
+      booking_id: bookingId,
+      email_type: emailType,
+      recipient_email: recipientEmail,
+      recipient_type: recipientType,
+      status: 'pending',
+      payload: payload ?? null,
+      attempts: 0,
+      next_retry_at: new Date().toISOString(),
+      locked_at: null,
+      processed_at: null,
+    })
     .select('id')
-    .eq('booking_id', bookingId)
-    .eq('email_type', emailType)
-    .eq('status', 'sent')
-    .maybeSingle()
+    .single()
 
-  return !!data
+  if (error) {
+    console.error('Failed to create email log:', error)
+    throw error
+  }
+
+  return data.id
 }
 
 async function updateEmailLog(
@@ -61,26 +81,6 @@ async function updateEmailLog(
     })
     .eq('id', logId)
 }
-
-async function updateEmailLog(
-  logId: string,
-  status: 'sent' | 'failed',
-  resendId?: string,
-  errorMessage?: string
-): Promise<void> {
-  const supabase = getSupabaseAdmin()
-
-  await supabase
-    .from('email_logs')
-    .update({
-      status,
-      resend_id: resendId,
-      error_message: errorMessage,
-      sent_at: status === 'sent' ? new Date().toISOString() : null,
-    })
-    .eq('id', logId)
-}
-
 export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boolean> {
   const emailType: EmailType = 'new_booking_spa'
   console.log(`[Email] Starting ${emailType} for booking ${data.bookingId}`)
