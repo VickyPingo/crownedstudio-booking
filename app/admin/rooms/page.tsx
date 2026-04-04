@@ -234,9 +234,23 @@ export default function RoomsCalendarPage() {
  let enrichedBookings: RoomBooking[] = []
 
 if (bookingsRes.data && bookingsRes.data.length > 0) {
-  const visibleBookings = (bookingsRes.data || []).filter((b) =>
-    !['cancelled', 'cancelled_expired', 'expired'].includes(b.status)
-  ) as any[]
+  const now = new Date()
+
+  const visibleBookings = (bookingsRes.data || []).filter((b) => {
+    if (['cancelled', 'cancelled_expired', 'expired'].includes(b.status)) {
+      return false
+    }
+
+    if (
+      b.status === 'pending_payment' &&
+      b.payment_expires_at &&
+      new Date(b.payment_expires_at) <= now
+    ) {
+      return false
+    }
+
+    return true
+  }) as any[]
 
   const bookingIds = visibleBookings.map((b) => b.id)
 
