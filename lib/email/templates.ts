@@ -295,10 +295,13 @@ export function bookingConfirmationToClientTemplate(data: BookingEmailData): str
       <div class="footer">
         <div class="section-title">Contact Us</div>
         <div class="contact-info">
-          <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
-          <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
-        </div>
+  <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
+  <p style="margin: 4px 0;">1197 Cunningham Avenue</p>
+  <p style="margin: 4px 0;">Waverley, Pretoria</p>
+  <p style="margin: 4px 0;">South Africa</p>
+  <p style="margin: 8px 0 4px 0;">Email: bookings@crownedstudio.co.za</p>
+  <p style="margin: 4px 0;">Phone: 069 863 7240</p>
+</div>
         <p class="footer-text" style="margin-top: 24px;">
           We look forward to seeing you! If you need to make any changes to your booking, please contact us at least 48 hours in advance.
         </p>
@@ -422,12 +425,18 @@ export function paymentConfirmationToClientTemplate(data: PaymentEmailData): str
       `}
 
       <div class="footer">
-        <div class="section-title">Contact Us</div>
-        <div class="contact-info">
-          <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
-          <p style="margin: 4px 0;">Email: bookings@crownedstudio.co.za</p>
-          <p style="margin: 4px 0;">Phone: 069 863 7240</p>
-        </div>
+  <div class="section-title">Contact Us</div>
+  <div class="contact-info">
+    <p style="margin: 4px 0;"><strong>Crowned Studio</strong></p>
+    <p style="margin: 4px 0;">1197 Cunningham Avenue</p>
+    <p style="margin: 4px 0;">Waverley, Pretoria</p>
+    <p style="margin: 4px 0;">South Africa</p>
+    <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280;">
+  Please arrive 10 minutes before your appointment.
+</p>
+    <p style="margin: 8px 0 4px 0;">Email: bookings@crownedstudio.co.za</p>
+    <p style="margin: 4px 0;">Phone: 069 863 7240</p>
+  </div>
         <p class="footer-text" style="margin-top: 24px;">
           We look forward to seeing you!
         </p>
