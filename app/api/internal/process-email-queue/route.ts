@@ -9,8 +9,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const reminders = await processDueReminders(20)
-    const emails = await processEmailQueue(20)
+    const [reminders, emails] = await Promise.all([
+      processDueReminders(3),
+      processEmailQueue(3),
+    ])
 
     return NextResponse.json({
       success: true,
