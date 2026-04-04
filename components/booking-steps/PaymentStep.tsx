@@ -203,12 +203,12 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
     .limit(1)
 
   if (email && phone) {
-    query = query.or(`email.eq.${email},phone.eq.${phone}`, { referencedTable: 'customers' })
-  } else if (email) {
-    query = query.eq('email', email, { referencedTable: 'customers' })
-  } else if (phone) {
-    query = query.eq('phone', phone, { referencedTable: 'customers' })
-  }
+  query = query.or(`email.eq.${email},phone.eq.${phone}`, { referencedTable: 'customers' })
+} else if (email) {
+  query = query.or(`email.eq.${email}`, { referencedTable: 'customers' })
+} else if (phone) {
+  query = query.or(`phone.eq.${phone}`, { referencedTable: 'customers' })
+}
 
   const { data: confirmedBookings, error } = await query
 
