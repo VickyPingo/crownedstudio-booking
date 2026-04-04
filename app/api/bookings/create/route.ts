@@ -244,14 +244,14 @@ export async function POST(request: NextRequest) {
     }
 
     const bookingStatus = isZeroPayment ? 'confirmed' : 'pending_payment'
-
+const isFreeBooking = !depositDue || depositDue <= 0
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
         customer_id: customerId,
         service_slug: payload.serviceSlug,
         people_count: payload.peopleCount,
-        status: bookingStatus,
+        status: isFreeBooking ? 'confirmed' : bookingStatus,
         start_time: startDateTime.toISOString(),
         end_time: endDateTime.toISOString(),
         base_price: payload.basePrice,
@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
         discount_type: discountType,
         total_price: totalPrice,
         deposit_due: depositDue,
-        payment_expires_at: isZeroPayment ? null : paymentExpiresAt.toISOString(),
+        payment_expires_at: isFreeBooking ? null : paymentExpiresAt.toISOString(),
         allergies: payload.customerAllergies || null,
         massage_pressure: payload.customerMassagePressure,
         medical_history: payload.customerMedicalHistory || null,
