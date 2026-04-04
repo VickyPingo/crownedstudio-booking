@@ -187,25 +187,40 @@ export async function POST(request: NextRequest) {
     }
 
     if (paymentStatus === 'COMPLETE') {
-      updateData.status = 'complete'
+  updateData.status = 'complete'
 
-      const { error: bookingUpdateError } = await supabase
-  .from('bookings')
-  .update({
-    status: 'confirmed',
-    payment_expires_at: null,
-  })
-  .eq('id', transaction.booking_id)
-      if (bookingUpdateError) {
-        console.error('Failed to update booking:', bookingUpdateError)
-      }
+  const { error: transactionUpdateError } = await supabase
+    .from('payment_transactions')
+    .update(updateData)
+    .eq('id', transaction.id)
+    .neq('status', 'complete')
 
-      sendPaymentEmails(
-        transaction.booking_id,
-        receivedAmount,
-        payfastPaymentId || merchantTransactionId
-      )
-    } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
+  if (transactionUpdateError) {
+    console.error('Failed to update payment transaction:', transactionUpdateError)
+    return NextResponse.json({ error: 'Failed to update payment transaction' }, { status: 500 })
+  }
+
+  const { error: bookingUpdateError } = await supabase
+    .from('bookings')
+    .update({
+      status: 'confirmed',
+      payment_expires_at: null,
+    })
+    .eq('id', transaction.booking_id)
+    .in('status', ['pending_payment', 'pending'])
+
+  if (bookingUpdateError) {
+    console.error('Failed to update booking:', bookingUpdateError)
+  }
+
+  await sendPaymentEmails(
+    transaction.booking_id,
+    receivedAmount,
+    payfastPaymentId || merchantTransactionId
+  )
+
+  return NextResponse.json({ success: true })
+} else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
     } else {
       updateData.status = 'pending'
