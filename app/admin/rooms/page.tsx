@@ -231,11 +231,14 @@ export default function RoomsCalendarPage() {
       .eq('block_date', selectedDate),
   ])
 
-  let enrichedBookings: RoomBooking[] = []
+ let enrichedBookings: RoomBooking[] = []
 
-  if (bookingsRes.data && bookingsRes.data.length > 0) {
-    const visibleBookings = bookingsRes.data as any[]
-    const bookingIds = visibleBookings.map((b) => b.id)
+if (bookingsRes.data && bookingsRes.data.length > 0) {
+  const visibleBookings = (bookingsRes.data || []).filter((b) =>
+    !['cancelled', 'cancelled_expired', 'expired'].includes(b.status)
+  ) as any[]
+
+  const bookingIds = visibleBookings.map((b) => b.id)
 
     const { data: bookingRoomsData } = await supabase
       .from('booking_rooms')
