@@ -193,87 +193,90 @@ export default function RoomsCalendarPage() {
     }
   }, [dragError, dragSuccess])
 
-  const fetchData = async () => {
-    setLoading(true)
+ const fetchData = async () => {
+  setLoading(true)
 
-    const { data: roomsData } = await supabase
-      .from('rooms')
+  const { data: roomsData } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('active', true)
+    .order('priority', { ascending: true })
+
+  const localDate = new Date(selectedDate + 'T00:00:00')
+  const dayStartUTC = new Date(localDate.getTime() - 2 * 60 * 60 * 1000)
+  const dayEndUTC = new Date(localDate.getTime() + 24 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000 - 1000)
+  const dayStart = dayStartUTC.toISOString()
+  const dayEnd = dayEndUTC.toISOString()
+
+  const [bookingsRes, blocksRes] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select(`
+        id, start_time, end_time, room_id, status, people_count, total_price,
+        deposit_due, deposit_paid_manually,
+        balance_paid, no_payment_required,
+        is_custom_booking, custom_booking_name, payment_expires_at,
+        allergies, medical_history, massage_pressure, is_pregnant,
+        customer:customers(full_name),
+        service:services(name),
+        payment_transactions(status, amount),
+        booking_upsells(upsell:upsells(name))
+      `)
+      .gte('start_time', dayStart)
+      .lte('start_time', dayEnd)
+      .in('status', ['confirmed', 'completed', 'pending_payment', 'no_show']),
+    supabase
+      .from('time_blocks')
       .select('*')
-      .eq('active', true)
-      .order('priority', { ascending: true })
+      .eq('block_date', selectedDate),
+  ])
 
-    const localDate = new Date(selectedDate + 'T00:00:00')
-    const dayStartUTC = new Date(localDate.getTime() - 2 * 60 * 60 * 1000)
-    const dayEndUTC = new Date(localDate.getTime() + 24 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000 - 1000)
-    const dayStart = dayStartUTC.toISOString()
-    const dayEnd = dayEndUTC.toISOString()
+  let enrichedBookings: RoomBooking[] = []
 
-    const [bookingsRes, blocksRes] = await Promise.all([
-      supabase
-        .from('bookings')
-        .select(`
-  id, start_time, end_time, room_id, status, people_count, total_price,
-  deposit_due, deposit_paid_manually,
-  balance_paid, no_payment_required,
-  is_custom_booking, custom_booking_name, payment_expires_at,
-  allergies, medical_history, massage_pressure, is_pregnant,
-  customer:customers(full_name),
-  service:services(name),
-  payment_transactions(status, amount),
-  booking_upsells(upsell:upsells(name))
-`)
-        .gte('start_time', dayStart)
-        .lte('start_time', dayEnd)
-        .in('status', ['confirmed', 'completed', 'pending_payment', 'no_show']),
-      supabase
-        .from('time_blocks')
-        .select('*')
-        .eq('block_date', selectedDate),
-    ])
+  if (bookingsRes.data && bookingsRes.data.length > 0) {
+    const visibleBookings = bookingsRes.data as any[]
+    const bookingIds = visibleBookings.map((b) => b.id)
 
-    let enrichedBookings: RoomBooking[] = []
-    if (bookingsRes.data && bookingsRes.data.length > 0) {
-      // Keep no-show bookings visible in the room calendar,
-// but still exclude other inactive bookings.
-const visibleBookings = bookingsRes.data as any[]
-const bookingIds = visibleBookings.map(b => b.id)
-      const { data: bookingRoomsData } = await supabase
-        .from('booking_rooms')
-        .select('booking_id, room_id, capacity_used')
-        .in('booking_id', bookingIds)
+    const { data: bookingRoomsData } = await supabase
+      .from('booking_rooms')
+      .select('booking_id, room_id, capacity_used')
+      .in('booking_id', bookingIds)
 
-      const bookingRoomsMap = new Map<string, string[]>()
-      const bookingRoomsAllocationsMap = new Map<string, BookingRoomAllocation[]>()
-      if (bookingRoomsData) {
-        bookingRoomsData.forEach(br => {
-          if (!bookingRoomsMap.has(br.booking_id)) bookingRoomsMap.set(br.booking_id, [])
-          bookingRoomsMap.get(br.booking_id)!.push(br.room_id)
+    const bookingRoomsMap = new Map<string, string[]>()
+    const bookingRoomsAllocationsMap = new Map<string, BookingRoomAllocation[]>()
 
-          if (!bookingRoomsAllocationsMap.has(br.booking_id)) bookingRoomsAllocationsMap.set(br.booking_id, [])
-          bookingRoomsAllocationsMap.get(br.booking_id)!.push({
-            room_id: br.room_id,
-            capacity_used: br.capacity_used
-          })
-        })
-      }
+    if (bookingRoomsData) {
+      bookingRoomsData.forEach((br) => {
+        if (!bookingRoomsMap.has(br.booking_id)) bookingRoomsMap.set(br.booking_id, [])
+        bookingRoomsMap.get(br.booking_id)!.push(br.room_id)
 
-      enrichedBookings = visibleBookings.map(b => {
-        const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
-        const bookingRoomsAllocations = bookingRoomsAllocationsMap.get(b.id)
-        return {
-          ...(b as unknown as RoomBooking),
-          assigned_room_ids: assignedRoomIds,
-          booking_rooms: bookingRoomsAllocations
+        if (!bookingRoomsAllocationsMap.has(br.booking_id)) {
+          bookingRoomsAllocationsMap.set(br.booking_id, [])
         }
+        bookingRoomsAllocationsMap.get(br.booking_id)!.push({
+          room_id: br.room_id,
+          capacity_used: br.capacity_used,
+        })
       })
     }
 
-    setBookings(enrichedBookings)
-setDragError(
-  `FETCHED: ${enrichedBookings
-    .map(b => `${b.customer?.full_name || 'Unknown'} | ${b.status} | room:${b.room_id || 'null'} | assigned:${(b.assigned_room_ids || []).join(',') || 'none'}`)
-    .join(' || ')}`
-)
+    enrichedBookings = visibleBookings.map((b) => {
+      const assignedRoomIds = bookingRoomsMap.get(b.id) || (b.room_id ? [b.room_id] : [])
+      const bookingRoomsAllocations = bookingRoomsAllocationsMap.get(b.id)
+
+      return {
+        ...(b as unknown as RoomBooking),
+        assigned_room_ids: assignedRoomIds,
+        booking_rooms: bookingRoomsAllocations,
+      }
+    })
+  }
+
+  setRooms((roomsData || []) as Room[])
+  setBookings(enrichedBookings)
+  setTimeBlocks((blocksRes.data || []) as TimeBlock[])
+  setLoading(false)
+}
 
   const getBookingPosition = (booking: RoomBooking): { top: number; height: number } => {
     const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
@@ -675,7 +678,7 @@ setDragError(
                                   </div>
                                 )}
                                 <p className="font-medium text-sm truncate">
-  {booking.customer?.full_name} [{booking.status}]
+ {booking.customer?.full_name}
 </p>
                                 <p className="text-xs truncate opacity-80">
                                   {booking.is_custom_booking
