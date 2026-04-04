@@ -685,7 +685,7 @@ export default function RoomsCalendarPage() {
                                   </div>
                                 )}
                                 <p className="font-medium text-sm truncate">
- {booking.customer?.full_name}
+  {booking.customer?.full_name} -- TEST123 -- {booking.status}
 </p>
                                 <p className="text-xs truncate opacity-80">
                                   {booking.is_custom_booking
