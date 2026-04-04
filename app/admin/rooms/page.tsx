@@ -268,11 +268,12 @@ const bookingIds = visibleBookings.map(b => b.id)
       })
     }
 
-    setRooms((roomsData || []) as Room[])
     setBookings(enrichedBookings)
-    setTimeBlocks((blocksRes.data || []) as TimeBlock[])
-    setLoading(false)
-  }
+setDragError(
+  `FETCHED: ${enrichedBookings
+    .map(b => `${b.customer?.full_name || 'Unknown'} | ${b.status} | room:${b.room_id || 'null'} | assigned:${(b.assigned_room_ids || []).join(',') || 'none'}`)
+    .join(' || ')}`
+)
 
   const getBookingPosition = (booking: RoomBooking): { top: number; height: number } => {
     const SAST_OFFSET_MS = 2 * 60 * 60 * 1000
