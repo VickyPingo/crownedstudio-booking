@@ -25,6 +25,20 @@ function getSupabaseAdmin() {
   )
 }
 
+async function hasEmailBeenSent(bookingId: string, emailType: EmailType): Promise<boolean> {
+  const supabase = getSupabaseAdmin()
+
+  const { data } = await supabase
+    .from('email_logs')
+    .select('id')
+    .eq('booking_id', bookingId)
+    .eq('email_type', emailType)
+    .eq('status', 'sent')
+    .maybeSingle()
+
+  return !!data
+}
+
 async function logEmailAttempt(
   bookingId: string,
   emailType: EmailType,
