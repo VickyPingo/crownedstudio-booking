@@ -209,15 +209,16 @@ export async function POST(request: NextRequest) {
   .eq('id', transaction.booking_id)
   .in('status', ['pending_payment', 'pending', 'expired'])
 
-  if (bookingUpdateError) {
-    console.error('Failed to update booking:', bookingUpdateError)
-  }
+ if (bookingUpdateError) {
+  console.error('Failed to update booking:', bookingUpdateError)
+  return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+}
 
-  await sendPaymentEmails(
-    transaction.booking_id,
-    receivedAmount,
-    payfastPaymentId || merchantTransactionId
-  )
+await sendPaymentEmails(
+  transaction.booking_id,
+  receivedAmount,
+  payfastPaymentId || merchantTransactionId
+)
 
   return NextResponse.json({ success: true })
 } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
