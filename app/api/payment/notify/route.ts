@@ -200,18 +200,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to update payment transaction' }, { status: 500 })
   }
 
-  const { error: bookingUpdateError } = await supabase
+  const { data: updatedBooking, error: bookingUpdateError } = await supabase
   .from('bookings')
   .update({
     status: 'confirmed',
     payment_expires_at: null,
   })
   .eq('id', transaction.booking_id)
-  .in('status', ['pending_payment', 'pending', 'expired'])
+  .select('id, status, payment_expires_at')
+  .maybeSingle()
 
- if (bookingUpdateError) {
+if (bookingUpdateError) {
   console.error('Failed to update booking:', bookingUpdateError)
   return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+}
+
+if (!updatedBooking) {
+  console.error('Booking update matched no rows for transaction:', {
+    transactionId: transaction.id,
+    bookingId: transaction.booking_id,
+    merchantTransactionId,
+    payfastPaymentId,
+  })
+  return NextResponse.json({ error: 'Booking update matched no rows' }, { status: 500 })
 }
 
 await sendPaymentEmails(
