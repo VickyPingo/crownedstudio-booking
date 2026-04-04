@@ -646,10 +646,17 @@ export default function RoomsCalendarPage() {
                           })}
 
                           {roomBookings.map((booking) => {
-                            const { top, height } = getBookingPosition(booking)
-                            const paymentResult = getPaymentState(booking)
-                            const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
-                            const isDragging = dragState?.bookingId === booking.id
+  console.log('ROOM BOOKING CARD:', {
+    id: booking.id,
+    customer: booking.customer?.full_name,
+    status: booking.status,
+    roomId: room.id,
+  })
+
+  const { top, height } = getBookingPosition(booking)
+  const paymentResult = getPaymentState(booking)
+  const isMultiRoom = booking.assigned_room_ids && booking.assigned_room_ids.length > 1
+  const isDragging = dragState?.bookingId === booking.id
 
                             return (
                               <div
