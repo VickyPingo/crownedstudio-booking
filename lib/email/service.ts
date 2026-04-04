@@ -39,32 +39,27 @@ async function hasEmailBeenSent(bookingId: string, emailType: EmailType): Promis
   return !!data
 }
 
-async function logEmailAttempt(
-  bookingId: string,
-  emailType: EmailType,
-  recipientEmail: string,
-  recipientType: 'client' | 'spa'
-): Promise<string> {
+async function updateEmailLog(
+  logId: string,
+  status: 'sent' | 'failed',
+  resendId?: string,
+  errorMessage?: string
+): Promise<void> {
   const supabase = getSupabaseAdmin()
 
-  const { data, error } = await supabase
+  await supabase
     .from('email_logs')
-    .insert({
-      booking_id: bookingId,
-      email_type: emailType,
-      recipient_email: recipientEmail,
-      recipient_type: recipientType,
-      status: 'pending',
+    .update({
+      status,
+      resend_id: resendId,
+      error_message: errorMessage,
+      sent_at: status === 'sent' ? new Date().toISOString() : null,
+      processed_at: status === 'sent' ? new Date().toISOString() : null,
+      last_attempt_at: new Date().toISOString(),
+      next_retry_at: status === 'failed' ? new Date().toISOString() : null,
+      locked_at: null,
     })
-    .select('id')
-    .single()
-
-  if (error) {
-    console.error('Failed to create email log:', error)
-    throw error
-  }
-
-  return data.id
+    .eq('id', logId)
 }
 
 async function updateEmailLog(
@@ -95,7 +90,7 @@ export async function sendNewBookingToSpa(data: BookingEmailData): Promise<boole
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, SPA_EMAIL, 'spa')
+  const logId = await logEmailAttempt(data.bookingId, emailType, SPA_EMAIL, 'spa', data as unknown as Record<string, unknown>)
 
   const html = newBookingToSpaTemplate(data)
   const subject = `New Booking: ${data.clientName} - ${data.serviceName} on ${data.bookingDate}`
@@ -128,7 +123,7 @@ export async function sendBookingRequestToClient(data: BookingEmailData): Promis
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
+  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client', data as unknown as Record<string, unknown>)
 
   const html = bookingRequestToClientTemplate(data)
   const subject = 'Your Crowned Studio Booking Request'
@@ -165,7 +160,13 @@ export async function sendBookingConfirmationToClient(data: BookingEmailData): P
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
+  const logId = await logEmailAttempt(
+  data.bookingId,
+  emailType,
+  data.clientEmail,
+  'client',
+  data as unknown as Record<string, unknown>
+)
 
   const html = bookingConfirmationToClientTemplate(data)
   const subject = 'Your Crowned Studio Booking is Confirmed'
@@ -193,7 +194,13 @@ export async function sendPaymentReceivedToSpa(data: PaymentEmailData): Promise<
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, SPA_EMAIL, 'spa')
+const logId = await logEmailAttempt(
+  data.bookingId,
+  emailType,
+  SPA_EMAIL,
+  'spa',
+  data as unknown as Record<string, unknown>
+)
 
   const html = paymentReceivedToSpaTemplate(data)
   const subject = `Payment Received: R${data.amountPaid} from ${data.clientName}`
@@ -226,7 +233,13 @@ export async function sendPaymentConfirmationToClient(data: PaymentEmailData): P
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
+  const logId = await logEmailAttempt(
+  data.bookingId,
+  emailType,
+  data.clientEmail,
+  'client',
+  data as unknown as Record<string, unknown>
+)
 
   const html = paymentConfirmationToClientTemplate(data)
   const subject = `Payment Confirmed - R${data.amountPaid} Received`
@@ -259,7 +272,13 @@ export async function sendReminder24hToClient(data: BookingEmailData): Promise<b
     return true
   }
 
-  const logId = await logEmailAttempt(data.bookingId, emailType, data.clientEmail, 'client')
+  const logId = await logEmailAttempt(
+  data.bookingId,
+  emailType,
+  data.clientEmail,
+  'client',
+  data as unknown as Record<string, unknown>
+)
 
   const html = reminder24hToClientTemplate(data)
   const subject = `Reminder: Your appointment tomorrow at ${data.bookingTime}`
