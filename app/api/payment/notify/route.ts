@@ -201,13 +201,13 @@ export async function POST(request: NextRequest) {
   }
 
   const { error: bookingUpdateError } = await supabase
-    .from('bookings')
-    .update({
-      status: 'confirmed',
-      payment_expires_at: null,
-    })
-    .eq('id', transaction.booking_id)
-    .in('status', ['pending_payment', 'pending'])
+  .from('bookings')
+  .update({
+    status: 'confirmed',
+    payment_expires_at: null,
+  })
+  .eq('id', transaction.booking_id)
+  .in('status', ['pending_payment', 'pending', 'expired'])
 
   if (bookingUpdateError) {
     console.error('Failed to update booking:', bookingUpdateError)
