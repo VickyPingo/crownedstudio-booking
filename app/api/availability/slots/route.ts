@@ -47,9 +47,9 @@ const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const HHMM_RE = /^\d{2}:\d{2}$/
 const BOOKING_BUFFER_MINUTES = 10
 
-const MORNING_END = 11 * 60       // 11:00
-const MID_MORNING_END = 14 * 60   // 14:00
-const DAY_END = 17 * 60 + 30      // 17:30
+const MORNING_END = 11 * 60 // 11:00
+const MID_MORNING_END = 14 * 60 // 14:00
+const DAY_END = 17 * 60 + 30 // 17:30
 
 function timeHHMMToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
@@ -93,6 +93,11 @@ function sanitizeHHMM(value: string): string {
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
 }
 
+function isWeekendInSast(date: string): boolean {
+  const day = new Date(`${date}T12:00:00+02:00`).getDay()
+  return day === 0 || day === 6
+}
+
 function buildCandidateSlots(
   roomBookings: RoomBooking[],
   timeBlocks: SchedulingTimeBlock[]
@@ -111,7 +116,10 @@ function buildCandidateSlots(
   // Booking end + cleanup buffer
   for (const booking of roomBookings) {
     const endMin = getMinutesFromIsoInSast(booking.end_time) + BOOKING_BUFFER_MINUTES
-    if (endMin >= timeHHMMToMinutes(NORMAL_HOURS_START) && endMin <= timeHHMMToMinutes(NORMAL_HOURS_END)) {
+    if (
+      endMin >= timeHHMMToMinutes(NORMAL_HOURS_START) &&
+      endMin <= timeHHMMToMinutes(NORMAL_HOURS_END)
+    ) {
       candidates.add(minutesToHHMM(endMin))
     }
   }
@@ -120,7 +128,10 @@ function buildCandidateSlots(
   for (const block of timeBlocks) {
     if (block.is_full_day || !block.end_time) continue
     const endMin = timeHHMMToMinutes(block.end_time.slice(0, 5))
-    if (endMin >= timeHHMMToMinutes(NORMAL_HOURS_START) && endMin <= timeHHMMToMinutes(NORMAL_HOURS_END)) {
+    if (
+      endMin >= timeHHMMToMinutes(NORMAL_HOURS_START) &&
+      endMin <= timeHHMMToMinutes(NORMAL_HOURS_END)
+    ) {
       candidates.add(minutesToHHMM(endMin))
     }
   }
@@ -252,7 +263,6 @@ function rankSlotsForRoom(
     .sort((a, b) => a.startMin - b.startMin)
 
   if (roomOccs.length === 0) {
-    // Empty room: earliest first
     return [...validSlots].sort((a, b) => timeHHMMToMinutes(a) - timeHHMMToMinutes(b))
   }
 
@@ -273,7 +283,6 @@ function rankSlotsForRoom(
     const aHasPostBookingGap = aGaps.length > 0
     const bHasPostBookingGap = bGaps.length > 0
 
-    // Prefer slots that continue downward filling after an existing booking/block
     if (aHasPostBookingGap && !bHasPostBookingGap) return -1
     if (!aHasPostBookingGap && bHasPostBookingGap) return 1
 
@@ -284,7 +293,6 @@ function rankSlotsForRoom(
       return aMin - bMin
     }
 
-    // Otherwise earliest first
     return aMin - bMin
   })
 }
@@ -309,8 +317,17 @@ function pickFinalSlots(
 
   // STEP 2: try to ensure coverage across buckets, but ONLY within these same active rooms
   if (selected.length < 3) {
-    const existingBuckets = new Set(selected.map(getBucket).filter(Boolean))
-    const desiredBuckets: Array<'morning' | 'midMorning' | 'afternoon'> = ['morning', 'midMorning', 'afternoon']
+    const existingBuckets = new Set(
+      selected
+        .map(getBucket)
+        .filter((bucket): bucket is 'morning' | 'midMorning' | 'afternoon' => bucket !== null)
+    )
+
+    const desiredBuckets: Array<'morning' | 'midMorning' | 'afternoon'> = [
+      'morning',
+      'midMorning',
+      'afternoon',
+    ]
 
     for (const bucket of desiredBuckets) {
       if (selected.length >= 3) break
@@ -358,10 +375,7 @@ export async function POST(request: NextRequest) {
     const { date, serviceSlug, serviceDurationMinutes, peopleCount } = body
 
     if (!date || !serviceDurationMinutes || !peopleCount) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
     const supabase = supabaseAdmin
@@ -382,10 +396,7 @@ export async function POST(request: NextRequest) {
 
     if (roomsError) {
       console.error('[Availability] rooms error', roomsError)
-      return NextResponse.json(
-        { error: 'Failed to load rooms' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to load rooms' }, { status: 500 })
     }
 
     const allTreatmentRooms = (roomsData || []) as Room[]
@@ -398,10 +409,7 @@ export async function POST(request: NextRequest) {
 
     if (bookingsError) {
       console.error('[Availability] bookings error', bookingsError)
-      return NextResponse.json(
-        { error: 'Failed to load bookings' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to load bookings' }, { status: 500 })
     }
 
     const activeBookings = ((bookingsData || []) as BookingRow[]).filter((booking) =>
@@ -419,10 +427,7 @@ export async function POST(request: NextRequest) {
 
       if (bookingRoomsError) {
         console.error('[Availability] booking_rooms error', bookingRoomsError)
-        return NextResponse.json(
-          { error: 'Failed to load booking rooms' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to load booking rooms' }, { status: 500 })
       }
 
       bookingRoomsData = (splitRooms || []) as BookingRoomRow[]
@@ -465,25 +470,51 @@ export async function POST(request: NextRequest) {
 
     const timeBlocks: SchedulingTimeBlock[] = (timeBlocksRaw || []) as SchedulingTimeBlock[]
 
-    // This is the IMPORTANT lock:
-    // find the FIRST active group that can serve the booking.
-    // We only expose options from this group.
-    const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
-      date,
-      allTreatmentRooms,
-      roomBookings,
-      serviceDurationMinutes,
-      peopleCount,
-      sanitizeHHMM(NORMAL_HOURS_START),
-      sanitizeHHMM(NORMAL_HOURS_END),
-      timeBlocks
-    )
+    const weekendOverride = isWeekendInSast(date)
 
-    const activeRoomIdSet = new Set(slotResult.activeRoomIds)
+    let activeRooms: Room[] = []
+    let activeGroupBookings: RoomBooking[] = []
+    let activeGroupTimeBlocks: SchedulingTimeBlock[] = []
+    let activeGroupLabel = 'weekend-all-rooms'
 
-    const activeRooms = allTreatmentRooms
-      .filter((room) => activeRoomIdSet.has(room.id))
-      .sort((a, b) => a.priority - b.priority)
+    if (weekendOverride) {
+      activeRooms = [...allTreatmentRooms].sort((a, b) => a.priority - b.priority)
+      const allRoomIds = new Set(activeRooms.map((room) => room.id))
+
+      activeGroupBookings = roomBookings.filter((booking) => allRoomIds.has(booking.room_id))
+
+      activeGroupTimeBlocks = timeBlocks.filter(
+        (block) => !block.room_id || allRoomIds.has(block.room_id)
+      )
+    } else {
+      // Weekdays keep the existing strict first-active-group rule
+      const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
+        date,
+        allTreatmentRooms,
+        roomBookings,
+        serviceDurationMinutes,
+        peopleCount,
+        sanitizeHHMM(NORMAL_HOURS_START),
+        sanitizeHHMM(NORMAL_HOURS_END),
+        timeBlocks
+      )
+
+      const activeRoomIdSet = new Set(slotResult.activeRoomIds)
+
+      activeRooms = allTreatmentRooms
+        .filter((room) => activeRoomIdSet.has(room.id))
+        .sort((a, b) => a.priority - b.priority)
+
+      activeGroupBookings = roomBookings.filter((booking) =>
+        activeRoomIdSet.has(booking.room_id)
+      )
+
+      activeGroupTimeBlocks = timeBlocks.filter(
+        (block) => !block.room_id || activeRoomIdSet.has(block.room_id)
+      )
+
+      activeGroupLabel = slotResult.activeGroup
+    }
 
     if (activeRooms.length === 0) {
       return NextResponse.json({
@@ -491,14 +522,6 @@ export async function POST(request: NextRequest) {
         isFullyBlocked: true,
       })
     }
-
-    const activeGroupBookings = roomBookings.filter((booking) =>
-      activeRoomIdSet.has(booking.room_id)
-    )
-
-    const activeGroupTimeBlocks = timeBlocks.filter(
-      (block) => !block.room_id || activeRoomIdSet.has(block.room_id)
-    )
 
     const candidateSlots = buildCandidateSlots(activeGroupBookings, activeGroupTimeBlocks)
     const occupancies = buildRoomOccupancies(
@@ -527,7 +550,11 @@ export async function POST(request: NextRequest) {
 
     const availableSlots = pickFinalSlots(activeRooms, roomToRankedSlots)
 
-    console.log('[Availability] ACTIVE GROUP', slotResult.activeGroup, slotResult.activeRoomIds)
+    console.log(
+      '[Availability] ACTIVE GROUP',
+      activeGroupLabel,
+      activeRooms.map((room) => room.id)
+    )
     console.log('[Availability] FINAL selected slots', availableSlots)
     console.log('[Availability] selected date/service/people', {
       date,
@@ -542,9 +569,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[Availability] unexpected error', error)
-    return NextResponse.json(
-      { error: 'Failed to calculate availability' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to calculate availability' }, { status: 500 })
   }
 }
