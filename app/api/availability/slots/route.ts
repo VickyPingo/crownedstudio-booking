@@ -475,8 +475,8 @@ export async function POST(request: NextRequest) {
     let activeRooms: Room[] = []
     let activeGroupBookings: RoomBooking[] = []
     let activeGroupTimeBlocks: SchedulingTimeBlock[] = []
-    let activeGroupLabel = 'weekend-all-rooms'
-
+    let activeGroupLabel: string = 'weekend-all-rooms'
+    
     if (weekendOverride) {
       activeRooms = [...allTreatmentRooms].sort((a, b) => a.priority - b.priority)
       const allRoomIds = new Set(activeRooms.map((room) => room.id))
@@ -513,7 +513,7 @@ export async function POST(request: NextRequest) {
         (block) => !block.room_id || activeRoomIdSet.has(block.room_id)
       )
 
-      activeGroupLabel = slotResult.activeGroup
+      activeGroupLabel = String(slotResult.activeGroup ?? 'weekday-active-group')
     }
 
     if (activeRooms.length === 0) {
