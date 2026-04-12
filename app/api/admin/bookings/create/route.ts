@@ -148,8 +148,11 @@ balance_paid_by: initialPaidAmount > 0 ? adminUserId || null : null,
 
 // ✅ INSERT UPSELLS FOR MANUAL BOOKINGS
 if (selectedUpsellsByPerson && typeof selectedUpsellsByPerson === 'object') {
-  const allUpsellIds = [...new Set(Object.values(selectedUpsellsByPerson).flat())]
-
+  const allUpsellIds = [
+  ...new Set(
+    Object.values(selectedUpsellsByPerson).flatMap((ids) => ids as string[])
+  ),
+]
   if (allUpsellIds.length > 0) {
     const { data: upsells } = await supabaseAdmin
       .from('upsells')
