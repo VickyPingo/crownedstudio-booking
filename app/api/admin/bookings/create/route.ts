@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       customPrice,
       adminUserId,
       adminName,
+      selectedUpsellsByPerson,
     } = payload
 
     const safeNum = (val: unknown) =>
@@ -145,6 +146,52 @@ balance_paid_by: initialPaidAmount > 0 ? adminUserId || null : null,
       )
     }
 
+// ✅ INSERT UPSELLS FOR MANUAL BOOKINGS
+if (selectedUpsellsByPerson && typeof selectedUpsellsByPerson === 'object') {
+  const allUpsellIds = [...new Set(Object.values(selectedUpsellsByPerson).flat())]
+
+  if (allUpsellIds.length > 0) {
+    const { data: upsells } = await supabaseAdmin
+      .from('upsells')
+      .select('id, price, duration_added_minutes')
+      .in('id', allUpsellIds)
+
+    if (upsells && upsells.length > 0) {
+      const upsellMap = new Map(upsells.map(u => [u.id, u]))
+
+      const bookingUpsells: any[] = []
+
+      for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson)) {
+        const personNumber = parseInt(personKey, 10)
+
+        for (const upsellId of ids as string[]) {
+          const upsell = upsellMap.get(upsellId)
+          if (upsell) {
+            bookingUpsells.push({
+              booking_id: booking.id,
+              upsell_id: upsell.id,
+              quantity: 1,
+              price_total: upsell.price,
+              duration_added_minutes: upsell.duration_added_minutes,
+              person_number: personNumber,
+            })
+          }
+        }
+      }
+
+      if (bookingUpsells.length > 0) {
+        const { error } = await supabaseAdmin
+          .from('booking_upsells')
+          .insert(bookingUpsells)
+
+        if (error) {
+          console.error('[ManualBooking] Upsell insert failed:', error)
+        }
+      }
+    }
+  }
+}
+    
     // Create a single real manual payment transaction for any amount already paid
     if (initialPaidAmount > 0) {
       const paymentTxId = `MANUAL-PAY-${booking.id.replace(/-/g, '')}-${Date.now()}`
