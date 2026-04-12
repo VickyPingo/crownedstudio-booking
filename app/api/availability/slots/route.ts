@@ -52,11 +52,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = supabaseAdmin
 
-    if (CROWNED_NIGHT_SLUGS.includes(serviceSlug)) {
-      const result = await getEveningAvailability(date, peopleCount, supabase)
-      return NextResponse.json(result)
-    }
-
     const { start, end } = getUtcRangeForSastDate(date)
 
     const { data: roomsData, error: roomsError } = await supabase
