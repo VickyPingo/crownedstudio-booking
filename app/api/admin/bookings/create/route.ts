@@ -164,7 +164,7 @@ if (selectedUpsellsByPerson && typeof selectedUpsellsByPerson === 'object') {
 
       const bookingUpsells: any[] = []
 
-      for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson)) {
+      for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson as Record<string, string[]>)) {
         const personNumber = parseInt(personKey, 10)
 
         for (const upsellId of ids as string[]) {
