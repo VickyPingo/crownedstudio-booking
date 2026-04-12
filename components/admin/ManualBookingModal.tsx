@@ -555,14 +555,9 @@ export function ManualBookingModal({
         return
       }
 
-      const upsellsByPersonWithSlugs: PerPersonUpsells = {}
-      for (const [personKey, ids] of Object.entries(selectedUpsellsByPerson)) {
-        upsellsByPersonWithSlugs[Number(personKey)] = (ids as string[]).map((id) => {
-          const u = upsells.find((u) => u.id === id)
-          return u?.slug || id
-        })
-      }
-
+      // FIX: Send upsell IDs directly — do NOT convert to slugs.
+      // The server route queries booking_upsells by upsell ID, so slugs
+      // will never match and booking_upsells rows will never be created.
       const primaryPressure = pressureByPerson[1] || 'medium'
 
       let bodyExtras: Record<string, unknown>
@@ -599,7 +594,7 @@ export function ManualBookingModal({
           paymentOption,
           manualPaymentMethod,
           initialAmountPaid: Number(initialAmountPaid || 0),
-          selectedUpsellsByPerson: upsellsByPersonWithSlugs,
+          selectedUpsellsByPerson, // Send IDs as-is — server queries upsells by ID
           roomAssignments: roomAssignments.map((ra) => ({ roomId: ra.roomId, people: ra.people })),
           adminUserId: user?.id || null,
           adminName:
