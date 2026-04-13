@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ServiceWithUpsells, ServicePricingOption } from '@/types/service'
 
 interface ServiceDetailsStepProps {
@@ -8,6 +9,7 @@ interface ServiceDetailsStepProps {
   onUpdatePeopleCount: (count: number) => void
   selectedPricingOption?: ServicePricingOption | null
   onUpdatePricingOption?: (option: ServicePricingOption) => void
+  onRoomAcknowledgedChange?: (acknowledged: boolean) => void
 }
 
 function getPriceForPeopleCount(service: ServiceWithUpsells, count: number): number | null {
@@ -48,7 +50,10 @@ export function ServiceDetailsStep({
   onUpdatePeopleCount,
   selectedPricingOption,
   onUpdatePricingOption,
+  onRoomAcknowledgedChange,
 }: ServiceDetailsStepProps) {
+  const [roomAcknowledged, setRoomAcknowledged] = useState(false)
+
   const hasPricingOptions = service.pricingOptions && service.pricingOptions.length > 0
 
   const peopleOptions: number[] = []
@@ -66,6 +71,11 @@ export function ServiceDetailsStep({
   const currentPrice = hasPricingOptions && selectedPricingOption
     ? getPricingOptionPrice(selectedPricingOption, peopleCount)
     : (getPriceForPeopleCount(service, peopleCount) ?? service.price_1_person)
+
+  const handleRoomAcknowledged = (val: boolean) => {
+    setRoomAcknowledged(val)
+    onRoomAcknowledgedChange?.(val)
+  }
 
   return (
     <div className="space-y-4">
@@ -145,11 +155,29 @@ export function ServiceDetailsStep({
             })}
           </div>
 
+          {/* Room surcharge acknowledgement */}
+          <div className={`mt-4 flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+            roomAcknowledged ? 'border-gray-200 bg-white' : 'border-red-200 bg-red-50'
+          }`}>
+            <input
+              type="checkbox"
+              id="room-surcharge-notice"
+              checked={roomAcknowledged}
+              onChange={(e) => handleRoomAcknowledged(e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer accent-black flex-shrink-0"
+            />
+            <label htmlFor="room-surcharge-notice" className="text-sm text-gray-700 cursor-pointer">
+              Please note the discount for 2 and 3 people are applicable when sharing one room. If more rooms are required there will be a surcharge.{' '}
+              <span className="text-red-500">*</span>
+            </label>
+          </div>
+
+          {/* Green WhatsApp block */}
           <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-sm text-green-800 mb-2">
               Booking for more than 6 people? Please contact the spa directly on WhatsApp and we'll help you arrange your group booking.
             </p>
-            <a
+            
               href="https://wa.me/27698637240?text=Hi%20Crowned%20Studio%2C%20I%20would%20like%20to%20book%20for%20more%20than%206%20people."
               target="_blank"
               rel="noopener noreferrer"
