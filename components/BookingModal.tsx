@@ -69,7 +69,6 @@ export function BookingModal({
 }: BookingModalProps) {
   const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
-  const [roomAcknowledged, setRoomAcknowledged] = useState(false)
   const [formData, setFormData] = useState<BookingFormData>({
     peopleCount: 1,
     selectedUpsells: [],
@@ -154,7 +153,6 @@ roomSharingNoticeAccepted: false,
 
   const handleClose = () => {
     setCurrentStep(0)
-    setRoomAcknowledged(false)
     setFormData({
       peopleCount: 1,
       selectedUpsells: [],
