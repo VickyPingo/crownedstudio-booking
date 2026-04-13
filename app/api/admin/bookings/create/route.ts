@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
       customPrice,
       adminUserId,
       adminName,
-      selectedUpsellsByPerson,
     } = payload
 
     const safeNum = (val: unknown) =>
