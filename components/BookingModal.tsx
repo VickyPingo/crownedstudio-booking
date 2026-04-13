@@ -329,10 +329,8 @@ export function BookingModal({
       <div className="absolute inset-0 overflow-y-auto">
         <div className="flex min-h-full items-start sm:items-center justify-center p-3 sm:p-6">
           <div className="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl max-h-[92vh] flex flex-col">
-            <button
-              onClick={handleClose}
-              <button
-  onClick={handleClose}
-  className="absolute right-4 top-4 z-10 rounded-full p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-  aria-label="Close booking modal"
->
+  <button
+    onClick={handleClose}
+    className="absolute right-4 top-4 z-10 rounded-full p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+    aria-label="Close booking modal"
+  >
