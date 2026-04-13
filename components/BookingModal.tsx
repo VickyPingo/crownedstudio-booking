@@ -88,6 +88,7 @@ export function BookingModal({
     clientPregnancyWeeks: null,
     afterHoursSurcharge: 0,
     selectedPricingOption: null,
+roomSharingNoticeAccepted: false,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
@@ -172,6 +173,7 @@ export function BookingModal({
       clientPregnancyWeeks: null,
       afterHoursSurcharge: 0,
       selectedPricingOption: null,
+roomSharingNoticeAccepted: false,
     })
     closeModal()
   }
