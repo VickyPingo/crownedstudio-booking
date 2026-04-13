@@ -227,14 +227,15 @@ roomSharingNoticeAccepted: false,
     switch (currentStep) {
       case 0:
         return (
-          <ServiceDetailsStep
-            service={resolvedService}
-            peopleCount={formData.peopleCount}
-            onUpdatePeopleCount={(count) => updateFormData({ peopleCount: count })}
-            selectedPricingOption={formData.selectedPricingOption}
-            onUpdatePricingOption={(option) => updateFormData({ selectedPricingOption: option })}
-            onRoomAcknowledgedChange={setRoomAcknowledged}
-          />
+         <ServiceDetailsStep
+  service={resolvedService}
+  peopleCount={formData.peopleCount}
+  onUpdatePeopleCount={(count) => updateFormData({ peopleCount: count })}
+  selectedPricingOption={formData.selectedPricingOption}
+  onUpdatePricingOption={(option) => updateFormData({ selectedPricingOption: option })}
+  roomSharingNoticeAccepted={formData.roomSharingNoticeAccepted}
+  onUpdateRoomSharingNotice={(accepted) => updateFormData({ roomSharingNoticeAccepted: accepted })}
+/>
         )
       case 1:
         return (
