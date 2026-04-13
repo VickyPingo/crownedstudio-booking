@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       manualPaymentMethod,
       initialAmountPaid,
       roomAssignments,
+      selectedUpsellsByPerson,
       isCustomBooking,
       customBookingName,
       customDurationMinutes,
@@ -236,6 +237,71 @@ if (selectedUpsellsByPerson && typeof selectedUpsellsByPerson === 'object') {
 
     if (!assignResult.success) {
       console.error('[CreateBooking] assignRoomsToBooking failed:', assignResult.error)
+    }
+
+    const hasPerPersonUpsells =
+      selectedUpsellsByPerson &&
+      Object.values(selectedUpsellsByPerson).some(
+        (arr) => Array.isArray(arr) && arr.length > 0
+      )
+
+    if (hasPerPersonUpsells) {
+      const allUpsellIds = [
+        ...new Set(
+          Object.values(selectedUpsellsByPerson).flat().filter((id) => typeof id === 'string')
+        ),
+      ]
+
+      if (allUpsellIds.length > 0) {
+        const { data: upsellData, error: upsellQueryError } = await supabaseAdmin
+          .from('upsells')
+          .select('id, price, duration_added_minutes')
+          .in('id', allUpsellIds)
+
+        if (upsellQueryError) {
+          console.error('[CreateBooking] Upsells query error:', upsellQueryError)
+        }
+
+        if (upsellData && upsellData.length > 0) {
+          const upsellMap = new Map(upsellData.map((u) => [u.id, u]))
+          const bookingUpsells: Array<{
+            booking_id: string
+            upsell_id: string
+            quantity: number
+            price_total: number
+            duration_added_minutes: number
+            person_number: number
+          }> = []
+
+          for (const [personKey, personUpsellIds] of Object.entries(selectedUpsellsByPerson)) {
+            const personNumber = Number(personKey)
+            if (!Array.isArray(personUpsellIds)) continue
+            for (const upsellId of personUpsellIds) {
+              const upsell = upsellMap.get(upsellId)
+              if (upsell) {
+                bookingUpsells.push({
+                  booking_id: booking.id,
+                  upsell_id: upsell.id,
+                  quantity: 1,
+                  price_total: upsell.price,
+                  duration_added_minutes: upsell.duration_added_minutes,
+                  person_number: personNumber,
+                })
+              }
+            }
+          }
+
+          if (bookingUpsells.length > 0) {
+            const { error: bookingUpsellsInsertError } = await supabaseAdmin
+              .from('booking_upsells')
+              .insert(bookingUpsells)
+
+            if (bookingUpsellsInsertError) {
+              console.error('[CreateBooking] booking_upsells insert error:', bookingUpsellsInsertError)
+            }
+          }
+        }
+      }
     }
 
     await writeAuditLogServer(

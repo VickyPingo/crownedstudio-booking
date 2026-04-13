@@ -23,6 +23,7 @@ export interface BookingFormData {
   clientPregnancyWeeks: number | null
   afterHoursSurcharge: number
   selectedPricingOption?: ServicePricingOption | null
+  roomSharingNoticeAccepted: boolean
 }
 
 export interface BookingPricing {

@@ -82,7 +82,6 @@ export function BookingModal({
 }: BookingModalProps) {
   const { isOpen, selectedService, serviceSlug, closeModal } = useBookingModal()
   const [currentStep, setCurrentStep] = useState(0)
-  const [roomAcknowledged, setRoomAcknowledged] = useState(false)
   const [formData, setFormData] = useState<BookingFormData>({
     peopleCount: 1,
     selectedUpsells: [],
@@ -101,6 +100,7 @@ export function BookingModal({
     clientPregnancyWeeks: null,
     afterHoursSurcharge: 0,
     selectedPricingOption: null,
+    roomSharingNoticeAccepted: false,
   })
   const [resolvedService, setResolvedService] = useState<ServiceWithUpsells | null>(null)
 
@@ -174,7 +174,6 @@ export function BookingModal({
 
   const handleClose = () => {
     setCurrentStep(0)
-    setRoomAcknowledged(false)
     setFormData({
       peopleCount: 1,
       selectedUpsells: [],
@@ -193,6 +192,7 @@ export function BookingModal({
       clientPregnancyWeeks: null,
       afterHoursSurcharge: 0,
       selectedPricingOption: null,
+      roomSharingNoticeAccepted: false,
     })
     closeModal()
   }
@@ -225,9 +225,7 @@ export function BookingModal({
   const canProceedToNext = () => {
     switch (currentStep) {
       case 0:
-        // Require checkbox only when it is shown (multi-person, no pricing options)
-        if (showRoomCheckbox && !roomAcknowledged) return false
-        return true
+        return !showRoomCheckbox || formData.roomSharingNoticeAccepted
       case 1:
         for (let i = 1; i <= formData.peopleCount; i++) {
           if (!formData.pressureByPerson[i]) {
@@ -258,7 +256,8 @@ export function BookingModal({
             onUpdatePeopleCount={(count) => updateFormData({ peopleCount: count })}
             selectedPricingOption={formData.selectedPricingOption}
             onUpdatePricingOption={(option) => updateFormData({ selectedPricingOption: option })}
-            onRoomAcknowledgedChange={setRoomAcknowledged}
+            roomSharingNoticeAccepted={formData.roomSharingNoticeAccepted}
+            onUpdateRoomSharingNotice={(accepted) => updateFormData({ roomSharingNoticeAccepted: accepted })}
           />
         )
       case 1:
