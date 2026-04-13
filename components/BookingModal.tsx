@@ -203,8 +203,8 @@ roomSharingNoticeAccepted: false,
   const canProceedToNext = () => {
     switch (currentStep) {
       case 0:
-        if (showRoomCheckbox && !roomAcknowledged) return false
-        return true
+  if (showRoomCheckbox && !formData.roomSharingNoticeAccepted) return false
+  return true
       case 1:
         for (let i = 1; i <= formData.peopleCount; i++) {
           if (!formData.pressureByPerson[i]) return false
