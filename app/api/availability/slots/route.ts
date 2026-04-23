@@ -15,57 +15,16 @@ interface AvailabilityRequest {
   peopleCount: number
 }
 
-interface BookingRow {
-  id: string
-  start_time: string
-  end_time: string
-  room_id: string | null
-  status: string
-  payment_expires_at?: string | null
-  people_count?: number
-  service_slug?: string
-}
-
-interface BookingRoomRow {
-  booking_id: string
-  room_id: string
-}
-
-interface RoomOccupancy {
-  room_id: string
-  startMin: number
-  endMin: number
-  source: 'booking' | 'time_block'
-}
-
 // ✅ CONSTANTS
 const NORMAL_HOURS_START = '08:30'
 const NORMAL_HOURS_END = '17:30'
-const BOOKING_BUFFER_MINUTES = 10
 
 const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const EVENING_START_TIME = '17:30'
 const EVENING_MAX_BOOKINGS = 2
 const EVENING_MAX_PEOPLE = 4
 
-const HHMM_RE = /^\d{2}:\d{2}$/
-
-const MORNING_END = 11 * 60
-const MID_MORNING_END = 14 * 60
-const DAY_END = 17 * 60 + 30
-
 // ✅ HELPERS
-function timeHHMMToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
-}
-
-function minutesToHHMM(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
-
 function getUtcRangeForSastDate(date: string) {
   return {
     start: new Date(`${date}T00:00:00+02:00`).toISOString(),
@@ -73,25 +32,10 @@ function getUtcRangeForSastDate(date: string) {
   }
 }
 
-function getMinutesFromIsoInSast(isoString: string): number {
-  const ms = new Date(isoString).getTime()
-  const sastMs = ms + 2 * 60 * 60 * 1000
-  return Math.floor(sastMs / 60000) % (24 * 60)
-}
-
 function sanitizeHHMM(value: string): string {
   if (!value) return ''
   const [h = '00', m = '00'] = value.split(':')
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`
-}
-
-function isWeekendInSast(date: string): boolean {
-  const day = new Date(`${date}T12:00:00+02:00`).getDay()
-  return day === 0 || day === 6
-}
-
-function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
-  return aStart < bEnd && bStart < aEnd
 }
 
 // ✅ EVENING LOGIC
@@ -150,10 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (blockedServiceDates[serviceSlug]?.includes(date)) {
-      return NextResponse.json({
-        availableSlots: [],
-        isFullyBlocked: true,
-      })
+      return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
     }
 
     const supabase = supabaseAdmin
@@ -167,6 +108,7 @@ export async function POST(request: NextRequest) {
 
     const { start, end } = getUtcRangeForSastDate(date)
 
+    // Load active treatment rooms
     const { data: rooms } = await supabase
       .from('rooms')
       .select('*')
@@ -174,16 +116,66 @@ export async function POST(request: NextRequest) {
       .eq('room_area', 'treatment')
       .order('priority', { ascending: true })
 
-    const { data: bookings } = await supabase
+    // Load all bookings for the day
+    const { data: bookingsRaw } = await supabase
       .from('bookings')
-      .select('*')
+      .select('id, start_time, end_time, room_id, status, payment_expires_at')
       .gte('start_time', start)
       .lte('start_time', end)
 
-    const activeBookings = (bookings || []).filter((b: any) =>
+    const activeBookings = (bookingsRaw || []).filter((b: any) =>
       isActiveBooking(b.status, b.payment_expires_at)
     )
 
+    // ✅ KEY FIX: Load booking_rooms — modern bookings store room assignments here,
+    // NOT on the booking's room_id field. Without this, fully-booked days appear empty.
+    const bookingIds = activeBookings.map((b: any) => b.id)
+    let bookingRoomsData: { booking_id: string; room_id: string }[] = []
+    if (bookingIds.length > 0) {
+      const { data: brData } = await supabase
+        .from('booking_rooms')
+        .select('booking_id, room_id')
+        .in('booking_id', bookingIds)
+      bookingRoomsData = brData || []
+    }
+
+    // Build merged RoomBooking list:
+    // - booking_rooms is authoritative for modern bookings
+    // - fall back to legacy room_id only if no booking_rooms entry exists
+    const roomBookings: RoomBooking[] = []
+    const seen = new Set<string>()
+
+    for (const booking of activeBookings) {
+      const extraRooms = bookingRoomsData.filter((row) => row.booking_id === booking.id)
+
+      if (extraRooms.length > 0) {
+        // Modern booking: room assignments are in booking_rooms
+        for (const row of extraRooms) {
+          const key = `${booking.id}:${row.room_id}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            roomBookings.push({
+              room_id: row.room_id,
+              start_time: booking.start_time,
+              end_time: booking.end_time,
+            })
+          }
+        }
+      } else if (booking.room_id) {
+        // Legacy booking: room_id is on the booking itself
+        const key = `${booking.id}:${booking.room_id}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          roomBookings.push({
+            room_id: booking.room_id,
+            start_time: booking.start_time,
+            end_time: booking.end_time,
+          })
+        }
+      }
+    }
+
+    // Load time blocks
     const { data: timeBlocksRaw } = await supabase
       .from('time_blocks')
       .select('*')
@@ -194,7 +186,7 @@ export async function POST(request: NextRequest) {
     const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
       date,
       rooms || [],
-      activeBookings,
+      roomBookings,
       serviceDurationMinutes,
       peopleCount,
       sanitizeHHMM(NORMAL_HOURS_START),
@@ -203,8 +195,9 @@ export async function POST(request: NextRequest) {
     )
 
     console.log(
-      `[Availability] date=${date} service=${serviceSlug} slots=${slotResult.slots.length}` +
-      ` group=${slotResult.activeGroup} weekend=${isWeekendInSast(date)}`
+      `[Availability] date=${date} service=${serviceSlug}` +
+      ` activeBookings=${activeBookings.length} roomBookings=${roomBookings.length}` +
+      ` slots=${slotResult.slots.length} group=${slotResult.activeGroup}`
     )
 
     return NextResponse.json({
@@ -212,7 +205,7 @@ export async function POST(request: NextRequest) {
       isFullyBlocked: slotResult.slots.length === 0,
     })
   } catch (error) {
-    console.error(error)
+    console.error('[Availability] Error:', error)
     return NextResponse.json({ error: 'Failed' }, { status: 500 })
   }
 }
