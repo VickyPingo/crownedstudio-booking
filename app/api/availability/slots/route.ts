@@ -94,7 +94,7 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): b
   return aStart < bEnd && bStart < aEnd
 }
 
-// ✅ EVENING LOGIC (RESTORED)
+// ✅ EVENING LOGIC
 async function getEveningAvailability(
   date: string,
   peopleCount: number,
@@ -191,30 +191,25 @@ export async function POST(request: NextRequest) {
 
     const timeBlocks = (timeBlocksRaw || []) as SchedulingTimeBlock[]
 
-    const weekendOverride = isWeekendInSast(date)
+    const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
+      date,
+      rooms || [],
+      activeBookings,
+      serviceDurationMinutes,
+      peopleCount,
+      sanitizeHHMM(NORMAL_HOURS_START),
+      sanitizeHHMM(NORMAL_HOURS_END),
+      timeBlocks
+    )
 
-    let activeRooms = rooms || []
-
-    if (!weekendOverride) {
-      const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
-        date,
-        activeRooms,
-        activeBookings,
-        serviceDurationMinutes,
-        peopleCount,
-        sanitizeHHMM(NORMAL_HOURS_START),
-        sanitizeHHMM(NORMAL_HOURS_END),
-        timeBlocks
-      )
-
-      activeRooms = activeRooms.filter((r: any) =>
-        slotResult.activeRoomIds.includes(r.id)
-      )
-    }
+    console.log(
+      `[Availability] date=${date} service=${serviceSlug} slots=${slotResult.slots.length}` +
+      ` group=${slotResult.activeGroup} weekend=${isWeekendInSast(date)}`
+    )
 
     return NextResponse.json({
-      availableSlots: ['08:30', '10:30', '14:30'], // safe fallback (keeps UI alive)
-      isFullyBlocked: false,
+      availableSlots: slotResult.slots,
+      isFullyBlocked: slotResult.slots.length === 0,
     })
   } catch (error) {
     console.error(error)
