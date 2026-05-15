@@ -37,31 +37,39 @@ export const NORMAL_HOURS_START_TIME = '08:30'
 export const AFTER_HOURS_BOOKING_START_TIME = '17:30'
 const CROWNED_NIGHT_SERVICES = ['crowned-night-a', 'crowned-night-b']
 
+// Minimum hours required between now and a booking slot
+const MIN_ADVANCE_HOURS = 12
+
 export const ROOM_GROUPS = {
   GROUP_1: { min: 1, max: 2 },
   GROUP_2: { min: 3, max: 4 },
   GROUP_3: { min: 5, max: 6 },
 } as const
 
-export function isSameDayBooking(dateString: string): boolean {
-  const bookingDate = new Date(dateString)
-  const today = new Date()
-
-  bookingDate.setHours(0, 0, 0, 0)
-  today.setHours(0, 0, 0, 0)
-
-  return bookingDate.getTime() === today.getTime()
+/**
+ * Returns true if the booking slot is less than MIN_ADVANCE_HOURS (12h) from now.
+ * When timeString is provided the check is against that specific slot datetime (in SAST).
+ * When omitted it falls back to midnight of the given date, which is a safe conservative check.
+ */
+export function isSameDayBooking(dateString: string, timeString?: string): boolean {
+  const bookingDateTime = timeString
+    ? new Date(`${dateString}T${timeString}:00+02:00`)
+    : new Date(`${dateString}T00:00:00+02:00`)
+  const diffHours = (bookingDateTime.getTime() - Date.now()) / (1000 * 60 * 60)
+  return diffHours < MIN_ADVANCE_HOURS
 }
 
+/**
+ * Returns the earliest selectable date in YYYY-MM-DD format (SAST).
+ * This is the calendar date that is MIN_ADVANCE_HOURS (12h) from now.
+ * e.g. if it is currently 20:00 SAST, this returns tomorrow's date
+ *      (because 20:00 + 12h = 08:00 tomorrow).
+ *      If it is currently 03:00 SAST, this returns today's date
+ *      (because 03:00 + 12h = 15:00 today, which is within business hours).
+ */
 export function getMinimumBookingDate(): string {
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-
-  const year = tomorrow.getFullYear()
-  const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
-  const day = String(tomorrow.getDate()).padStart(2, '0')
-
-  return `${year}-${month}-${day}`
+  const minBookingTime = new Date(Date.now() + MIN_ADVANCE_HOURS * 60 * 60 * 1000)
+  return minBookingTime.toLocaleDateString('sv-SE', { timeZone: 'Africa/Johannesburg' })
 }
 
 function timeToMinutes(time: string): number {
