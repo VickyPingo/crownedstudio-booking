@@ -6,6 +6,12 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { getPaymentState, PAYMENT_STATE_LABELS, PAYMENT_STATE_STYLES } from '@/lib/paymentState'
 
+interface CustomerData {
+  id: string
+  full_name: string
+  email: string | null
+}
+
 interface Booking {
   created_at?: string
   id: string
@@ -43,6 +49,13 @@ const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'no_show', label: 'No-show' },
 ]
 
+// Supabase FK joins can return either an object or array depending on client version
+function resolveCustomer(raw: unknown): CustomerData | null {
+  if (!raw) return null
+  if (Array.isArray(raw)) return (raw[0] as CustomerData) ?? null
+  return raw as CustomerData
+}
+
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,7 +87,7 @@ export default function AdminBookingsPage() {
           no_payment_required,
           room_id,
           pricing_option_name,
-          customer:customers!bookings_customer_id_fkey(id, full_name, email)
+          customer:customers(id, full_name, email)
         `)
         .order('created_at', { ascending: false })
 
@@ -129,22 +142,22 @@ export default function AdminBookingsPage() {
         txnsByBooking.set(payment.booking_id, list)
       }
 
-      const enrichedBookings: Booking[] = bookingsData.map(b => {
-        const customer = (b as unknown as { customer?: { id: string; full_name: string; email: string | null } | null }).customer
-        const service = b.service_slug ? serviceMap.get(b.service_slug) : null
-        const room = b.room_id ? roomMap.get(b.room_id) : null
-        const txns = txnsByBooking.get(b.id) || []
+      const enrichedBookings: Booking[] = (bookingsData as unknown as Array<Record<string, unknown>>).map(b => {
+        const customer = resolveCustomer(b.customer)
+        const service = b.service_slug ? serviceMap.get(b.service_slug as string) : null
+        const room = b.room_id ? roomMap.get(b.room_id as string) : null
+        const txns = txnsByBooking.get(b.id as string) || []
 
         return {
-          ...b,
-          balance_paid: (b as unknown as { balance_paid?: number }).balance_paid || 0,
-          no_payment_required: (b as unknown as { no_payment_required?: boolean }).no_payment_required || false,
+          ...(b as unknown as Booking),
+          balance_paid: (b.balance_paid as number) || 0,
+          no_payment_required: (b.no_payment_required as boolean) || false,
           customer_name: customer?.full_name || undefined,
           customer_email: customer?.email || undefined,
           service_name: service?.name || undefined,
           room_name: room?.room_name || undefined,
           room_area: room?.room_area || undefined,
-          total_paid: paymentsByBooking.get(b.id) || 0,
+          total_paid: paymentsByBooking.get(b.id as string) || 0,
           payment_transactions: txns,
         }
       })
