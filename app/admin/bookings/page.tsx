@@ -59,23 +59,24 @@ export default function AdminBookingsPage() {
       let query = supabase
         .from('bookings')
         .select(`
-  id,
-  created_at,
-  customer_id,
-  service_slug,
-  is_custom_booking,
-  custom_booking_name,
-  people_count,
-  status,
-  start_time,
-  total_price,
-  deposit_due,
-  balance_paid,
-  no_payment_required,
-  room_id,
-  pricing_option_name
-`)
-.order('created_at', { ascending: false })
+          id,
+          created_at,
+          customer_id,
+          service_slug,
+          is_custom_booking,
+          custom_booking_name,
+          people_count,
+          status,
+          start_time,
+          total_price,
+          deposit_due,
+          balance_paid,
+          no_payment_required,
+          room_id,
+          pricing_option_name,
+          customer:customers!bookings_customer_id_fkey(id, full_name, email)
+        `)
+        .order('created_at', { ascending: false })
 
       if (filter !== 'all') {
         query = query.eq('status', filter)
@@ -96,15 +97,11 @@ export default function AdminBookingsPage() {
         return
       }
 
-      const customerIds = [...new Set(bookingsData.filter(b => b.customer_id).map(b => b.customer_id))]
       const serviceSlugs = [...new Set(bookingsData.filter(b => b.service_slug).map(b => b.service_slug))]
       const roomIds = [...new Set(bookingsData.filter(b => b.room_id).map(b => b.room_id))]
       const bookingIds = bookingsData.map(b => b.id)
 
-      const [customersRes, servicesRes, roomsRes, paymentsRes] = await Promise.all([
-        customerIds.length > 0
-          ? supabase.from('customers').select('id, full_name, email').in('id', customerIds)
-          : { data: [], error: null },
+      const [servicesRes, roomsRes, paymentsRes] = await Promise.all([
         serviceSlugs.length > 0
           ? supabase.from('services').select('slug, name').in('slug', serviceSlugs)
           : { data: [], error: null },
@@ -114,7 +111,6 @@ export default function AdminBookingsPage() {
         supabase.from('payment_transactions').select('booking_id, status, amount').in('booking_id', bookingIds),
       ])
 
-      const customerMap = new Map((customersRes.data || []).map(c => [c.id, c]))
       const serviceMap = new Map((servicesRes.data || []).map(s => [s.slug, s]))
       const roomMap = new Map((roomsRes.data || []).map(r => [r.id, r]))
 
@@ -134,7 +130,7 @@ export default function AdminBookingsPage() {
       }
 
       const enrichedBookings: Booking[] = bookingsData.map(b => {
-        const customer = b.customer_id ? customerMap.get(b.customer_id) : null
+        const customer = (b as unknown as { customer?: { id: string; full_name: string; email: string | null } | null }).customer
         const service = b.service_slug ? serviceMap.get(b.service_slug) : null
         const room = b.room_id ? roomMap.get(b.room_id) : null
         const txns = txnsByBooking.get(b.id) || []
@@ -206,7 +202,6 @@ export default function AdminBookingsPage() {
     })
     return { label: PAYMENT_STATE_LABELS[ps.state], style: PAYMENT_STATE_STYLES[ps.state] }
   }
-
 
   return (
     <AdminLayout>
@@ -287,7 +282,7 @@ export default function AdminBookingsPage() {
                         Room
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Date & Time
+                        Date &amp; Time
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                         Amount
@@ -310,28 +305,28 @@ export default function AdminBookingsPage() {
                           className="hover:bg-gray-50 cursor-pointer"
                         >
                           <td className="px-6 py-4">
-  <div>
-    <div className="flex items-center gap-2">
-      <p className="font-medium text-gray-900">
-        {booking.customer_name || 'Unknown'}
-      </p>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">
+                                  {booking.customer_name || 'Unknown'}
+                                </p>
 
-      {booking.created_at && (() => {
-        const created = new Date(booking.created_at)
-        const now = new Date()
-        const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+                                {booking.created_at && (() => {
+                                  const created = new Date(booking.created_at)
+                                  const now = new Date()
+                                  const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60)
 
-        return diffHours <= 48 ? (
-          <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
-            New
-          </span>
-        ) : null
-      })()}
-    </div>
+                                  return diffHours <= 48 ? (
+                                    <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                      New
+                                    </span>
+                                  ) : null
+                                })()}
+                              </div>
 
-    <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
-  </div>
-</td>
+                              <p className="text-sm text-gray-600">{booking.customer_email || '-'}</p>
+                            </div>
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2 mb-0.5">
                               <p className="text-gray-900">
