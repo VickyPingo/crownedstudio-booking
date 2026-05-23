@@ -66,9 +66,10 @@ export default async function Home() {
       ? service.allowed_upsells.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0)
       : []
 
-    const serviceUpsells = (allUpsells || []).filter((upsell: Upsell) =>
-      allowedUpsellNames.includes(upsell.name)
-    )
+    // Preserve the order defined in allowed_upsells
+    const serviceUpsells = allowedUpsellNames
+      .map(name => (allUpsells || []).find((upsell: Upsell) => upsell.name === name))
+      .filter((upsell): upsell is Upsell => upsell !== undefined)
 
     return {
       ...service,
