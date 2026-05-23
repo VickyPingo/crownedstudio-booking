@@ -94,9 +94,10 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
         ? service.allowed_upsells.split(/[,\n]/).map((s: string) => s.trim()).filter((s: string) => s.length > 0)
         : []
 
-      const serviceUpsells = (allUpsells || []).filter((upsell) =>
-        allowedUpsellNames.includes(upsell.name)
-      )
+      // Preserve the order defined in allowed_upsells
+      const serviceUpsells = allowedUpsellNames
+        .map(name => (allUpsells || []).find(upsell => upsell.name === name))
+        .filter((upsell): upsell is NonNullable<typeof upsell> => upsell !== undefined)
 
       return {
         ...service,
