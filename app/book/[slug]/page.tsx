@@ -70,7 +70,7 @@ export default async function BookingPage({ params }: { params: Promise<{ slug: 
 
     // Preserve the order defined in allowed_upsells
     const serviceUpsells = allowedUpsellNames
-      .map(name => (allUpsells || []).find(upsell => upsell.name === name))
+     .map((name: string) => (allUpsells || []).find(upsell => upsell.name === name))
       .filter((upsell): upsell is NonNullable<typeof upsell> => upsell !== undefined)
 
     return {
