@@ -7,6 +7,8 @@ import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock } from '@/lib/
 import { isSameDayBooking } from '@/lib/timeSlots'
 
 const PAYMENT_EXPIRY_MINUTES = 20
+const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
+const DEPOSIT_PERCENT = 0.5
 
 async function sendEmailNotifications(bookingId: string, startDateTime: Date, isZeroPayment: boolean) {
   console.log(`Booking ${bookingId}: Starting email notifications, isZeroPayment=${isZeroPayment}`)
@@ -36,8 +38,6 @@ async function sendEmailNotifications(bookingId: string, startDateTime: Date, is
     console.error(`Booking ${bookingId}: Error sending emails:`, error)
   }
 }
-const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
-const DEPOSIT_PERCENT = 0.5
 
 async function recordVoucherUsage(
   supabase: typeof supabaseAdmin,
@@ -95,6 +95,14 @@ async function isPublicHoliday(
     .limit(1)
 
   return data !== null && data.length > 0
+}
+
+// ✅ Helper: resolve upsell price accounting for per_hour quantity rule
+function resolveUpsellPrice(upsellPrice: number, quantityRule: string, durationMinutes: number): number {
+  if (quantityRule === 'per_hour') {
+    return upsellPrice * Math.ceil(durationMinutes / 60)
+  }
+  return upsellPrice
 }
 
 export async function POST(request: NextRequest) {
@@ -244,7 +252,8 @@ export async function POST(request: NextRequest) {
     }
 
     const bookingStatus = isZeroPayment ? 'confirmed' : 'pending_payment'
-const isFreeBooking = !depositDue || depositDue <= 0
+    const isFreeBooking = !depositDue || depositDue <= 0
+
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
       .insert({
@@ -290,6 +299,7 @@ const isFreeBooking = !depositDue || depositDue <= 0
 
     await assignRoomsToBooking(booking.id, roomAllocation.room_ids)
 
+    // ✅ PER-PERSON UPSELLS
     const hasPerPersonUpsells = payload.selectedUpsellsByPerson &&
       Object.values(payload.selectedUpsellsByPerson).some(arr => arr.length > 0)
 
@@ -299,7 +309,7 @@ const isFreeBooking = !depositDue || depositDue <= 0
       if (allUpsellIds.length > 0) {
         const { data: upsells, error: upsellsError } = await supabase
           .from('upsells')
-          .select('id, slug, price, duration_added_minutes')
+          .select('id, slug, price, quantity_rule, duration_added_minutes')
           .in('id', allUpsellIds)
 
         if (upsellsError) {
@@ -326,7 +336,7 @@ const isFreeBooking = !depositDue || depositDue <= 0
                   booking_id: booking.id,
                   upsell_id: upsell.id,
                   quantity: 1,
-                  price_total: upsell.price,
+                  price_total: resolveUpsellPrice(upsell.price, upsell.quantity_rule, payload.durationMinutes),
                   duration_added_minutes: upsell.duration_added_minutes,
                   person_number: personNumber,
                 })
@@ -342,10 +352,11 @@ const isFreeBooking = !depositDue || depositDue <= 0
           }
         }
       }
-    } else if (payload.selectedUpsellIds.length > 0) {
+    } else if (payload.selectedUpsellIds && payload.selectedUpsellIds.length > 0) {
+      // ✅ LEGACY UPSELLS PATH
       const { data: upsells, error: upsellsError } = await supabase
         .from('upsells')
-        .select('id, slug, price, duration_added_minutes')
+        .select('id, slug, price, quantity_rule, duration_added_minutes')
         .in('id', payload.selectedUpsellIds)
 
       if (upsellsError) {
@@ -357,7 +368,7 @@ const isFreeBooking = !depositDue || depositDue <= 0
           booking_id: booking.id,
           upsell_id: upsell.id,
           quantity: 1,
-          price_total: upsell.price,
+          price_total: resolveUpsellPrice(upsell.price, upsell.quantity_rule, payload.durationMinutes),
           duration_added_minutes: upsell.duration_added_minutes,
           person_number: 1,
         }))
