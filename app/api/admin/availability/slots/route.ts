@@ -113,10 +113,23 @@ export async function POST(request: NextRequest) {
     const { data: timeWindowRow } = serviceSlug
       ? await supabase
           .from('service_time_windows')
-          .select('service_slug, start_time, end_time')
+          .select('service_slug, days_allowed, start_time, end_time')
           .eq('service_slug', serviceSlug)
           .maybeSingle()
       : { data: null }
+
+    // ✅ DAY-OF-WEEK RESTRICTION (service_time_windows.days_allowed)
+    if (timeWindowRow?.days_allowed) {
+      const DAY_ABBRS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+      const todayAbbr = DAY_ABBRS[dayOfWeek]
+      const allowedDays = (timeWindowRow.days_allowed as string)
+        .split(',')
+        .map((d: string) => d.trim().toUpperCase())
+      if (!allowedDays.includes(todayAbbr)) {
+        console.log(`[AdminAvailability] Service "${serviceSlug}" not allowed on ${todayAbbr} — days_allowed: ${timeWindowRow.days_allowed}`)
+        return NextResponse.json({ availableSlots: [] })
+      }
+    }
 
     const dayStartISO = new Date(date + 'T00:00:00+02:00').toISOString()
     const dayEndISO = new Date(date + 'T23:59:59+02:00').toISOString()
