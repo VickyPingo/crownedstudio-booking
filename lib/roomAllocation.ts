@@ -35,6 +35,19 @@ export interface MultiRoomAllocationResult {
 export const CLEANUP_BUFFER_MINUTES = 10
 
 /**
+ * Services that get Room 7 as first preference (≤2 people).
+ * If Room 7 is occupied, they fall back to standard rooms.
+ * If >2 people, they skip Room 7 entirely and use standard rooms.
+ * All other services never see Room 7.
+ */
+const ROOM7_PREFERRED_SLUGS = new Set([
+  'cosy-comfort',            // WP2
+  'head-to-toe',             // WP3
+  'complete-body-care',      // SC2
+  'massage-creative-escape', // SC3
+])
+
+/**
  * Determines whether a booking should block room availability.
  * - confirmed → always blocks
  * - completed → always blocks (handled at query level, not needed here)
@@ -310,12 +323,21 @@ async function getOccupiedRoomIds(
   return occupied
 }
 
+/**
+ * Returns available rooms for a given area and time window, filtered by:
+ * 1. Rooms with no entries in room_allowed_services → available to all services
+ * 2. Rooms with entries in room_allowed_services → only available if serviceSlug matches
+ *
+ * Also returns the set of restricted room IDs (Room 7) so callers can
+ * apply preference logic without re-querying.
+ */
 async function getAvailableRooms(
   serviceRoomArea: string,
   startTime: Date,
   endTime: Date,
-  excludeBookingId?: string
-): Promise<Room[]> {
+  excludeBookingId?: string,
+  serviceSlug?: string
+): Promise<{ rooms: Room[]; restrictedRoomIds: Set<string> }> {
   const supabase = supabaseAdmin
 
   const { data: rooms, error: roomsError } = await supabase
@@ -327,12 +349,38 @@ async function getAvailableRooms(
 
   if (roomsError || !rooms) {
     console.error('[RoomAllocation] Room query error:', roomsError)
-    return []
+    return { rooms: [], restrictedRoomIds: new Set() }
   }
 
-  const occupiedRoomIds = await getOccupiedRoomIds(startTime, endTime, excludeBookingId)
+  // Fetch service restrictions for all rooms in this area
+  const roomIds = rooms.map((r: any) => r.id)
+  const { data: restrictions } = await supabase
+    .from('room_allowed_services')
+    .select('room_id, service_slug')
+    .in('room_id', roomIds)
 
-  return rooms.filter(room => !occupiedRoomIds.has(room.id))
+  // Build map: room_id → Set<allowed_slug>  (only populated for restricted rooms)
+  const restrictionMap = new Map<string, Set<string>>()
+  for (const row of restrictions || []) {
+    if (!restrictionMap.has(row.room_id)) restrictionMap.set(row.room_id, new Set())
+    restrictionMap.get(row.room_id)!.add(row.service_slug)
+  }
+
+  // Rooms that have ANY restriction entry (i.e. Room 7)
+  const restrictedRoomIds = new Set(restrictionMap.keys())
+
+  // Eligibility filter: unrestricted rooms pass always; restricted rooms only if slug matches
+  const eligibleRooms = rooms.filter((room: any) => {
+    const allowed = restrictionMap.get(room.id)
+    if (!allowed || allowed.size === 0) return true        // no restriction → open to all
+    if (!serviceSlug) return false                          // restricted room, no slug → exclude
+    return allowed.has(serviceSlug)                        // restricted room → slug must match
+  })
+
+  const occupiedRoomIds = await getOccupiedRoomIds(startTime, endTime, excludeBookingId)
+  const availableRooms = eligibleRooms.filter((room: any) => !occupiedRoomIds.has(room.id))
+
+  return { rooms: availableRooms, restrictedRoomIds }
 }
 
 function findRoomCombination(
@@ -356,51 +404,35 @@ function findRoomCombination(
   return null
 }
 
-export async function allocateRoom(
-  serviceRoomArea: string,
-  startTime: Date,
-  endTime: Date,
+/**
+ * Runs the standard group-based room combination logic on a given list of rooms
+ * and returns the allocation result. Extracted so it can be called from multiple
+ * paths in allocateRoom without duplication.
+ */
+function allocateFromRoomList(
+  rooms: Room[],
   peopleCount: number,
-  excludeBookingId?: string
-): Promise<MultiRoomAllocationResult> {
-  console.log('[RoomAllocation] Starting allocation:', {
-    serviceRoomArea,
-    startTime: startTime.toISOString(),
-    endTime: endTime.toISOString(),
-    peopleCount,
-    excludeBookingId,
-  })
-
-  const availableRooms = await getAvailableRooms(serviceRoomArea, startTime, endTime, excludeBookingId)
-
-  console.log('[RoomAllocation] Available rooms:', availableRooms.map(r => ({
-    name: r.room_name,
-    capacity: r.capacity,
-    priority: r.priority
-  })))
-
-  if (availableRooms.length === 0) {
+  serviceRoomArea: string
+): MultiRoomAllocationResult {
+  if (rooms.length === 0) {
     console.error('[RoomAllocation] No available rooms for:', { serviceRoomArea, peopleCount })
     return {
       room_ids: [],
       room_names: [],
-      error: `No rooms available for area "${serviceRoomArea}"`
+      error: `No rooms available for area "${serviceRoomArea}"`,
     }
   }
 
-  const combination = findRoomCombination(availableRooms, peopleCount)
+  const combination = findRoomCombination(rooms, peopleCount)
 
   if (!combination) {
-    console.error('[RoomAllocation] No room combination found for:', { peopleCount, availableRooms: availableRooms.length })
+    console.error('[RoomAllocation] No room combination found for:', { peopleCount, availableRooms: rooms.length })
     return {
       room_ids: [],
       room_names: [],
-      error: `No available room combination can accommodate ${peopleCount} people`
+      error: `No available room combination can accommodate ${peopleCount} people`,
     }
   }
-
-  const room_ids = combination.map(r => r.id)
-  const room_names = combination.map(r => r.room_name)
 
   const invalidRooms = combination.filter(r => r.room_area !== serviceRoomArea)
   if (invalidRooms.length > 0) {
@@ -411,13 +443,76 @@ export async function allocateRoom(
     return {
       room_ids: [],
       room_names: [],
-      error: `Room allocation produced rooms outside the allowed area "${serviceRoomArea}". Please try again.`
+      error: `Room allocation produced rooms outside the allowed area "${serviceRoomArea}". Please try again.`,
     }
   }
+
+  const room_ids = combination.map(r => r.id)
+  const room_names = combination.map(r => r.room_name)
 
   console.log(`[RoomAllocation] Allocated rooms: ${room_names.join(', ')} (${room_ids.length} rooms) area="${serviceRoomArea}"`)
 
   return { room_ids, room_names }
+}
+
+export async function allocateRoom(
+  serviceRoomArea: string,
+  startTime: Date,
+  endTime: Date,
+  peopleCount: number,
+  excludeBookingId?: string,
+  serviceSlug?: string
+): Promise<MultiRoomAllocationResult> {
+  console.log('[RoomAllocation] Starting allocation:', {
+    serviceRoomArea,
+    serviceSlug,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString(),
+    peopleCount,
+    excludeBookingId,
+  })
+
+  const isPreferredSlug = serviceSlug ? ROOM7_PREFERRED_SLUGS.has(serviceSlug) : false
+
+  const { rooms: availableRooms, restrictedRoomIds } = await getAvailableRooms(
+    serviceRoomArea,
+    startTime,
+    endTime,
+    excludeBookingId,
+    serviceSlug
+  )
+
+  console.log('[RoomAllocation] Available rooms:', availableRooms.map(r => ({
+    name: r.room_name,
+    capacity: r.capacity,
+    priority: r.priority,
+    restricted: restrictedRoomIds.has(r.id),
+  })))
+
+  // ── PREFERRED SLUGS (WP2, WP3, SC2, SC3) ──────────────────────────────────
+  if (isPreferredSlug) {
+    if (peopleCount <= 2) {
+      // Try Room 7 first (it's in availableRooms only if free + slug matches)
+      const room7 = availableRooms.find(r => restrictedRoomIds.has(r.id))
+      if (room7) {
+        console.log(`[RoomAllocation] Room 7 preference hit: using ${room7.room_name} for "${serviceSlug}"`)
+        return { room_ids: [room7.id], room_names: [room7.room_name] }
+      }
+      // Room 7 occupied — fall back to standard rooms (Rooms 1–6)
+      console.log(`[RoomAllocation] Room 7 occupied for "${serviceSlug}", falling back to standard rooms`)
+      const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
+      return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
+    }
+
+    // >2 people — Room 7 can't fit them; use standard rooms only
+    console.log(`[RoomAllocation] "${serviceSlug}" with ${peopleCount} people exceeds Room 7 capacity, using standard rooms`)
+    const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
+    return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
+  }
+
+  // ── ALL OTHER SERVICES ────────────────────────────────────────────────────
+  // Room 7 is already absent from availableRooms (filtered out by restriction logic)
+  return allocateFromRoomList(availableRooms, peopleCount, serviceRoomArea)
 }
 
 export async function getRoomsForDate(
