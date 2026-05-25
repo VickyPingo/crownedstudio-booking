@@ -35,9 +35,36 @@ export function BookingPageClient({
         Book {serviceName}
       </h1>
 
-      <p style={{ marginBottom: "30px", color: "#666" }}>
+      <p style={{ marginBottom: "16px", color: "#666" }}>
         Complete your booking details below.
       </p>
+
+      {/* Gift voucher CTA */}
+      <div style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "8px",
+        marginBottom: "30px",
+        padding: "10px 16px",
+        background: "#f9f9f9",
+        border: "1px solid #e5e5e5",
+        borderRadius: "8px",
+        fontSize: "14px",
+        color: "#555",
+      }}>
+        <span>🎁</span>
+        <span>Want to give this as a gift?</span>
+        <a
+          href={`/gift-voucher/${serviceSlug}`}
+          style={{
+            color: "#111",
+            fontWeight: 600,
+            textDecoration: "underline",
+          }}
+        >
+          Buy a Gift Voucher →
+        </a>
+      </div>
 
       <BookingModal
         services={services}
