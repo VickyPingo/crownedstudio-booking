@@ -1,3 +1,4 @@
+// app/api/bookings/create/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { CreateBookingPayload } from '@/types/booking'
@@ -97,7 +98,6 @@ async function isPublicHoliday(
   return data !== null && data.length > 0
 }
 
-// ✅ Helper: resolve upsell price accounting for per_hour quantity rule
 function resolveUpsellPrice(upsellPrice: number, quantityRule: string, durationMinutes: number): number {
   if (quantityRule === 'per_hour') {
     return upsellPrice * Math.ceil(durationMinutes / 60)
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
       customerId = newCustomer.id
     }
 
-    const hasVoucher = !!(payload.voucherId || payload.voucherCode)
+    const hasPromoVoucher = !!(payload.voucherId || payload.voucherCode)
 
     const startDateTime = createSouthAfricaDateTime(payload.selectedDate, payload.selectedTime)
     const endDateTime = new Date(startDateTime.getTime() + payload.durationMinutes * 60000)
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
     let discountAmount = 0
     let discountType: string | null = null
 
-    if (hasVoucher) {
+    if (hasPromoVoucher) {
       discountAmount = payload.voucherDiscount || 0
       discountType = 'voucher'
     } else {
@@ -204,6 +204,57 @@ export async function POST(request: NextRequest) {
         discountType = 'repeat_customer'
       }
     }
+
+    // ── GIFT VOUCHER CHECK ────────────────────────────────────────────────────
+    // If a voucherCode is provided (no voucherId), check the gift_vouchers table.
+    // A valid gift voucher overrides any other discount and covers the full price.
+    let giftVoucherId: string | null = null
+
+    if (payload.voucherCode && !payload.voucherId) {
+      const { data: gv } = await supabase
+        .from('gift_vouchers')
+        .select('id, service_slug, people_count, amount_paid, status, expires_at')
+        .eq('code', payload.voucherCode.toUpperCase().trim())
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (gv) {
+        // Validate service match
+        if (gv.service_slug !== payload.serviceSlug) {
+          return NextResponse.json(
+            { error: 'This gift voucher is not valid for this service' },
+            { status: 400 }
+          )
+        }
+
+        // Validate people count match
+        if (gv.people_count !== payload.peopleCount) {
+          return NextResponse.json(
+            {
+              error: `This gift voucher is for ${gv.people_count} ${gv.people_count === 1 ? 'person' : 'people'}`,
+            },
+            { status: 400 }
+          )
+        }
+
+        // Validate not expired
+        if (new Date(gv.expires_at) < new Date()) {
+          await supabase
+            .from('gift_vouchers')
+            .update({ status: 'expired', updated_at: new Date().toISOString() })
+            .eq('id', gv.id)
+          return NextResponse.json({ error: 'This gift voucher has expired' }, { status: 400 })
+        }
+
+        // Apply full discount — gift voucher covers the entire price
+        discountAmount = subtotal
+        discountType = 'gift_voucher'
+        giftVoucherId = gv.id
+
+        console.log(`[BookingCreate] Gift voucher ${payload.voucherCode} applied — full discount R${subtotal}`)
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const cappedDiscount = Math.min(discountAmount, subtotal)
     const totalPrice = Math.max(0, subtotal - cappedDiscount)
@@ -218,7 +269,7 @@ export async function POST(request: NextRequest) {
         endDateTime,
         payload.peopleCount,
         undefined,
-        payload.serviceSlug  // ← passed so Room 7 preference logic applies
+        payload.serviceSlug
       )
     } catch (err) {
       console.error('Room allocation error:', err)
@@ -232,9 +283,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Final defensive guard: re-check all allocated rooms against time blocks
-    // before inserting. Catches race conditions and direct API calls that bypass
-    // the availability slot filter.
     for (const roomId of roomAllocation.room_ids) {
       const blockingBlock = await getBlockingTimeBlock(roomId, startDateTime, endDateTime)
       if (blockingBlock) {
@@ -300,6 +348,27 @@ export async function POST(request: NextRequest) {
     }
 
     await assignRoomsToBooking(booking.id, roomAllocation.room_ids)
+
+    // ── REDEEM GIFT VOUCHER ───────────────────────────────────────────────────
+    if (giftVoucherId) {
+      const { error: redeemError } = await supabase
+        .from('gift_vouchers')
+        .update({
+          status: 'redeemed',
+          redeemed_at: new Date().toISOString(),
+          redeemed_booking_id: booking.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', giftVoucherId)
+        .eq('status', 'active') // safety: don't double-redeem
+
+      if (redeemError) {
+        console.error('[BookingCreate] Failed to mark gift voucher as redeemed:', redeemError)
+      } else {
+        console.log(`[BookingCreate] Gift voucher ${payload.voucherCode} redeemed for booking ${booking.id}`)
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ✅ PER-PERSON UPSELLS
     const hasPerPersonUpsells = payload.selectedUpsellsByPerson &&
@@ -382,7 +451,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (hasVoucher && payload.voucherId) {
+    // Record promo voucher usage (only for regular vouchers, not gift vouchers)
+    if (hasPromoVoucher && payload.voucherId && discountType !== 'gift_voucher') {
       await recordVoucherUsage(supabase, payload.voucherId, booking.id, payload.voucherDiscount || 0)
     }
 
