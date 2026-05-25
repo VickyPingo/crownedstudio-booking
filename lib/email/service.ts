@@ -1,3 +1,6 @@
+// lib/email/service.ts
+// ─── ALL EXISTING CODE UNCHANGED — gift voucher functions added at the bottom ───
+
 import { createClient } from '@supabase/supabase-js'
 import { sendEmail, SPA_EMAIL } from './resend'
 import {
@@ -419,4 +422,182 @@ export async function sendBookingRescheduledToClient(data: RescheduleEmailData):
   }
 
   return result.success
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GIFT VOUCHER EMAILS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GiftVoucherEmailData {
+  voucherCode: string
+  serviceName: string
+  peopleCount: number
+  amountPaid: number
+  purchaserName: string
+  purchaserEmail: string
+  recipientName?: string | null
+  recipientEmail?: string | null
+  expiresAt: string
+}
+
+function formatGiftVoucherExpiry(expiresAt: string): string {
+  return new Date(expiresAt).toLocaleDateString('en-ZA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function buildGiftVoucherClientEmail(data: GiftVoucherEmailData): string {
+  const displayName = data.recipientName ? `for ${data.recipientName} ` : ''
+  const expiryFormatted = formatGiftVoucherExpiry(data.expiresAt)
+  const peopleText = data.peopleCount === 1 ? '1 person' : `${data.peopleCount} people`
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e5e5;">
+
+    <div style="background:#111111;padding:32px 32px 24px;text-align:center;">
+      <p style="margin:0 0 8px;font-size:32px;">🎁</p>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">Gift Voucher ${displayName}Purchased</h1>
+      <p style="margin:8px 0 0;color:#999;font-size:14px;">Crowned Studio</p>
+    </div>
+
+    <div style="padding:32px;">
+      <p style="margin:0 0 24px;color:#444;font-size:15px;line-height:1.6;">
+        Hi ${data.purchaserName}, your gift voucher purchase is confirmed!
+        ${data.recipientName ? `This voucher is for <strong>${data.recipientName}</strong>.` : ''}
+      </p>
+
+      <div style="background:#f9f9f9;border:2px dashed #ddd;border-radius:12px;padding:24px;text-align:center;margin-bottom:24px;">
+        <p style="margin:0 0 4px;font-size:12px;color:#999;font-weight:600;letter-spacing:2px;text-transform:uppercase;">Voucher Code</p>
+        <p style="margin:0;font-size:32px;font-family:monospace;font-weight:700;color:#111;letter-spacing:4px;">${data.voucherCode}</p>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr>
+          <td style="padding:10px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">Service</td>
+          <td style="padding:10px 0;color:#111;font-size:14px;font-weight:600;text-align:right;border-bottom:1px solid #f0f0f0;">${data.serviceName}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">People</td>
+          <td style="padding:10px 0;color:#111;font-size:14px;text-align:right;border-bottom:1px solid #f0f0f0;">${peopleText}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">Amount Paid</td>
+          <td style="padding:10px 0;color:#111;font-size:14px;font-weight:600;text-align:right;border-bottom:1px solid #f0f0f0;">R${data.amountPaid.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#666;font-size:14px;">Valid Until</td>
+          <td style="padding:10px 0;color:#111;font-size:14px;text-align:right;">${expiryFormatted}</td>
+        </tr>
+      </table>
+
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin-bottom:24px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#92400e;">How to redeem</p>
+        <p style="margin:0 0 4px;font-size:13px;color:#78350f;">1. Visit the Crowned Studio booking page</p>
+        <p style="margin:0 0 4px;font-size:13px;color:#78350f;">2. Choose your preferred date and time</p>
+        <p style="margin:0 0 4px;font-size:13px;color:#78350f;">3. Enter this voucher code at checkout</p>
+        <p style="margin:0;font-size:13px;color:#78350f;">4. Your booking is fully paid — enjoy!</p>
+      </div>
+
+      <p style="margin:0;font-size:12px;color:#aaa;text-align:center;">
+        Gift vouchers are non-refundable and valid for 6 months from purchase.
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>
+  `.trim()
+}
+
+function buildGiftVoucherSpaEmail(data: GiftVoucherEmailData): string {
+  const expiryFormatted = formatGiftVoucherExpiry(data.expiresAt)
+  const peopleText = data.peopleCount === 1 ? '1 person' : `${data.peopleCount} people`
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e5e5;">
+
+    <div style="background:#111111;padding:24px 32px;">
+      <h1 style="margin:0;color:#ffffff;font-size:18px;font-weight:700;">🎁 New Gift Voucher Sale</h1>
+    </div>
+
+    <div style="padding:24px 32px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;width:40%;">Voucher Code</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;font-weight:700;border-bottom:1px solid #f0f0f0;font-family:monospace;">${data.voucherCode}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">Service</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;border-bottom:1px solid #f0f0f0;">${data.serviceName}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">People</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;border-bottom:1px solid #f0f0f0;">${peopleText}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">Amount</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;font-weight:700;border-bottom:1px solid #f0f0f0;">R${data.amountPaid.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">Purchased By</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;border-bottom:1px solid #f0f0f0;">${data.purchaserName} (${data.purchaserEmail})</td>
+        </tr>
+        ${data.recipientName ? `
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;border-bottom:1px solid #f0f0f0;">For</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;border-bottom:1px solid #f0f0f0;">${data.recipientName}${data.recipientEmail ? ` (${data.recipientEmail})` : ''}</td>
+        </tr>
+        ` : ''}
+        <tr>
+          <td style="padding:8px 0;color:#666;font-size:14px;">Expires</td>
+          <td style="padding:8px 0;color:#111;font-size:14px;">${expiryFormatted}</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+</body>
+</html>
+  `.trim()
+}
+
+/**
+ * Sends gift voucher emails to the purchaser (and optionally the recipient)
+ * plus a notification to the spa. Fire-and-forget — does not use email_logs.
+ */
+export async function sendGiftVoucherEmails(data: GiftVoucherEmailData): Promise<void> {
+  const peopleText = data.peopleCount === 1 ? '1 person' : `${data.peopleCount} people`
+
+  // Email 1: Purchaser confirmation
+  const clientHtml = buildGiftVoucherClientEmail(data)
+  const clientSubject = `Your Gift Voucher for ${data.serviceName} — ${data.voucherCode}`
+  const clientResult = await sendEmail(data.purchaserEmail, clientSubject, clientHtml)
+  console.log(`[GiftVoucher Email] Purchaser (${data.purchaserEmail}): ${clientResult.success ? 'sent' : 'FAILED'}`)
+
+  // Email 2: Recipient (if provided and different from purchaser)
+  if (data.recipientEmail && data.recipientEmail !== data.purchaserEmail) {
+    const recipientHtml = buildGiftVoucherClientEmail({
+      ...data,
+      purchaserName: data.recipientName || data.purchaserName,
+    })
+    const recipientSubject = `You've received a Gift Voucher for ${data.serviceName}!`
+    const recipientResult = await sendEmail(data.recipientEmail, recipientSubject, recipientHtml)
+    console.log(`[GiftVoucher Email] Recipient (${data.recipientEmail}): ${recipientResult.success ? 'sent' : 'FAILED'}`)
+  }
+
+  // Email 3: Spa notification
+  const spaHtml = buildGiftVoucherSpaEmail(data)
+  const spaSubject = `Gift Voucher Sold: ${data.serviceName} × ${peopleText} — R${data.amountPaid.toLocaleString()}`
+  const spaResult = await sendEmail(SPA_EMAIL, spaSubject, spaHtml)
+  console.log(`[GiftVoucher Email] Spa (${SPA_EMAIL}): ${spaResult.success ? 'sent' : 'FAILED'}`)
 }
