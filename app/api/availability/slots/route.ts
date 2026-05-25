@@ -195,6 +195,29 @@ export async function POST(request: NextRequest) {
       .eq('room_area', 'treatment')
       .order('priority', { ascending: true })
 
+    // ✅ ROOM SERVICE RESTRICTIONS (Room 7 logic)
+    // Rooms with no entries in room_allowed_services → available to all services
+    // Rooms with entries → only available if their slug list includes serviceSlug
+    const roomIds = (rooms || []).map((r: any) => r.id)
+
+    const { data: roomRestrictions } = await supabase
+      .from('room_allowed_services')
+      .select('room_id, service_slug')
+      .in('room_id', roomIds)
+
+    const restrictionMap = new Map<string, Set<string>>()
+    for (const row of roomRestrictions || []) {
+      if (!restrictionMap.has(row.room_id)) restrictionMap.set(row.room_id, new Set())
+      restrictionMap.get(row.room_id)!.add(row.service_slug)
+    }
+
+    const eligibleRooms = (rooms || []).filter((room: any) => {
+      const allowed = restrictionMap.get(room.id)
+      if (!allowed || allowed.size === 0) return true   // no restriction → always eligible
+      if (!serviceSlug) return false                     // restricted room, no slug → exclude
+      return allowed.has(serviceSlug)                   // restricted room → slug must match
+    })
+
     const { data: bookings } = await supabase
       .from('bookings')
       .select('*')
@@ -214,7 +237,7 @@ export async function POST(request: NextRequest) {
 
     const weekendOverride = isWeekendInSast(date)
 
-    let activeRooms = rooms || []
+    let activeRooms = eligibleRooms
 
     if (!weekendOverride) {
       const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
