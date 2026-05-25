@@ -216,7 +216,9 @@ export async function POST(request: NextRequest) {
         serviceArea,
         startDateTime,
         endDateTime,
-        payload.peopleCount
+        payload.peopleCount,
+        undefined,
+        payload.serviceSlug  // ← passed so Room 7 preference logic applies
       )
     } catch (err) {
       console.error('Room allocation error:', err)
