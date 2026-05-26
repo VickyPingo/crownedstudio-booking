@@ -33,7 +33,7 @@ export interface BookingPricing {
   weekendSurcharge: number
   subtotal: number
   discountAmount: number
-  discountType: 'repeat_customer' | 'voucher' | null
+  discountType: 'repeat_customer' | 'voucher' | 'gift_voucher' | null
   finalTotal: number
   depositAmount: number
 }
@@ -79,7 +79,7 @@ export interface SavedBooking {
   status: 'pending_payment' | 'confirmed' | 'cancelled' | 'completed' | 'expired' | 'cancelled_expired'
   depositDue: number
   discountAmount: number
-  discountType: 'repeat_customer' | 'voucher' | null
+  discountType: 'repeat_customer' | 'voucher' | 'gift_voucher' | null
   totalPrice: number
   startTime: string
   paymentExpiresAt?: string
