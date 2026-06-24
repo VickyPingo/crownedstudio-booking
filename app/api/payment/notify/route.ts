@@ -187,52 +187,77 @@ export async function POST(request: NextRequest) {
     }
 
     if (paymentStatus === 'COMPLETE') {
-  updateData.status = 'complete'
+      updateData.status = 'complete'
 
-  const { error: transactionUpdateError } = await supabase
-    .from('payment_transactions')
-    .update(updateData)
-    .eq('id', transaction.id)
-    .neq('status', 'complete')
+      const { error: transactionUpdateError } = await supabase
+        .from('payment_transactions')
+        .update(updateData)
+        .eq('id', transaction.id)
+        .neq('status', 'complete')
 
-  if (transactionUpdateError) {
-    console.error('Failed to update payment transaction:', transactionUpdateError)
-    return NextResponse.json({ error: 'Failed to update payment transaction' }, { status: 500 })
-  }
+      if (transactionUpdateError) {
+        console.error('Failed to update payment transaction:', transactionUpdateError)
+        return NextResponse.json({ error: 'Failed to update payment transaction' }, { status: 500 })
+      }
 
-  const { data: updatedBooking, error: bookingUpdateError } = await supabase
-  .from('bookings')
-  .update({
-    status: 'confirmed',
-    payment_expires_at: null,
-  })
-  .eq('id', transaction.booking_id)
-  .select('id, status, payment_expires_at')
-  .maybeSingle()
+      // Update the booking to confirmed — intentionally has no status guard so it
+      // recovers bookings that were cancelled/expired before the ITN arrived.
+      // Only skip if already in a truly terminal state (completed, no_show).
+      const { data: updatedBooking, error: bookingUpdateError } = await supabase
+        .from('bookings')
+        .update({
+          status: 'confirmed',
+          payment_expires_at: null,
+        })
+        .eq('id', transaction.booking_id)
+        .not('status', 'in', '("completed","no_show")')
+        .select('id, status')
+        .maybeSingle()
 
-if (bookingUpdateError) {
-  console.error('Failed to update booking:', bookingUpdateError)
-  return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
-}
+      if (bookingUpdateError) {
+        console.error('Failed to update booking:', bookingUpdateError)
+        return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 })
+      }
 
-if (!updatedBooking) {
-  console.error('Booking update matched no rows for transaction:', {
-    transactionId: transaction.id,
-    bookingId: transaction.booking_id,
-    merchantTransactionId,
-    payfastPaymentId,
-  })
-  return NextResponse.json({ error: 'Booking update matched no rows' }, { status: 500 })
-}
+      if (!updatedBooking) {
+        // Row didn't match — either already completed/no_show, or booking_id is wrong.
+        // Check current state so we can decide whether to proceed with emails.
+        const { data: existingBooking } = await supabase
+          .from('bookings')
+          .select('id, status')
+          .eq('id', transaction.booking_id)
+          .maybeSingle()
 
-await sendPaymentEmails(
-  transaction.booking_id,
-  receivedAmount,
-  payfastPaymentId || merchantTransactionId
-)
+        const terminalStatuses = ['confirmed', 'completed', 'no_show']
+        if (existingBooking && terminalStatuses.includes(existingBooking.status)) {
+          console.log('[PayFast Notify] Booking already in acceptable state, proceeding with emails:', {
+            bookingId: transaction.booking_id,
+            status: existingBooking.status,
+          })
+          // Fall through to send emails below
+        } else {
+          // Booking is missing or in a truly broken state — log and return 200
+          // so PayFast stops retrying (retries won't fix a missing booking).
+          console.error('[PayFast Notify] Booking update matched no rows and status is unexpected:', {
+            transactionId: transaction.id,
+            bookingId: transaction.booking_id,
+            currentStatus: existingBooking?.status ?? 'NOT FOUND',
+            merchantTransactionId,
+            payfastPaymentId,
+          })
+          // Return 200 to stop PayFast retrying — nothing we can do here automatically.
+          return NextResponse.json({ success: true, warning: 'Booking not updated — requires manual review' })
+        }
+      }
 
-  return NextResponse.json({ success: true })
-} else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
+      await sendPaymentEmails(
+        transaction.booking_id,
+        receivedAmount,
+        payfastPaymentId || merchantTransactionId
+      )
+
+      return NextResponse.json({ success: true })
+    } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       updateData.status = 'failed'
     } else {
       updateData.status = 'pending'
