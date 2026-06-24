@@ -15,14 +15,14 @@ interface AvailabilityRequest {
   peopleCount: number
 }
 
-// ✅ CONSTANTS
-const NORMAL_HOURS_START = '08:30'
-const NORMAL_HOURS_END = '17:30'
-
 const CROWNED_NIGHT_SLUGS = ['crowned-night-a', 'crowned-night-b']
 const EVENING_START_TIME = '17:30'
 const EVENING_MAX_BOOKINGS = 2
 const EVENING_MAX_PEOPLE = 4
+
+// Fallback if business_hours query fails
+const FALLBACK_OPEN = '08:30'
+const FALLBACK_CLOSE = '16:30'
 
 function getUtcRangeForSastDate(date: string) {
   return {
@@ -126,6 +126,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ✅ BUSINESS HOURS — query DB for the actual day, same as admin route
+    const dayOfWeek = new Date(`${date}T12:00:00+02:00`).getDay()
+    const { data: hoursRow } = await supabase
+      .from('business_hours')
+      .select('open_time, close_time, after_hours_enabled, after_hours_end_time')
+      .eq('day_of_week', dayOfWeek)
+      .maybeSingle()
+
+    const openTime = sanitizeHHMM(hoursRow?.open_time ?? FALLBACK_OPEN)
+    const closeTime = sanitizeHHMM(hoursRow?.close_time ?? FALLBACK_CLOSE)
+
+    console.log(`[Availability] date=${date} day=${dayOfWeek} open=${openTime} close=${closeTime}`)
+
     const { start, end } = getUtcRangeForSastDate(date)
 
     // Load rooms (treatment area only, active)
@@ -225,8 +238,8 @@ export async function POST(request: NextRequest) {
       roomBookings,
       serviceDurationMinutes,
       peopleCount,
-      sanitizeHHMM(NORMAL_HOURS_START),
-      sanitizeHHMM(NORMAL_HOURS_END),
+      openTime,
+      closeTime,
       timeBlocks
     )
 
