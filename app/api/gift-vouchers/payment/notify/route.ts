@@ -84,20 +84,22 @@ export async function POST(request: NextRequest) {
 
       console.log('[GiftVoucher ITN] Activated:', giftVoucher.code)
 
-      // Send emails (fire and forget — don't fail the webhook if email fails)
-      sendGiftVoucherEmails({
-        voucherCode: giftVoucher.code,
-        serviceName: giftVoucher.service_name,
-        peopleCount: giftVoucher.people_count,
-        amountPaid: Number(giftVoucher.amount_paid),
-        purchaserName: giftVoucher.purchaser_name,
-        purchaserEmail: giftVoucher.purchaser_email,
-        recipientName: giftVoucher.recipient_name,
-        recipientEmail: giftVoucher.recipient_email,
-        expiresAt: giftVoucher.expires_at,
-      }).catch((err) => {
+      // Send emails — awaited so Vercel doesn't kill the function before all emails go out
+      try {
+        await sendGiftVoucherEmails({
+          voucherCode: giftVoucher.code,
+          serviceName: giftVoucher.service_name,
+          peopleCount: giftVoucher.people_count,
+          amountPaid: Number(giftVoucher.amount_paid),
+          purchaserName: giftVoucher.purchaser_name,
+          purchaserEmail: giftVoucher.purchaser_email,
+          recipientName: giftVoucher.recipient_name,
+          recipientEmail: giftVoucher.recipient_email,
+          expiresAt: giftVoucher.expires_at,
+        })
+      } catch (err) {
         console.error('[GiftVoucher ITN] Email send error:', err)
-      })
+      }
 
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       await supabase
