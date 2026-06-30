@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 
+
 export async function GET() {
   return NextResponse.json({
     SEND_EMAILS: process.env.SEND_EMAILS ?? null,
