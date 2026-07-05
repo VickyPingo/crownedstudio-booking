@@ -73,7 +73,7 @@ export function ClientDetailsStep({
 
         <div>
           <label className="block text-sm font-medium text-gray-800 mb-2">
-            Phone Number <span className="text-red-500">*</span>
+            WhatsApp Number <span className="text-red-500">*</span>
           </label>
           <input
             type="tel"
@@ -83,7 +83,7 @@ export function ClientDetailsStep({
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent text-gray-900 placeholder-gray-500"
           />
           {clientPhone.trim() === '' && (
-            <p className="text-xs text-red-500 mt-1">Phone number is required</p>
+            <p className="text-xs text-red-500 mt-1">WhatsApp number is required</p>
           )}
         </div>
 
