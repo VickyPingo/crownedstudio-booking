@@ -504,9 +504,17 @@ function buildGiftVoucherClientEmail(data: GiftVoucherEmailData): string {
         <p style="margin:0;font-size:13px;color:#78350f;">4. Your booking is fully paid — enjoy!</p>
       </div>
 
-      <p style="margin:0;font-size:12px;color:#aaa;text-align:center;">
-        Gift vouchers are non-refundable and valid for 6 months from purchase.
-      </p>
+      <div style="border-top:1px solid #f0f0f0;padding-top:20px;">
+        <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:1px;">Terms &amp; Conditions for Vouchers</p>
+        <ul style="margin:0;padding-left:18px;color:#888;font-size:12px;line-height:1.7;">
+          <li>Vouchers must be used within their validity period.</li>
+          <li>Clients are responsible for booking well in advance of the voucher expiry date to avoid disappointment.</li>
+          <li>All voucher bookings are subject to availability, and Crowned Studio cannot guarantee preferred dates or times close to expiry.</li>
+          <li>Vouchers will expire if an appointment is missed or not rescheduled within 48 hours.</li>
+          <li>Vouchers are non-refundable and non-transferable unless otherwise stated.</li>
+          <li>Promotional offers and vouchers cannot be combined unless explicitly specified.</li>
+        </ul>
+      </div>
     </div>
 
   </div>
