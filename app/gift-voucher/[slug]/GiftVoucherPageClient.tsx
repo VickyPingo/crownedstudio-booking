@@ -41,6 +41,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
   const [recipientEmail, setRecipientEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
 
   const price = getPriceForPeopleCount(service, peopleCount)
   const maxPeople = Math.min(service.max_people, 6)
@@ -48,6 +49,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
   const canSubmit =
     purchaserName.trim() !== '' &&
     purchaserEmail.trim() !== '' &&
+    termsAccepted &&
     !isSubmitting
 
   const handlePurchase = async () => {
@@ -217,6 +219,35 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
               <p className="text-xs text-gray-500 mt-2">Valid for 6 months from purchase date</p>
             </div>
 
+            {/* Terms & Conditions */}
+            <div className="space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                <p className="text-xs font-semibold text-gray-800 uppercase tracking-wide mb-2">
+                  Terms &amp; Conditions for Vouchers
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-xs text-gray-600">
+                  <li>Vouchers must be used within their validity period.</li>
+                  <li>Clients are responsible for booking well in advance of the voucher expiry date to avoid disappointment.</li>
+                  <li>All voucher bookings are subject to availability, and Crowned Studio cannot guarantee preferred dates or times close to expiry.</li>
+                  <li>Vouchers will expire if an appointment is missed or not rescheduled within 48 hours.</li>
+                  <li>Vouchers are non-refundable and non-transferable unless otherwise stated.</li>
+                  <li>Promotional offers and vouchers cannot be combined unless explicitly specified.</li>
+                </ul>
+              </div>
+              <div className="flex items-start gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="voucher-terms-checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-gray-900 border-gray-300 rounded focus:ring-gray-900 focus:ring-2 cursor-pointer"
+                />
+                <label htmlFor="voucher-terms-checkbox" className="text-sm text-gray-700 cursor-pointer">
+                  I have read and accept the Terms &amp; Conditions for Vouchers above.
+                </label>
+              </div>
+            </div>
+
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                 <p className="text-sm text-red-700">{error}</p>
@@ -243,7 +274,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
 
         {/* Back link */}
         <div className="text-center mt-6">
-          <a
+          
             href={`/booking/${service.slug}`}
             className="text-sm text-gray-600 hover:text-gray-900 underline"
           >
