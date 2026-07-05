@@ -274,7 +274,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
 
         {/* Back link */}
         <div className="text-center mt-6">
-          
+          <a
             href={`/booking/${service.slug}`}
             className="text-sm text-gray-600 hover:text-gray-900 underline"
           >
