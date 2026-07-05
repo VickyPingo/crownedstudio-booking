@@ -435,7 +435,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
           <div className="space-y-1 text-sm">
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Name:</span> {formData.clientName}</p>
             <p className="text-gray-800"><span className="text-gray-600 font-medium">Email:</span> {formData.clientEmail}</p>
-            <p className="text-gray-800"><span className="text-gray-600 font-medium">Phone:</span> {formData.clientPhone}</p>
+            <p className="text-gray-800"><span className="text-gray-600 font-medium">WhatsApp:</span> {formData.clientPhone}</p>
             {formData.clientDateOfBirth && (
               <p className="text-gray-800"><span className="text-gray-600 font-medium">Date of Birth:</span> {new Date(formData.clientDateOfBirth).toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             )}
