@@ -336,7 +336,8 @@ async function getAvailableRooms(
   startTime: Date,
   endTime: Date,
   excludeBookingId?: string,
-  serviceSlug?: string
+  serviceSlug?: string,
+  bypassRestriction: boolean = false
 ): Promise<{ rooms: Room[]; restrictedRoomIds: Set<string> }> {
   const supabase = supabaseAdmin
 
@@ -373,6 +374,7 @@ async function getAvailableRooms(
   const eligibleRooms = rooms.filter((room: any) => {
     const allowed = restrictionMap.get(room.id)
     if (!allowed || allowed.size === 0) return true        // no restriction → open to all
+    if (bypassRestriction) return true                     // explicit bypass (e.g. 1-person bookings) → open regardless of slug
     if (!serviceSlug) return false                          // restricted room, no slug → exclude
     return allowed.has(serviceSlug)                        // restricted room → slug must match
   })
@@ -474,12 +476,17 @@ export async function allocateRoom(
 
   const isPreferredSlug = serviceSlug ? ROOM7_PREFERRED_SLUGS.has(serviceSlug) : false
 
+  // For 1-person bookings, Room 7 is opened up to ALL services (not just the
+  // preferred 4) as part of the Group 1 pool alongside Room 3 & Room 4.
+  const bypassRoom7Restriction = peopleCount === 1
+
   const { rooms: availableRooms, restrictedRoomIds } = await getAvailableRooms(
     serviceRoomArea,
     startTime,
     endTime,
     excludeBookingId,
-    serviceSlug
+    serviceSlug,
+    bypassRoom7Restriction
   )
 
   console.log('[RoomAllocation] Available rooms:', availableRooms.map(r => ({
@@ -490,9 +497,10 @@ export async function allocateRoom(
   })))
 
   // ── PREFERRED SLUGS (WP2, WP3, SC2, SC3) ──────────────────────────────────
+  // Unchanged: these 4 services still try Room 7 FIRST for ≤2 people.
   if (isPreferredSlug) {
     if (peopleCount <= 2) {
-      // Try Room 7 first (it's in availableRooms only if free + slug matches)
+      // Try Room 7 first (it's in availableRooms only if free + slug matches, or bypassed above)
       const room7 = availableRooms.find(r => restrictedRoomIds.has(r.id))
       if (room7) {
         console.log(`[RoomAllocation] Room 7 preference hit: using ${room7.room_name} for "${serviceSlug}"`)
@@ -510,7 +518,27 @@ export async function allocateRoom(
     return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
   }
 
-  // ── ALL OTHER SERVICES ────────────────────────────────────────────────────
+  // ── ALL OTHER SERVICES, 1 PERSON ──────────────────────────────────────────
+  // Room 7 joins Group 1 (Room 3 & Room 4, priority 1–2) for single-person bookings.
+  // Tried in priority order: Room 3 → Room 4 → Room 7.
+  if (bypassRoom7Restriction) {
+    const groupOnePlusRoom7 = availableRooms
+      .filter(r => (r.priority >= 1 && r.priority <= 2) || restrictedRoomIds.has(r.id))
+      .sort((a, b) => a.priority - b.priority)
+
+    if (groupOnePlusRoom7.length > 0) {
+      const room = groupOnePlusRoom7[0]
+      console.log(`[RoomAllocation] Single-person booking → Group 1 + Room 7 pool: using ${room.room_name}`)
+      return { room_ids: [room.id], room_names: [room.room_name] }
+    }
+
+    // Group 1 + Room 7 all occupied — fall back to standard combination logic
+    console.log('[RoomAllocation] Group 1 + Room 7 all occupied for single-person booking, falling back to standard rooms')
+    const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
+    return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
+  }
+
+  // ── ALL OTHER SERVICES, 2+ PEOPLE ─────────────────────────────────────────
   // Room 7 is already absent from availableRooms (filtered out by restriction logic)
   return allocateFromRoomList(availableRooms, peopleCount, serviceRoomArea)
 }
