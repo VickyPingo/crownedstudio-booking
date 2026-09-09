@@ -105,6 +105,7 @@ interface PaymentStepProps {
 export function PaymentStep({ service, formData, businessHours, publicHolidayDates }: PaymentStepProps) {
   const [isCreatingBooking, setIsCreatingBooking] = useState(false)
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
+  const [bookingErrorMessage, setBookingErrorMessage] = useState<string | null>(null)
   const { savedBooking, setSavedBooking } = useBookingModal()
 
   const [voucherCode, setVoucherCode] = useState('')
@@ -279,6 +280,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   const handleCreateBooking = async () => {
     if (savedBooking) return
     setIsCreatingBooking(true)
+    setBookingErrorMessage(null)
     try {
       const payload: CreateBookingPayload = {
         customerName: formData.clientName,
@@ -328,12 +330,18 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         body: JSON.stringify(payload),
       })
 
-      if (!response.ok) throw new Error('Failed to create booking')
-      const result = await response.json()
-      if (result.success && result.booking) setSavedBooking(result.booking)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Something went wrong creating your booking. Please try again.')
+      }
+
+      if (result.booking) setSavedBooking(result.booking)
     } catch (error) {
       console.error('Error creating booking:', error)
-      alert('Failed to create booking. Please try again.')
+      setBookingErrorMessage(
+        error instanceof Error ? error.message : 'Something went wrong creating your booking. Please try again.'
+      )
     } finally {
       setIsCreatingBooking(false)
     }
@@ -342,18 +350,25 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
   const handlePayDeposit = async () => {
     if (!savedBooking) return
     setIsInitiatingPayment(true)
+    setBookingErrorMessage(null)
     try {
       const response = await fetch('/api/payment/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bookingId: savedBooking.id }),
       })
-      if (!response.ok) throw new Error('Failed to initiate payment')
-      const result = await response.json()
-      if (result.success && result.paymentUrl) window.location.href = result.paymentUrl
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Something went wrong starting your payment. Please try again.')
+      }
+
+      if (result.paymentUrl) window.location.href = result.paymentUrl
     } catch (error) {
       console.error('Error initiating payment:', error)
-      alert('Failed to initiate payment. Please try again.')
+      setBookingErrorMessage(
+        error instanceof Error ? error.message : 'Something went wrong starting your payment. Please try again.'
+      )
       setIsInitiatingPayment(false)
     }
   }
@@ -670,6 +685,28 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
           : savedBooking.status === 'confirmed' ? 'Your booking has been confirmed. No payment required.'
           : 'You will be redirected to PayFast to complete your deposit payment'}
       </p>
+
+      {/* Booking / payment failure popup */}
+      {bookingErrorMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setBookingErrorMessage(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center">
+            <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </div>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">We couldn't complete this</h4>
+            <p className="text-sm text-gray-700 mb-6">{bookingErrorMessage}</p>
+            <button
+              onClick={() => setBookingErrorMessage(null)}
+              className="w-full bg-black text-white py-2.5 px-6 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
