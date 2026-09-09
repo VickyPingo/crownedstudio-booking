@@ -119,6 +119,25 @@ export default function AdminGiftVouchersPage() {
     }
   }
 
+  const handleMarkRedeemed = async (voucher: GiftVoucher) => {
+    if (!window.confirm(`Mark gift voucher ${voucher.code} as redeemed? Use this when a customer redeems in person or over the phone.`)) {
+      return
+    }
+    setUpdating(true)
+    const { error: updateError } = await supabase
+      .from('gift_vouchers')
+      .update({ status: 'redeemed', redeemed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', voucher.id)
+
+    setUpdating(false)
+    if (!updateError) {
+      setDetailVoucher(null)
+      fetchVouchers()
+    } else {
+      setError(updateError.message)
+    }
+  }
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -356,6 +375,15 @@ export default function AdminGiftVouchersPage() {
               >
                 Close
               </button>
+              {detailVoucher.status === 'active' && (
+                <button
+                  onClick={() => handleMarkRedeemed(detailVoucher)}
+                  disabled={updating}
+                  className="flex-1 px-4 py-2.5 bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100 transition-colors disabled:opacity-50"
+                >
+                  {updating ? 'Marking...' : 'Mark as Redeemed'}
+                </button>
+              )}
               {(detailVoucher.status === 'active' || detailVoucher.status === 'pending_payment') && (
                 <button
                   onClick={() => handleMarkCancelled(detailVoucher)}
