@@ -95,6 +95,63 @@ export async function POST(req: NextRequest) {
         ? roomAssignments[0].roomId
         : null
 
+    // ── GIFT VOUCHER CHECK ────────────────────────────────────────────────────
+    // A voucherCode sent WITHOUT a voucherId means the client resolved it against
+    // the gift_vouchers table (see ManualBookingModal.handleCheckVoucher), not the
+    // regular `vouchers` discount-code table. Re-validate server-side before
+    // trusting the client-computed total, and redeem the voucher once the booking
+    // is created so it can't be reused.
+    let giftVoucherId: string | null = null
+    let discountType: string | null = voucherId ? 'voucher' : null
+
+    if (voucherCode && !voucherId) {
+      const { data: gv } = await supabaseAdmin
+        .from('gift_vouchers')
+        .select('id, service_slug, people_count, status, expires_at')
+        .eq('code', String(voucherCode).toUpperCase().trim())
+        .eq('status', 'active')
+        .maybeSingle()
+
+      if (gv) {
+        if (!isCustomBooking && gv.service_slug !== serviceSlug) {
+          return NextResponse.json(
+            { success: false, error: 'This gift voucher is not valid for this service' },
+            { status: 400 }
+          )
+        }
+
+        if (gv.people_count !== safeNum(peopleCount)) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `This gift voucher is for ${gv.people_count} ${gv.people_count === 1 ? 'person' : 'people'}`,
+            },
+            { status: 400 }
+          )
+        }
+
+        if (new Date(gv.expires_at) < new Date()) {
+          await supabaseAdmin
+            .from('gift_vouchers')
+            .update({ status: 'expired', updated_at: new Date().toISOString() })
+            .eq('id', gv.id)
+          return NextResponse.json(
+            { success: false, error: 'This gift voucher has expired' },
+            { status: 400 }
+          )
+        }
+
+        giftVoucherId = gv.id
+        discountType = 'gift_voucher'
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Invalid or already-redeemed gift voucher code' },
+          { status: 400 }
+        )
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from('bookings')
       .insert({
@@ -113,7 +170,7 @@ export async function POST(req: NextRequest) {
         base_price: safeNum(pricing?.basePrice),
         upsells_total: safeNum(pricing?.upsellsTotal),
         discount_amount: safeNum(pricing?.discount),
-        discount_type: null,
+        discount_type: discountType,
         voucher_code: voucherCode || null,
         voucher_id: voucherId || null,
 
@@ -153,6 +210,27 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       )
     }
+
+    // ── REDEEM GIFT VOUCHER ────────────────────────────────────────────────────
+    if (giftVoucherId) {
+      const { error: redeemError } = await supabaseAdmin
+        .from('gift_vouchers')
+        .update({
+          status: 'redeemed',
+          redeemed_at: nowIso,
+          redeemed_booking_id: booking.id,
+          updated_at: nowIso,
+        })
+        .eq('id', giftVoucherId)
+        .eq('status', 'active') // safety: don't double-redeem
+
+      if (redeemError) {
+        console.error('[ManualBooking] Failed to mark gift voucher as redeemed:', redeemError)
+      } else {
+        console.log(`[ManualBooking] Gift voucher ${voucherCode} redeemed for booking ${booking.id}`)
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // ✅ INSERT UPSELLS FOR MANUAL BOOKINGS
     if (selectedUpsellsByPerson && typeof selectedUpsellsByPerson === 'object') {
