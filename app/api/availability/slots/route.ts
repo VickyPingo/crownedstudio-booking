@@ -141,12 +141,25 @@ export async function POST(request: NextRequest) {
 
     const { start, end } = getUtcRangeForSastDate(date)
 
-    // Load rooms (treatment area only, active)
+    // ✅ SERVICE AREA — determines which room pool this service draws from
+    // (mirrors app/api/bookings/create/route.ts so slot availability matches
+    // what room allocation will actually do at booking time)
+    let serviceArea = 'treatment'
+    if (serviceSlug) {
+      const { data: serviceRow } = await supabase
+        .from('services')
+        .select('service_area')
+        .eq('slug', serviceSlug)
+        .maybeSingle()
+      serviceArea = serviceRow?.service_area || 'treatment'
+    }
+
+    // Load rooms (matching the service's area, active)
     const { data: rooms } = await supabase
       .from('rooms')
       .select('*')
       .eq('active', true)
-      .eq('room_area', 'treatment')
+      .eq('room_area', serviceArea)
       .order('priority', { ascending: true })
 
     // ✅ ROOM SERVICE RESTRICTIONS
@@ -240,7 +253,8 @@ export async function POST(request: NextRequest) {
       peopleCount,
       openTime,
       closeTime,
-      timeBlocks
+      timeBlocks,
+      serviceArea
     )
 
     console.log(
