@@ -400,9 +400,10 @@ function buildMergedBookingsForScheduling(
   date: string,
   rooms: Room[],
   bookings: RoomBooking[],
-  timeBlocks?: SchedulingTimeBlock[]
+  timeBlocks?: SchedulingTimeBlock[],
+  roomArea: string = 'treatment'
 ) {
-  const activeRooms = rooms.filter((room) => room.active && room.room_area === 'treatment')
+  const activeRooms = rooms.filter((room) => room.active && room.room_area === roomArea)
   const allRoomIds = activeRooms.map((r) => r.id)
 
   const syntheticBlockBookings = timeBlocks && timeBlocks.length > 0
@@ -434,13 +435,15 @@ export function findAllAvailableSlotsInActiveGroupWithMeta(
   peopleCount: number,
   businessStartTime: string,
   businessEndTime: string,
-  timeBlocks?: SchedulingTimeBlock[]
+  timeBlocks?: SchedulingTimeBlock[],
+  roomArea: string = 'treatment'
 ): ActiveGroupAvailabilityResult {
   const { activeRooms, mergedBookings } = buildMergedBookingsForScheduling(
     date,
     rooms,
     bookings,
-    timeBlocks
+    timeBlocks,
+    roomArea
   )
 
   const groupedRooms = groupRoomsByPriority(activeRooms)
