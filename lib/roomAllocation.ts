@@ -35,10 +35,10 @@ export interface MultiRoomAllocationResult {
 export const CLEANUP_BUFFER_MINUTES = 10
 
 /**
- * Services that get Room 7 as first preference (≤2 people).
- * If Room 7 is occupied, they fall back to standard rooms.
- * If >2 people, they skip Room 7 entirely and use standard rooms.
- * All other services never see Room 7.
+ * Services that get Room 7 as first preference, but only when the party fits
+ * Room 7's capacity (read from the DB — currently 1).
+ * If Room 7 is occupied or too small, they fall back to standard rooms.
+ * Other services only see Room 7 for single-person bookings.
  */
 const ROOM7_PREFERRED_SLUGS = new Set([
   'cosy-comfort',            // WP2
@@ -497,23 +497,15 @@ export async function allocateRoom(
   })))
 
   // ── PREFERRED SLUGS (WP2, WP3, SC2, SC3) ──────────────────────────────────
-  // Unchanged: these 4 services still try Room 7 FIRST for ≤2 people.
+  // Try Room 7 FIRST, but only if the whole party fits in it (capacity from DB).
   if (isPreferredSlug) {
-    if (peopleCount <= 2) {
-      // Try Room 7 first (it's in availableRooms only if free + slug matches, or bypassed above)
-      const room7 = availableRooms.find(r => restrictedRoomIds.has(r.id))
-      if (room7) {
-        console.log(`[RoomAllocation] Room 7 preference hit: using ${room7.room_name} for "${serviceSlug}"`)
-        return { room_ids: [room7.id], room_names: [room7.room_name] }
-      }
-      // Room 7 occupied — fall back to standard rooms (Rooms 1–6)
-      console.log(`[RoomAllocation] Room 7 occupied for "${serviceSlug}", falling back to standard rooms`)
-      const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
-      return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
+    const room7 = availableRooms.find(r => restrictedRoomIds.has(r.id))
+    if (room7 && room7.capacity >= peopleCount) {
+      console.log(`[RoomAllocation] Room 7 preference hit: using ${room7.room_name} for "${serviceSlug}"`)
+      return { room_ids: [room7.id], room_names: [room7.room_name] }
     }
-
-    // >2 people — Room 7 can't fit them; use standard rooms only
-    console.log(`[RoomAllocation] "${serviceSlug}" with ${peopleCount} people exceeds Room 7 capacity, using standard rooms`)
+    // Room 7 occupied or too small for this party — use standard rooms (Rooms 1–6)
+    console.log(`[RoomAllocation] Room 7 ${room7 ? `too small for ${peopleCount} people` : 'unavailable'} for "${serviceSlug}", using standard rooms`)
     const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
     return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
   }
