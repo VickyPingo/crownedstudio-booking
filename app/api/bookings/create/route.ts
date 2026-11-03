@@ -6,6 +6,7 @@ import { fetchBookingForEmail, buildBookingEmailData } from '@/lib/email/helpers
 import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingRequestToClient, scheduleReminder } from '@/lib/email/service'
 import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock } from '@/lib/roomAllocation'
 import { isSameDayBooking } from '@/lib/timeSlots'
+import { getFixedStartTimes, FIXED_TIME_EXEMPT_SLUGS } from '@/lib/fixedStartTimes'
 
 const PAYMENT_EXPIRY_MINUTES = 20
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
@@ -178,6 +179,19 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     const serviceArea = service?.service_area || 'treatment'
+
+    // Only the fixed online start times may be booked (where configured)
+    if (!FIXED_TIME_EXEMPT_SLUGS.has(payload.serviceSlug)) {
+      const fixedStartTimes = await getFixedStartTimes(serviceArea, supabase)
+      const requestedTime = String(payload.selectedTime || '').slice(0, 5)
+      if (fixedStartTimes.length > 0 && !fixedStartTimes.includes(requestedTime)) {
+        console.warn(`[BookingCreate] Rejected non-fixed start time ${requestedTime} for area "${serviceArea}"`)
+        return NextResponse.json(
+          { error: 'This time is no longer available. Please go back and choose one of the available times.' },
+          { status: 409 }
+        )
+      }
+    }
     const weekendSurchargePP = Number(service?.weekend_surcharge_pp) || 0
 
     let weekendSurchargeAmount = 0
