@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import {
   findAllAvailableSlotsInActiveGroupWithMeta,
+  findFixedTimeSlotsStrictFill,
   Room,
   RoomBooking,
   SchedulingTimeBlock,
 } from '@/lib/controlledScheduling'
 import { isActiveBooking } from '@/lib/bookingFilters'
+import { getFixedStartTimes } from '@/lib/fixedStartTimes'
 
 interface AvailabilityRequest {
   date: string
@@ -176,9 +178,12 @@ export async function POST(request: NextRequest) {
       restrictionMap.get(row.room_id)!.add(row.service_slug)
     }
 
+    // Restricted rooms (Room 7) are open to ALL services for 1-person bookings,
+    // mirroring allocateRoom() in lib/roomAllocation.ts.
     const eligibleRooms = (rooms || []).filter((room: any) => {
       const allowed = restrictionMap.get(room.id)
       if (!allowed || allowed.size === 0) return true
+      if (peopleCount === 1) return true
       if (!serviceSlug) return false
       return allowed.has(serviceSlug)
     })
@@ -245,6 +250,42 @@ export async function POST(request: NextRequest) {
 
     const timeBlocks = (timeBlocksRaw || []) as SchedulingTimeBlock[]
 
+    // A full-day global block means the spa is closed — not just booked out.
+    const isClosedAllDay = timeBlocks.some((b) => b.is_full_day && !b.room_id)
+    if (isClosedAllDay) {
+      return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
+    }
+
+    // ✅ FIXED START TIMES + STRICT ROOM FILL (areas with booking_start_times rows)
+    const fixedStartTimes = await getFixedStartTimes(serviceArea, supabase)
+
+    if (fixedStartTimes.length > 0) {
+      const fixedResult = findFixedTimeSlotsStrictFill(
+        date,
+        eligibleRooms as Room[],
+        roomBookings,
+        serviceDurationMinutes,
+        peopleCount,
+        fixedStartTimes,
+        openTime,
+        closeTime,
+        timeBlocks,
+        serviceArea
+      )
+
+      console.log(
+        `[Availability] date=${date} service=${serviceSlug} people=${peopleCount}` +
+        ` mode=${fixedResult.mode} slots=${fixedResult.slots.join(',') || 'none'}`
+      )
+
+      // isFullyBlocked=false with no slots → UI shows "no availability" (+ WhatsApp for groups)
+      return NextResponse.json({
+        availableSlots: fixedResult.slots,
+        isFullyBlocked: false,
+      })
+    }
+
+    // Areas without fixed times (e.g. mani/pedi, picnic) keep flexible slots
     const slotResult = findAllAvailableSlotsInActiveGroupWithMeta(
       date,
       eligibleRooms as Room[],
@@ -265,7 +306,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       availableSlots: slotResult.slots,
-      isFullyBlocked: slotResult.slots.length === 0,
+      isFullyBlocked: false,
     })
   } catch (error) {
     console.error('[Availability] Error:', error)
