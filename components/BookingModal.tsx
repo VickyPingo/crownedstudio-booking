@@ -262,6 +262,7 @@ roomSharingNoticeAccepted: false,
             onUpdateDate={(date) => updateFormData({ selectedDate: date })}
             onUpdateTime={(time) => updateFormData({ selectedTime: time })}
             serviceSlug={resolvedService.slug}
+            serviceName={resolvedService.name}
             serviceDurationMinutes={calculateTotalDuration()}
             peopleCount={formData.peopleCount}
             businessHours={businessHours}
