@@ -562,3 +562,141 @@ export function findAvailableSlotsAnchoredToRoom(
 
   return validSlots.filter((slot) => HHMM_RE.test(slot))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIXED START TIMES + STRICT ROOM FILL (public booking flow)
+//
+// Rules (agreed with the client, Nov 2026):
+// 1. Only the fixed start times (booking_start_times table) are offered.
+// 2. Rooms are tried "best fit" first: the smallest room that holds the whole
+//    party, then by priority. With today's rooms that gives:
+//      1 person  → Room 7 → Room 1 → Room 2 → Room 5 → Room 6 → Room 3 → Room 4
+//      2 people  → Room 1 → Room 2 → Room 5 → Room 6 → Room 3 → Room 4
+//      3 people  → Room 3 → Room 4
+// 3. STRICT fill: the customer only sees the free times of the first room in
+//    that order that still has a free time for this service. The next room
+//    only opens once that room is full for the day.
+// 4. If no single room can take the party, groups may be split across rooms
+//    (best combination = fewest empty beds, then fewest rooms, then priority).
+// 5. Treatments may run past closing time (start time must be within hours).
+//
+// allocateRoom() in lib/roomAllocation.ts uses the same ordering, so the room
+// whose times were shown is the room the booking lands in.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FixedTimeSlotResult {
+  slots: string[]
+  mode: 'single-room' | 'split' | 'none'
+  openRoomId: string | null
+}
+
+/** Rooms that can hold the whole party alone, smallest first, then by priority. */
+export function orderRoomsForParty<T extends { capacity: number; priority: number }>(
+  rooms: T[],
+  peopleCount: number
+): T[] {
+  return rooms
+    .filter((r) => r.capacity >= peopleCount)
+    .sort((a, b) => a.capacity - b.capacity || a.priority - b.priority)
+}
+
+/**
+ * Best multi-room combination for a party: fewest empty beds, then fewest
+ * rooms, then lowest total priority. Returns null if no combination fits.
+ */
+export function findBestRoomCombination<T extends { capacity: number; priority: number }>(
+  rooms: T[],
+  peopleCount: number
+): T[] | null {
+  let best: T[] | null = null
+  let bestKey: [number, number, number] | null = null
+  const n = rooms.length
+  if (n > 16) return null // safety: never enumerate a huge set
+
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const combo: T[] = []
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) combo.push(rooms[i])
+    const capacity = combo.reduce((s, r) => s + r.capacity, 0)
+    if (capacity < peopleCount) continue
+    const key: [number, number, number] = [
+      capacity - peopleCount,
+      combo.length,
+      combo.reduce((s, r) => s + r.priority, 0),
+    ]
+    if (
+      !bestKey ||
+      key[0] < bestKey[0] ||
+      (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && key[2] < bestKey[2])))
+    ) {
+      best = combo
+      bestKey = key
+    }
+  }
+  return best ? [...best].sort((a, b) => a.priority - b.priority) : null
+}
+
+export function findFixedTimeSlotsStrictFill(
+  date: string,
+  rooms: Room[],
+  bookings: RoomBooking[],
+  serviceDurationMinutes: number,
+  peopleCount: number,
+  fixedStartTimes: string[],
+  businessStartTime: string,
+  businessEndTime: string,
+  timeBlocks?: SchedulingTimeBlock[],
+  roomArea: string = 'treatment'
+): FixedTimeSlotResult {
+  const { activeRooms, mergedBookings } = buildMergedBookingsForScheduling(
+    date,
+    rooms,
+    bookings,
+    timeBlocks,
+    roomArea
+  )
+
+  const openMs = toUtcMsFromSast(date, businessStartTime)
+  const closeMs = toUtcMsFromSast(date, businessEndTime)
+  const occupancyMs = (serviceDurationMinutes + BOOKING_BUFFER_MINUTES) * 60 * 1000
+
+  // Fixed times that start within business hours (finishing late is allowed)
+  const candidates = Array.from(new Set(fixedStartTimes.map(sanitizeHHMM)))
+    .filter((t) => HHMM_RE.test(t))
+    .map((t) => ({ label: t, ms: toUtcMsFromSast(date, t) }))
+    .filter((c) => Number.isFinite(c.ms))
+    .filter((c) => !Number.isFinite(openMs) || c.ms >= openMs)
+    .filter((c) => !Number.isFinite(closeMs) || c.ms < closeMs)
+    .sort((a, b) => a.ms - b.ms)
+
+  const freeAt = (roomId: string, startMs: number) =>
+    isRoomFreeAtTime(roomId, mergedBookings, startMs, startMs + occupancyMs)
+
+  // 1) Strict single-room fill
+  for (const room of orderRoomsForParty(activeRooms, peopleCount)) {
+    const free = candidates.filter((c) => freeAt(room.id, c.ms)).map((c) => c.label)
+    if (free.length > 0) {
+      console.log(
+        `[FixedSlots] date=${date} people=${peopleCount} open room=${room.room_name} slots=${free.join(',')}`
+      )
+      return { slots: free, mode: 'single-room', openRoomId: room.id }
+    }
+  }
+
+  // 2) No single room can take the party — allow splitting across rooms
+  const splitSlots = candidates
+    .filter((c) => {
+      const freeRooms = activeRooms.filter((r) => freeAt(r.id, c.ms))
+      return findBestRoomCombination(freeRooms, peopleCount) !== null
+    })
+    .map((c) => c.label)
+
+  console.log(
+    `[FixedSlots] date=${date} people=${peopleCount} no single room free → split slots=${splitSlots.join(',') || 'none'}`
+  )
+
+  return {
+    slots: splitSlots,
+    mode: splitSlots.length > 0 ? 'split' : 'none',
+    openRoomId: null,
+  }
+}
