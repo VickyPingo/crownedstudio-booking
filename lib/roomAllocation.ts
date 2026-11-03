@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/server'
-import { groupRoomsByPriority, findRoomCombinationInGroup } from './controlledScheduling'
+import { orderRoomsForParty, findBestRoomCombination } from './controlledScheduling'
 import type { TimeBlock } from './timeSlots'
 
 export interface Room {
@@ -34,18 +34,6 @@ export interface MultiRoomAllocationResult {
 
 export const CLEANUP_BUFFER_MINUTES = 10
 
-/**
- * Services that get Room 7 as first preference, but only when the party fits
- * Room 7's capacity (read from the DB — currently 1).
- * If Room 7 is occupied or too small, they fall back to standard rooms.
- * Other services only see Room 7 for single-person bookings.
- */
-const ROOM7_PREFERRED_SLUGS = new Set([
-  'cosy-comfort',            // WP2
-  'head-to-toe',             // WP3
-  'complete-body-care',      // SC2
-  'massage-creative-escape', // SC3
-])
 
 /**
  * Determines whether a booking should block room availability.
@@ -385,54 +373,23 @@ async function getAvailableRooms(
   return { rooms: availableRooms, restrictedRoomIds }
 }
 
-function findRoomCombination(
-  availableRooms: Room[],
-  peopleCount: number
-): Room[] | null {
-  const roomGroups = groupRoomsByPriority(availableRooms)
-
-  for (let groupNum = 1; groupNum <= 3; groupNum++) {
-    const groupRooms = roomGroups.get(groupNum)
-    if (!groupRooms || groupRooms.length === 0) continue
-
-    const combination = findRoomCombinationInGroup(groupRooms, peopleCount)
-    if (combination) {
-      console.log('[RoomAllocation] Found combination in Group', groupNum, ':', combination.map(r => r.room_name).join(' + '))
-      return combination
-    }
-  }
-
-  console.log('[RoomAllocation] No valid combination found in any group')
-  return null
-}
-
 /**
- * Runs the standard group-based room combination logic on a given list of rooms
- * and returns the allocation result. Extracted so it can be called from multiple
- * paths in allocateRoom without duplication.
+ * Validates a chosen combination and turns it into an allocation result.
  */
-function allocateFromRoomList(
-  rooms: Room[],
+function toAllocationResult(
+  combination: Room[] | null,
   peopleCount: number,
-  serviceRoomArea: string
+  serviceRoomArea: string,
+  availableCount: number
 ): MultiRoomAllocationResult {
-  if (rooms.length === 0) {
-    console.error('[RoomAllocation] No available rooms for:', { serviceRoomArea, peopleCount })
+  if (!combination || combination.length === 0) {
+    console.error('[RoomAllocation] No room combination found for:', { peopleCount, availableRooms: availableCount })
     return {
       room_ids: [],
       room_names: [],
-      error: `No rooms available for area "${serviceRoomArea}"`,
-    }
-  }
-
-  const combination = findRoomCombination(rooms, peopleCount)
-
-  if (!combination) {
-    console.error('[RoomAllocation] No room combination found for:', { peopleCount, availableRooms: rooms.length })
-    return {
-      room_ids: [],
-      room_names: [],
-      error: `No available room combination can accommodate ${peopleCount} people`,
+      error: availableCount === 0
+        ? `No rooms available for area "${serviceRoomArea}"`
+        : `No available room combination can accommodate ${peopleCount} people`,
     }
   }
 
@@ -451,12 +408,26 @@ function allocateFromRoomList(
 
   const room_ids = combination.map(r => r.id)
   const room_names = combination.map(r => r.room_name)
-
   console.log(`[RoomAllocation] Allocated rooms: ${room_names.join(', ')} (${room_ids.length} rooms) area="${serviceRoomArea}"`)
-
   return { room_ids, room_names }
 }
 
+/**
+ * Allocates room(s) for a public booking.
+ *
+ * Mirrors findFixedTimeSlotsStrictFill() in lib/controlledScheduling.ts:
+ * 1. Best fit: the smallest free room that holds the whole party, then by
+ *    priority (1p → Room 7 first; 2p → 2-bed rooms; 3p → 3-bed rooms).
+ *    Because availability only shows the first room in this order that still
+ *    has free times, the first free room here is the room the customer saw.
+ * 2. Otherwise split across rooms: fewest empty beds, then fewest rooms.
+ *
+ * Restricted rooms (Room 7, room_allowed_services) are open to every service
+ * for 1-person bookings; for larger parties only to their listed services.
+ *
+ * The 10-minute clean-up buffer is applied after the NEW booking too, exactly
+ * like the availability check, so both sides agree on which rooms are free.
+ */
 export async function allocateRoom(
   serviceRoomArea: string,
   startTime: Date,
@@ -474,65 +445,36 @@ export async function allocateRoom(
     excludeBookingId,
   })
 
-  const isPreferredSlug = serviceSlug ? ROOM7_PREFERRED_SLUGS.has(serviceSlug) : false
+  const occupancyEnd = new Date(endTime.getTime() + CLEANUP_BUFFER_MINUTES * 60000)
 
-  // For 1-person bookings, Room 7 is opened up to ALL services (not just the
-  // preferred 4) as part of the Group 1 pool alongside Room 3 & Room 4.
-  const bypassRoom7Restriction = peopleCount === 1
-
-  const { rooms: availableRooms, restrictedRoomIds } = await getAvailableRooms(
+  const { rooms: availableRooms } = await getAvailableRooms(
     serviceRoomArea,
     startTime,
-    endTime,
+    occupancyEnd,
     excludeBookingId,
     serviceSlug,
-    bypassRoom7Restriction
+    peopleCount === 1
   )
 
   console.log('[RoomAllocation] Available rooms:', availableRooms.map(r => ({
     name: r.room_name,
     capacity: r.capacity,
     priority: r.priority,
-    restricted: restrictedRoomIds.has(r.id),
   })))
 
-  // ── PREFERRED SLUGS (WP2, WP3, SC2, SC3) ──────────────────────────────────
-  // Try Room 7 FIRST, but only if the whole party fits in it (capacity from DB).
-  if (isPreferredSlug) {
-    const room7 = availableRooms.find(r => restrictedRoomIds.has(r.id))
-    if (room7 && room7.capacity >= peopleCount) {
-      console.log(`[RoomAllocation] Room 7 preference hit: using ${room7.room_name} for "${serviceSlug}"`)
-      return { room_ids: [room7.id], room_names: [room7.room_name] }
-    }
-    // Room 7 occupied or too small for this party — use standard rooms (Rooms 1–6)
-    console.log(`[RoomAllocation] Room 7 ${room7 ? `too small for ${peopleCount} people` : 'unavailable'} for "${serviceSlug}", using standard rooms`)
-    const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
-    return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
+  const bestSingle = orderRoomsForParty(availableRooms, peopleCount)[0]
+  if (bestSingle) {
+    console.log(`[RoomAllocation] Best-fit single room for ${peopleCount}p: ${bestSingle.room_name}`)
+    return toAllocationResult([bestSingle], peopleCount, serviceRoomArea, availableRooms.length)
   }
 
-  // ── ALL OTHER SERVICES, 1 PERSON ──────────────────────────────────────────
-  // Room 7 joins Group 1 (Room 3 & Room 4, priority 1–2) for single-person bookings.
-  // Tried in priority order: Room 3 → Room 4 → Room 7.
-  if (bypassRoom7Restriction) {
-    const groupOnePlusRoom7 = availableRooms
-      .filter(r => (r.priority >= 1 && r.priority <= 2) || restrictedRoomIds.has(r.id))
-      .sort((a, b) => a.priority - b.priority)
-
-    if (groupOnePlusRoom7.length > 0) {
-      const room = groupOnePlusRoom7[0]
-      console.log(`[RoomAllocation] Single-person booking → Group 1 + Room 7 pool: using ${room.room_name}`)
-      return { room_ids: [room.id], room_names: [room.room_name] }
-    }
-
-    // Group 1 + Room 7 all occupied — fall back to standard combination logic
-    console.log('[RoomAllocation] Group 1 + Room 7 all occupied for single-person booking, falling back to standard rooms')
-    const standardRooms = availableRooms.filter(r => !restrictedRoomIds.has(r.id))
-    return allocateFromRoomList(standardRooms, peopleCount, serviceRoomArea)
-  }
-
-  // ── ALL OTHER SERVICES, 2+ PEOPLE ─────────────────────────────────────────
-  // Room 7 is already absent from availableRooms (filtered out by restriction logic)
-  return allocateFromRoomList(availableRooms, peopleCount, serviceRoomArea)
+  console.log(`[RoomAllocation] No single room fits ${peopleCount}p — trying to split across rooms`)
+  return toAllocationResult(
+    findBestRoomCombination(availableRooms, peopleCount),
+    peopleCount,
+    serviceRoomArea,
+    availableRooms.length
+  )
 }
 
 export async function getRoomsForDate(
