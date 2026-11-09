@@ -7,6 +7,7 @@ import { useBookingModal } from '@/hooks/useBookingModal'
 import { isAfterHoursSlot } from '@/lib/timeSlots'
 import { supabase } from '@/lib/supabase/client'
 import type { Voucher } from '@/types/voucher'
+import { getPromoRule, getDepositPercent } from '@/lib/promoRules'
 
 const AFTER_HOURS_SURCHARGE_PP = 100
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
@@ -103,6 +104,7 @@ interface PaymentStepProps {
 }
 
 export function PaymentStep({ service, formData, businessHours, publicHolidayDates }: PaymentStepProps) {
+  const isFullPrepayment = !!getPromoRule(service.slug)?.fullPrepayment
   const [isCreatingBooking, setIsCreatingBooking] = useState(false)
   const [isInitiatingPayment, setIsInitiatingPayment] = useState(false)
   const [bookingErrorMessage, setBookingErrorMessage] = useState<string | null>(null)
@@ -163,7 +165,8 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
 
   // Discount logic — gift voucher takes priority and covers full price
   const hasAnyVoucher = !!(appliedVoucher || appliedGiftVoucher)
-  const repeatCustomerDiscount = isRepeatCustomer && !hasAnyVoucher
+  const repeatDiscountAllowed = isRepeatCustomer && !getPromoRule(service.slug)?.noRepeatCustomerDiscount
+  const repeatCustomerDiscount = repeatDiscountAllowed && !hasAnyVoucher
     ? Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT) : 0
 
   const calculateVoucherDiscount = (voucher: Voucher, amount: number): number => {
@@ -246,11 +249,11 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
     ? 'gift_voucher'
     : appliedVoucher
     ? 'voucher'
-    : isRepeatCustomer
+    : repeatDiscountAllowed
     ? 'repeat_customer'
     : null
   const finalTotal = Math.max(0, subtotal - activeDiscount)
-  const depositAmount = Math.max(0, Math.round(finalTotal * 0.5))
+  const depositAmount = Math.max(0, Math.round(finalTotal * getDepositPercent(service.slug)))
   const isZeroPayment = finalTotal === 0 || depositAmount === 0
 
   const pricing: BookingPricing = savedBooking
@@ -602,7 +605,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
             {pricing.depositAmount > 0 ? (
               <div className="pt-2 border-t border-green-300 bg-green-50 -mx-4 px-4 py-2 mt-2">
                 <div className="flex justify-between text-green-800 font-semibold">
-                  <span>50% Deposit Required</span>
+                  <span>{isFullPrepayment ? 'Full Payment Required' : '50% Deposit Required'}</span>
                   <span>R{pricing.depositAmount}</span>
                 </div>
                 <p className="text-xs text-green-700 mt-1">Booking held for 20 minutes. Expires if payment not completed.</p>
@@ -675,7 +678,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
           disabled={isInitiatingPayment}
           className="w-full bg-green-700 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-800 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
         >
-          {isInitiatingPayment ? 'Redirecting to PayFast...' : `Pay Deposit (R${pricing.depositAmount})`}
+          {isInitiatingPayment ? 'Redirecting to PayFast...' : `${isFullPrepayment ? 'Pay Now' : 'Pay Deposit'} (R${pricing.depositAmount})`}
         </button>
       )}
 
@@ -683,7 +686,7 @@ export function PaymentStep({ service, formData, businessHours, publicHolidayDat
         {!savedBooking
           ? isZeroPayment ? 'Your voucher fully covers this booking. Click to confirm.' : 'Your booking will be created and you will be redirected to payment'
           : savedBooking.status === 'confirmed' ? 'Your booking has been confirmed. No payment required.'
-          : 'You will be redirected to PayFast to complete your deposit payment'}
+          : `You will be redirected to PayFast to complete your ${isFullPrepayment ? 'payment' : 'deposit payment'}`}
       </p>
 
       {/* Booking / payment failure popup */}

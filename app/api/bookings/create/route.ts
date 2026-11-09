@@ -7,10 +7,10 @@ import { sendNewBookingToSpa, sendBookingConfirmationToClient, sendBookingReques
 import { allocateRoom, assignRoomsToBooking, getBlockingTimeBlock } from '@/lib/roomAllocation'
 import { isSameDayBooking } from '@/lib/timeSlots'
 import { getFixedStartTimes, FIXED_TIME_EXEMPT_SLUGS } from '@/lib/fixedStartTimes'
+import { getPromoRule, getDepositPercent, isAfterLastBookingDate } from '@/lib/promoRules'
 
 const PAYMENT_EXPIRY_MINUTES = 20
 const REPEAT_CUSTOMER_DISCOUNT_PERCENT = 0.1
-const DEPOSIT_PERCENT = 0.5
 
 async function sendEmailNotifications(bookingId: string, startDateTime: Date, isZeroPayment: boolean) {
   console.log(`Booking ${bookingId}: Starting email notifications, isZeroPayment=${isZeroPayment}`)
@@ -118,6 +118,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // ── PROMO / DAY RESTRICTIONS (server-side mirror of the availability route) ──
+    {
+      const unavailable = () =>
+        NextResponse.json(
+          { error: 'This service is not available on the selected date. Please choose another date.' },
+          { status: 400 }
+        )
+      if (isAfterLastBookingDate(payload.serviceSlug, payload.selectedDate)) return unavailable()
+      if (getPromoRule(payload.serviceSlug)?.blockPublicHolidays && (await isPublicHoliday(supabase, payload.selectedDate))) {
+        return unavailable()
+      }
+      const { data: timeWindow } = await supabase
+        .from('service_time_windows')
+        .select('days_allowed')
+        .eq('service_slug', payload.serviceSlug)
+        .maybeSingle()
+      if (timeWindow?.days_allowed) {
+        const DAY_ABBRS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+        const dayAbbr = DAY_ABBRS[new Date(`${payload.selectedDate}T12:00:00+02:00`).getDay()]
+        const allowed = String(timeWindow.days_allowed).split(',').map((d) => d.trim().toUpperCase())
+        if (!allowed.includes(dayAbbr)) return unavailable()
+      }
+    }
+
     let customerId: string
 
     const { data: existingCustomer } = await supabase
@@ -211,7 +235,7 @@ export async function POST(request: NextRequest) {
     if (hasPromoVoucher) {
       discountAmount = payload.voucherDiscount || 0
       discountType = 'voucher'
-    } else {
+    } else if (!getPromoRule(payload.serviceSlug)?.noRepeatCustomerDiscount) {
       const isRepeatCustomer = await checkRepeatCustomer(supabase, payload.customerEmail, payload.customerPhone)
       if (isRepeatCustomer) {
         discountAmount = Math.round(subtotal * REPEAT_CUSTOMER_DISCOUNT_PERCENT)
@@ -272,7 +296,7 @@ export async function POST(request: NextRequest) {
 
     const cappedDiscount = Math.min(discountAmount, subtotal)
     const totalPrice = Math.max(0, subtotal - cappedDiscount)
-    const depositDue = Math.max(0, Math.round(totalPrice * DEPOSIT_PERCENT))
+    const depositDue = Math.max(0, Math.round(totalPrice * getDepositPercent(payload.serviceSlug)))
     const isZeroPayment = totalPrice === 0 || depositDue === 0
 
     let roomAllocation: { room_ids: string[]; room_names: string[]; error?: string }

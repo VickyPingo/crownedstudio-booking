@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getPayfastConfig, generatePayfastPaymentUrl, splitName } from '@/lib/payfast'
+import { getPromoRule } from '@/lib/promoRules'
 
 interface InitiatePaymentRequest {
   bookingId: string
@@ -60,8 +61,8 @@ export async function POST(request: NextRequest) {
         merchant_transaction_id: merchantTransactionId,
         status: 'initiated',
         amount: booking.deposit_due,
-        item_name: `${service.name} - 50% Deposit`,
-        item_description: `Booking deposit for ${service.name}`,
+        item_name: getPromoRule(booking.service_slug)?.fullPrepayment ? `${service.name} - Full Payment` : `${service.name} - 50% Deposit`,
+        item_description: getPromoRule(booking.service_slug)?.fullPrepayment ? `Booking payment for ${service.name}` : `Booking deposit for ${service.name}`,
         name_first: splitName(customer.full_name).firstName,
         name_last: splitName(customer.full_name).lastName,
         email_address: customer.email,

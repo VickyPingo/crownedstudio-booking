@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { getPromoRule, getVoucherExpiry } from '@/lib/promoRules'
 
 interface Service {
   id: string
@@ -34,7 +35,15 @@ function getPriceForPeopleCount(service: Service, count: number): number {
 }
 
 export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
-  const [peopleCount, setPeopleCount] = useState(1)
+  const firstValidCount =
+    Array.from({ length: Math.min(service.max_people, 6) }, (_, i) => i + 1).find(
+      (n) => (getPriceForPeopleCount(service, n) || 0) > 0
+    ) || 1
+  const [peopleCount, setPeopleCount] = useState(firstValidCount)
+  const promoRule = getPromoRule(service.slug)
+  const validityText = promoRule?.voucherExpiresAt
+    ? `Valid until ${getVoucherExpiry(service.slug).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Johannesburg' })}`
+    : 'Valid for 6 months from purchase date'
   const [purchaserName, setPurchaserName] = useState('')
   const [purchaserEmail, setPurchaserEmail] = useState('')
   const [recipientName, setRecipientName] = useState('')
@@ -216,7 +225,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
                 </span>
                 <span className="font-bold text-gray-900 text-lg">R{price.toLocaleString()}</span>
               </div>
-              <p className="text-xs text-gray-500 mt-2">Valid for 6 months from purchase date</p>
+              <p className="text-xs text-gray-500 mt-2">{validityText}</p>
             </div>
 
             {/* Terms & Conditions */}
@@ -232,6 +241,9 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
                   <li>Vouchers will expire if an appointment is missed or not rescheduled within 48 hours.</li>
                   <li>Vouchers are non-refundable and non-transferable unless otherwise stated.</li>
                   <li>Promotional offers and vouchers cannot be combined unless explicitly specified.</li>
+                  {promoRule?.voucherTerms?.map((term) => (
+                    <li key={term} className="font-medium text-gray-800">{term}</li>
+                  ))}
                 </ul>
               </div>
               <div className="flex items-start gap-3 p-4 bg-gray-50 border border-gray-200 rounded-xl">

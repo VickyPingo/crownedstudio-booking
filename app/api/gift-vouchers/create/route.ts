@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase/server'
 import { getPayfastConfig, generatePayfastPaymentUrl, splitName } from '@/lib/payfast'
 import crypto from 'crypto'
+import { getVoucherExpiry } from '@/lib/promoRules'
 
 function generateVoucherCode(): string {
   // Exclude confusable chars (0/O, 1/I/L)
@@ -34,6 +35,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Verify the price server-side — never trust the amount sent by the browser
+    const { data: svc } = await supabase
+      .from('services')
+      .select('price_1_person, price_2_people, price_3_people, price_4_people, price_5_people, price_6_people, max_people')
+      .eq('slug', serviceSlug)
+      .eq('active', true)
+      .maybeSingle()
+    const priceByCount: Record<number, unknown> = svc
+      ? { 1: svc.price_1_person, 2: svc.price_2_people, 3: svc.price_3_people, 4: svc.price_4_people, 5: svc.price_5_people, 6: svc.price_6_people }
+      : {}
+    const expectedPrice = Number(priceByCount[Number(peopleCount)]) || 0
+    if (!svc || Number(peopleCount) > svc.max_people || expectedPrice <= 0 || Math.abs(expectedPrice - parseFloat(amountPaid)) > 0.009) {
+      return NextResponse.json({ error: 'Invalid voucher selection. Please refresh the page and try again.' }, { status: 400 })
+    }
+
     // Generate a unique voucher code (retry on collision)
     let code = ''
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -53,8 +69,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to generate unique voucher code' }, { status: 500 })
     }
 
-    const expiresAt = new Date()
-    expiresAt.setMonth(expiresAt.getMonth() + 6)
+    const expiresAt = getVoucherExpiry(serviceSlug)
+    const validUntilLabel = expiresAt.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Johannesburg' })
 
     const merchantTransactionId = `GV-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
 
@@ -104,7 +120,7 @@ export async function POST(request: NextRequest) {
       m_payment_id: merchantTransactionId,
       amount,
       item_name: `Gift Voucher: ${serviceName}`,
-      item_description: `Gift voucher for ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'} · Valid 6 months`,
+      item_description: `Gift voucher for ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'} · Valid until ${validUntilLabel}`,
     }
 
     const paymentUrl = generatePayfastPaymentUrl(paymentData, config)

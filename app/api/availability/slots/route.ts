@@ -9,6 +9,7 @@ import {
 } from '@/lib/controlledScheduling'
 import { isActiveBooking } from '@/lib/bookingFilters'
 import { getFixedStartTimes } from '@/lib/fixedStartTimes'
+import { getPromoRule, isAfterLastBookingDate } from '@/lib/promoRules'
 
 interface AvailabilityRequest {
   date: string
@@ -96,6 +97,25 @@ export async function POST(request: NextRequest) {
 
     if (blockedServiceDates[serviceSlug]?.includes(date)) {
       return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
+    }
+
+    // ✅ PROMO RULES (last booking date, public holidays) — see lib/promoRules.ts
+    const promoRule = getPromoRule(serviceSlug)
+    if (promoRule) {
+      if (isAfterLastBookingDate(serviceSlug, date)) {
+        return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
+      }
+      if (promoRule.blockPublicHolidays) {
+        const { data: holiday } = await supabaseAdmin
+          .from('public_holidays')
+          .select('id')
+          .eq('date', date)
+          .eq('active', true)
+          .limit(1)
+        if (holiday && holiday.length > 0) {
+          return NextResponse.json({ availableSlots: [], isFullyBlocked: true })
+        }
+      }
     }
 
     // ✅ DAY-OF-WEEK RESTRICTION

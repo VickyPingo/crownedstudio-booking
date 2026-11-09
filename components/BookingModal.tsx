@@ -109,8 +109,20 @@ roomSharingNoticeAccepted: false,
       if (defaultOption && !formData.selectedPricingOption) {
         setFormData((prev) => ({ ...prev, selectedPricingOption: defaultOption }))
       }
+      // Services priced only for certain group sizes (e.g. 2 people only):
+      // start on the first group size that actually has a price.
+      if (!defaultOption) {
+        const prices = [
+          newService.price_1_person, newService.price_2_people, newService.price_3_people,
+          newService.price_4_people, newService.price_5_people, newService.price_6_people,
+        ].map((p) => Number(p) || 0)
+        const firstValid = prices.findIndex((p, i) => p > 0 && i + 1 <= newService!.max_people) + 1
+        if (firstValid > 1) {
+          setFormData((prev) => (prices[prev.peopleCount - 1] > 0 ? prev : { ...prev, peopleCount: firstValid }))
+        }
+      }
     }
-  }, [selectedService, serviceSlug, services])
+  }, [selectedService, serviceSlug, services, isOpen])
 
   useEffect(() => {
     if (isOpen) {
