@@ -42,6 +42,10 @@ export function DateTimeStep({
       return
     }
 
+    // Ignore responses for a date that is no longer selected (typing a date
+    // fires several requests; a slow stale one must not overwrite a newer one).
+    let cancelled = false
+
     const fetchAvailability = async () => {
       setLoading(true)
       setError(null)
@@ -64,17 +68,22 @@ export function DateTimeStep({
         }
 
         const data = await response.json()
+        if (cancelled) return
         setAvailableSlots(data.availableSlots || [])
         setIsFullyBlocked(data.isFullyBlocked || false)
       } catch (err) {
+        if (cancelled) return
         console.error('Error fetching availability:', err)
         setError('Unable to check availability. Please try again.')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     fetchAvailability()
+    return () => {
+      cancelled = true
+    }
   }, [selectedDate, serviceSlug, serviceDurationMinutes, peopleCount])
 
   useEffect(() => {
