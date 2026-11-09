@@ -153,7 +153,13 @@ roomSharingNoticeAccepted: false,
 
   const serviceTimeWindow = serviceTimeWindows[resolvedService.slug] || null
   const hasPricingOptions = resolvedService.pricingOptions && resolvedService.pricingOptions.length > 0
-  const showRoomCheckbox = !hasPricingOptions && resolvedService.max_people > 1
+  // Must match when ServiceDetailsStep actually shows the people selector + checkbox
+  // (only when more than one group size has a price), otherwise Next can never unlock.
+  const pricedPeopleOptions = [
+    resolvedService.price_1_person, resolvedService.price_2_people, resolvedService.price_3_people,
+    resolvedService.price_4_people, resolvedService.price_5_people, resolvedService.price_6_people,
+  ].filter((p, i) => i + 1 <= resolvedService.max_people && (Number(p) || 0) > 0).length
+  const showRoomCheckbox = !hasPricingOptions && pricedPeopleOptions > 1
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) setCurrentStep(currentStep + 1)
