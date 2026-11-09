@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/admin/AdminLayout'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 
 interface Client {
   id: string
@@ -25,24 +26,44 @@ export default function AdminClientsPage() {
     const fetchClients = async () => {
       setLoading(true)
 
-      const { data: customers, error: customersError } = await supabase
-        .from('customers')
-        .select('id, full_name, email, phone')
+      // Paginate: Supabase returns max 1,000 rows per request, which silently
+      // dropped most clients once the tables grew past that.
+      const { data: customers, error: customersError } = await fetchAll<{
+        id: string
+        full_name: string
+        email: string | null
+        phone: string | null
+      }>((from, to) =>
+        supabase
+          .from('customers')
+          .select('id, full_name, email, phone')
+          .order('id')
+          .range(from, to)
+      )
 
-      if (customersError || !customers) {
+      if (customersError) {
         setLoading(false)
         return
       }
 
-      const { data: bookings, error: bookingsError } = await supabase
-        .from('bookings')
-        .select(`
-          customer_id,
-          total_price,
-          start_time,
-          payment_transactions(status, amount)
-        `)
-        .order('start_time', { ascending: false })
+      const { data: bookings, error: bookingsError } = await fetchAll<{
+        customer_id: string
+        total_price: number
+        start_time: string
+        payment_transactions: { status: string; amount: number }[] | null
+      }>((from, to) =>
+        supabase
+          .from('bookings')
+          .select(`
+            customer_id,
+            total_price,
+            start_time,
+            payment_transactions(status, amount)
+          `)
+          .order('start_time', { ascending: false })
+          .order('id')
+          .range(from, to)
+      )
 
       if (bookingsError) {
         setLoading(false)
