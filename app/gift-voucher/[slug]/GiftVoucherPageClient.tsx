@@ -46,8 +46,12 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
     : 'Valid for 6 months from purchase date'
   const [purchaserName, setPurchaserName] = useState('')
   const [purchaserEmail, setPurchaserEmail] = useState('')
-  const [recipientName, setRecipientName] = useState('')
-  const [recipientEmail, setRecipientEmail] = useState('')
+  const [recipients, setRecipients] = useState<{ name: string; email: string }[]>(
+    Array.from({ length: 10 }, () => ({ name: '', email: '' }))
+  )
+  const updateRecipient = (index: number, update: Partial<{ name: string; email: string }>) => {
+    setRecipients((prev) => prev.map((r, i) => (i === index ? { ...r, ...update } : r)))
+  }
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
@@ -81,8 +85,10 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
           quantity,
           purchaserName: purchaserName.trim(),
           purchaserEmail: purchaserEmail.trim().toLowerCase(),
-          recipientName: recipientName.trim() || null,
-          recipientEmail: recipientEmail.trim().toLowerCase() || null,
+          recipients: recipients.slice(0, quantity).map((r) => ({
+            name: r.name.trim() || null,
+            email: r.email.trim().toLowerCase() || null,
+          })),
         }),
       })
 
@@ -216,40 +222,50 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
               </div>
             </div>
 
-            {/* Recipient details (optional) */}
+            {/* Recipient details (optional) — one per voucher */}
             <div className="space-y-4 pt-2 border-t border-gray-100">
               <div>
                 <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
-                  Gift Recipient <span className="text-gray-400 font-normal normal-case">(optional)</span>
+                  {quantity > 1 ? 'Gift Recipients' : 'Gift Recipient'}{' '}
+                  <span className="text-gray-400 font-normal normal-case">(optional)</span>
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  If this is a gift, we'll also send the voucher directly to the recipient.
+                  {quantity > 1
+                    ? "Each voucher can go to a different person. We'll email each voucher to its recipient. Leave a voucher blank to keep it yourself — all codes are always emailed to you too."
+                    : "If this is a gift, we'll also send the voucher directly to the recipient."}
                 </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Recipient's Name
-                </label>
-                <input
-                  type="text"
-                  value={recipientName}
-                  onChange={(e) => setRecipientName(e.target.value)}
-                  placeholder="Sarah Johnson"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Recipient's Email
-                </label>
-                <input
-                  type="email"
-                  value={recipientEmail}
-                  onChange={(e) => setRecipientEmail(e.target.value)}
-                  placeholder="sarah@example.com"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                />
-              </div>
+              {recipients.slice(0, quantity).map((r, i) => (
+                <div key={i} className={quantity > 1 ? 'rounded-xl border border-gray-200 p-4 space-y-3' : 'space-y-4'}>
+                  {quantity > 1 && (
+                    <p className="text-sm font-semibold text-gray-800">Voucher {i + 1}</p>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Recipient&apos;s Name
+                    </label>
+                    <input
+                      type="text"
+                      value={r.name}
+                      onChange={(e) => updateRecipient(i, { name: e.target.value })}
+                      placeholder="Sarah Johnson"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Recipient&apos;s Email
+                    </label>
+                    <input
+                      type="email"
+                      value={r.email}
+                      onChange={(e) => updateRecipient(i, { email: e.target.value })}
+                      placeholder="sarah@example.com"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Price summary */}

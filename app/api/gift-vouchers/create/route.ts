@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       recipientName,
       recipientEmail,
       quantity,
+      recipients,
     } = body
 
     if (!serviceSlug || !serviceName || !peopleCount || !amountPaid || !purchaserName || !purchaserEmail) {
@@ -88,6 +89,19 @@ export async function POST(request: NextRequest) {
     const paymentGroupId = `GV-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
     const unitPrice = parseFloat(amountPaid)
 
+    // Each voucher can have its own recipient. Older clients send one recipientName/recipientEmail.
+    const recipientFor = (i: number): { name: string | null; email: string | null } => {
+      if (Array.isArray(recipients)) {
+        const r = recipients[i] || {}
+        const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim() : null
+        const email = typeof r.email === 'string' && r.email.trim() ? r.email.toLowerCase().trim() : null
+        return { name, email }
+      }
+      return i === 0
+        ? { name: recipientName || null, email: recipientEmail ? recipientEmail.toLowerCase().trim() : null }
+        : { name: null, email: null }
+    }
+
     const rows = codes.map((code, i) => ({
       code,
       service_slug: serviceSlug,
@@ -96,8 +110,8 @@ export async function POST(request: NextRequest) {
       amount_paid: unitPrice,
       purchaser_name: purchaserName,
       purchaser_email: purchaserEmail.toLowerCase().trim(),
-      recipient_name: recipientName || null,
-      recipient_email: recipientEmail ? recipientEmail.toLowerCase().trim() : null,
+      recipient_name: recipientFor(i).name,
+      recipient_email: recipientFor(i).email,
       status: 'pending_payment',
       merchant_transaction_id: qty === 1 ? paymentGroupId : `${paymentGroupId}-${i + 1}`,
       payment_group_id: paymentGroupId,
