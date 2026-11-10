@@ -5,7 +5,11 @@ import { Suspense } from 'react'
 
 function SuccessContent() {
   const searchParams = useSearchParams()
-  const code = searchParams.get('code')
+  const codes = (searchParams.get('codes') || searchParams.get('code') || '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean)
+  const multiple = codes.length > 1
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -19,20 +23,26 @@ function SuccessContent() {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Gift Voucher Purchased!
+            {multiple ? `${codes.length} Gift Vouchers Purchased!` : 'Gift Voucher Purchased!'}
           </h1>
           <p className="text-gray-600 mb-6 text-sm leading-relaxed">
-            Your payment is being confirmed. You'll receive a confirmation email with your voucher code shortly.
+            Your payment is being confirmed. You'll receive a confirmation email {multiple ? 'for each voucher code' : 'with your voucher code'} shortly.
           </p>
 
-          {code && (
+          {codes.length > 0 && (
             <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl p-6 mb-6">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mb-2">
-                Your Gift Voucher Code
+                {multiple ? 'Your Gift Voucher Codes' : 'Your Gift Voucher Code'}
               </p>
-              <p className="text-3xl font-mono font-bold text-gray-900 tracking-wider">{code}</p>
+              <div className="space-y-1">
+                {codes.map((c) => (
+                  <p key={c} className={`${multiple ? 'text-2xl' : 'text-3xl'} font-mono font-bold text-gray-900 tracking-wider`}>{c}</p>
+                ))}
+              </div>
               <p className="text-xs text-gray-400 mt-2">
-                Save this code — it will also be emailed to you
+                {multiple
+                  ? 'Save these codes — each one will also be emailed to you. Each code is used once.'
+                  : 'Save this code — it will also be emailed to you'}
               </p>
             </div>
           )}

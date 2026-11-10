@@ -51,9 +51,12 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const [quantity, setQuantity] = useState(1)
+  const MAX_QUANTITY = 10
 
   const price = getPriceForPeopleCount(service, peopleCount)
   const maxPeople = Math.min(service.max_people, 6)
+  const total = price * quantity
 
   const canSubmit =
     purchaserName.trim() !== '' &&
@@ -75,6 +78,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
           serviceName: service.name,
           peopleCount,
           amountPaid: price,
+          quantity,
           purchaserName: purchaserName.trim(),
           purchaserEmail: purchaserEmail.trim().toLowerCase(),
           recipientName: recipientName.trim() || null,
@@ -150,6 +154,37 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
               </div>
             </div>
 
+            {/* Quantity */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-3">
+                Number of Vouchers
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  disabled={quantity <= 1}
+                  aria-label="One less voucher"
+                  className="w-11 h-11 rounded-xl border-2 border-gray-200 text-xl font-semibold text-gray-800 hover:border-gray-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  −
+                </button>
+                <span className="w-10 text-center text-xl font-bold text-gray-900">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(MAX_QUANTITY, q + 1))}
+                  disabled={quantity >= MAX_QUANTITY}
+                  aria-label="One more voucher"
+                  className="w-11 h-11 rounded-xl border-2 border-gray-200 text-xl font-semibold text-gray-800 hover:border-gray-400 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  +
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Each voucher gets its own code, so you can give them to different people.
+              </p>
+            </div>
+
             {/* Purchaser details */}
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
@@ -221,10 +256,13 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="flex justify-between items-center">
                 <span className="text-gray-700">
-                  {service.name} — {peopleCount} {peopleCount === 1 ? 'person' : 'people'}
+                  {quantity > 1 ? `${quantity} × ` : ''}{service.name} — {peopleCount} {peopleCount === 1 ? 'person' : 'people'}
                 </span>
-                <span className="font-bold text-gray-900 text-lg">R{price.toLocaleString()}</span>
+                <span className="font-bold text-gray-900 text-lg">R{total.toLocaleString()}</span>
               </div>
+              {quantity > 1 && (
+                <p className="text-xs text-gray-500 mt-1">R{price.toLocaleString()} per voucher</p>
+              )}
               <p className="text-xs text-gray-500 mt-2">{validityText}</p>
             </div>
 
@@ -274,7 +312,7 @@ export function GiftVoucherPageClient({ service }: GiftVoucherPageClientProps) {
             >
               {isSubmitting
                 ? 'Redirecting to payment...'
-                : `Pay R${price.toLocaleString()} — Purchase Gift Voucher`}
+                : `Pay R${total.toLocaleString()} — Purchase ${quantity > 1 ? `${quantity} Gift Vouchers` : 'Gift Voucher'}`}
             </button>
 
             <p className="text-xs text-gray-500 text-center">

@@ -23,20 +23,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing merchant transaction id' }, { status: 400 })
     }
 
-    const { data: giftVoucher, error: gvError } = await supabase
+    // An order can hold several vouchers paid in one PayFast payment (payment_group_id).
+    // Older single-voucher orders are matched on merchant_transaction_id.
+    let { data: vouchers, error: gvError } = await supabase
       .from('gift_vouchers')
       .select('*')
-      .eq('merchant_transaction_id', merchantTransactionId)
-      .maybeSingle()
+      .eq('payment_group_id', merchantTransactionId)
+      .order('merchant_transaction_id', { ascending: true })
 
-    if (gvError || !giftVoucher) {
+    if (!gvError && (!vouchers || vouchers.length === 0)) {
+      const legacy = await supabase
+        .from('gift_vouchers')
+        .select('*')
+        .eq('merchant_transaction_id', merchantTransactionId)
+      vouchers = legacy.data
+      gvError = legacy.error
+    }
+
+    if (gvError || !vouchers || vouchers.length === 0) {
       console.error('[GiftVoucher ITN] Not found for transaction:', merchantTransactionId)
       return NextResponse.json({ error: 'Gift voucher not found' }, { status: 404 })
     }
 
+    const voucherIds = vouchers.map((v) => v.id)
+    const allCodes = vouchers.map((v) => v.code).join(', ')
+    const expectedTotal = vouchers.reduce((sum, v) => sum + Number(v.amount_paid), 0)
+
     // Idempotency: already processed
-    if (giftVoucher.status === 'active' || giftVoucher.status === 'redeemed') {
-      console.log('[GiftVoucher ITN] Already activated, skipping:', giftVoucher.code)
+    if (vouchers.every((v) => v.status === 'active' || v.status === 'redeemed')) {
+      console.log('[GiftVoucher ITN] Already activated, skipping:', allCodes)
       return NextResponse.json({ success: true, message: 'Already processed' })
     }
 
@@ -51,7 +66,7 @@ export async function POST(request: NextRequest) {
       const merchantMatches =
         !!config.merchantId &&
         String(itnData.merchant_id || '').trim() === String(config.merchantId).trim()
-      const amountMatches = Math.abs(receivedAmount - Number(giftVoucher.amount_paid)) <= 0.01
+      const amountMatches = Math.abs(receivedAmount - expectedTotal) <= 0.01
 
       console.warn('[GiftVoucher ITN] Signature invalid, checking fallback:', { merchantMatches, amountMatches })
 
@@ -62,51 +77,55 @@ export async function POST(request: NextRequest) {
     }
 
     if (paymentStatus === 'COMPLETE') {
-      // Verify amount
-      const amountMatches = Math.abs(receivedAmount - Number(giftVoucher.amount_paid)) <= 0.01
+      // Verify amount (total for all vouchers in the order)
+      const amountMatches = Math.abs(receivedAmount - expectedTotal) <= 0.01
       if (!amountMatches) {
         console.error('[GiftVoucher ITN] Amount mismatch:', {
-          expected: giftVoucher.amount_paid,
+          expected: expectedTotal,
           received: receivedAmount,
         })
         await supabase
           .from('gift_vouchers')
           .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-          .eq('id', giftVoucher.id)
+          .in('id', voucherIds)
         return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 })
       }
 
-      // Activate the voucher
+      // Activate the vouchers that are still pending
+      const pending = vouchers.filter((v) => v.status === 'pending_payment')
       await supabase
         .from('gift_vouchers')
         .update({ status: 'active', updated_at: new Date().toISOString() })
-        .eq('id', giftVoucher.id)
+        .in('id', pending.map((v) => v.id))
 
-      console.log('[GiftVoucher ITN] Activated:', giftVoucher.code)
+      console.log('[GiftVoucher ITN] Activated:', pending.map((v) => v.code).join(', '))
 
-      // Send emails — awaited so Vercel doesn't kill the function before all emails go out
-      try {
-        await sendGiftVoucherEmails({
-          voucherCode: giftVoucher.code,
-          serviceName: giftVoucher.service_name,
-          peopleCount: giftVoucher.people_count,
-          amountPaid: Number(giftVoucher.amount_paid),
-          purchaserName: giftVoucher.purchaser_name,
-          purchaserEmail: giftVoucher.purchaser_email,
-          recipientName: giftVoucher.recipient_name,
-          recipientEmail: giftVoucher.recipient_email,
-          expiresAt: giftVoucher.expires_at,
-        })
-      } catch (err) {
-        console.error('[GiftVoucher ITN] Email send error:', err)
+      // Send emails (one set per voucher) — awaited so Vercel doesn't kill the function early
+      for (const giftVoucher of pending) {
+        try {
+          await sendGiftVoucherEmails({
+            voucherCode: giftVoucher.code,
+            serviceName: giftVoucher.service_name,
+            peopleCount: giftVoucher.people_count,
+            amountPaid: Number(giftVoucher.amount_paid),
+            purchaserName: giftVoucher.purchaser_name,
+            purchaserEmail: giftVoucher.purchaser_email,
+            recipientName: giftVoucher.recipient_name,
+            recipientEmail: giftVoucher.recipient_email,
+            expiresAt: giftVoucher.expires_at,
+          })
+        } catch (err) {
+          console.error('[GiftVoucher ITN] Email send error for', giftVoucher.code, err)
+        }
       }
 
     } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED') {
       await supabase
         .from('gift_vouchers')
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', giftVoucher.id)
-      console.log('[GiftVoucher ITN] Cancelled/failed:', giftVoucher.code)
+        .in('id', voucherIds)
+        .eq('status', 'pending_payment')
+      console.log('[GiftVoucher ITN] Cancelled/failed:', allCodes)
     }
 
     return NextResponse.json({ success: true })

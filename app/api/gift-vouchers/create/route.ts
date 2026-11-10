@@ -5,6 +5,8 @@ import { getPayfastConfig, generatePayfastPaymentUrl, splitName } from '@/lib/pa
 import crypto from 'crypto'
 import { getVoucherExpiry } from '@/lib/promoRules'
 
+const MAX_VOUCHERS_PER_ORDER = 10
+
 function generateVoucherCode(): string {
   // Exclude confusable chars (0/O, 1/I/L)
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
       purchaserEmail,
       recipientName,
       recipientEmail,
+      quantity,
     } = body
 
     if (!serviceSlug || !serviceName || !peopleCount || !amountPaid || !purchaserName || !purchaserEmail) {
@@ -50,50 +53,63 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid voucher selection. Please refresh the page and try again.' }, { status: 400 })
     }
 
-    // Generate a unique voucher code (retry on collision)
-    let code = ''
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const candidate = generateVoucherCode()
-      const { data: existing } = await supabase
-        .from('gift_vouchers')
-        .select('id')
-        .eq('code', candidate)
-        .maybeSingle()
-      if (!existing) {
-        code = candidate
-        break
-      }
+    const qty = Math.floor(Number(quantity) || 1)
+    if (qty < 1 || qty > MAX_VOUCHERS_PER_ORDER) {
+      return NextResponse.json({ error: `You can buy between 1 and ${MAX_VOUCHERS_PER_ORDER} vouchers at a time.` }, { status: 400 })
     }
 
-    if (!code) {
-      return NextResponse.json({ error: 'Failed to generate unique voucher code' }, { status: 500 })
+    // Generate unique voucher codes (one per voucher, retry on collision)
+    const codes: string[] = []
+    for (let n = 0; n < qty; n++) {
+      let code = ''
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate = generateVoucherCode()
+        if (codes.includes(candidate)) continue
+        const { data: existing } = await supabase
+          .from('gift_vouchers')
+          .select('id')
+          .eq('code', candidate)
+          .maybeSingle()
+        if (!existing) {
+          code = candidate
+          break
+        }
+      }
+      if (!code) {
+        return NextResponse.json({ error: 'Failed to generate unique voucher code' }, { status: 500 })
+      }
+      codes.push(code)
     }
 
     const expiresAt = getVoucherExpiry(serviceSlug)
     const validUntilLabel = expiresAt.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Johannesburg' })
 
-    const merchantTransactionId = `GV-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+    // One PayFast payment covers every voucher in the order (payment_group_id).
+    const paymentGroupId = `GV-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`
+    const unitPrice = parseFloat(amountPaid)
 
-    const { data: giftVoucher, error: insertError } = await supabase
+    const rows = codes.map((code, i) => ({
+      code,
+      service_slug: serviceSlug,
+      service_name: serviceName,
+      people_count: peopleCount,
+      amount_paid: unitPrice,
+      purchaser_name: purchaserName,
+      purchaser_email: purchaserEmail.toLowerCase().trim(),
+      recipient_name: recipientName || null,
+      recipient_email: recipientEmail ? recipientEmail.toLowerCase().trim() : null,
+      status: 'pending_payment',
+      merchant_transaction_id: qty === 1 ? paymentGroupId : `${paymentGroupId}-${i + 1}`,
+      payment_group_id: paymentGroupId,
+      expires_at: expiresAt.toISOString(),
+    }))
+
+    const { data: inserted, error: insertError } = await supabase
       .from('gift_vouchers')
-      .insert({
-        code,
-        service_slug: serviceSlug,
-        service_name: serviceName,
-        people_count: peopleCount,
-        amount_paid: parseFloat(amountPaid),
-        purchaser_name: purchaserName,
-        purchaser_email: purchaserEmail.toLowerCase().trim(),
-        recipient_name: recipientName || null,
-        recipient_email: recipientEmail ? recipientEmail.toLowerCase().trim() : null,
-        status: 'pending_payment',
-        merchant_transaction_id: merchantTransactionId,
-        expires_at: expiresAt.toISOString(),
-      })
+      .insert(rows)
       .select('id, code')
-      .single()
 
-    if (insertError || !giftVoucher) {
+    if (insertError || !inserted || inserted.length !== qty) {
       console.error('[GiftVoucher] Insert error:', insertError)
       return NextResponse.json({ error: 'Failed to create gift voucher' }, { status: 500 })
     }
@@ -106,31 +122,32 @@ export async function POST(request: NextRequest) {
     }
 
     const { firstName, lastName } = splitName(purchaserName)
-    const amount = parseFloat(amountPaid).toFixed(2)
+    const amount = (unitPrice * qty).toFixed(2)
 
     const paymentData = {
       merchant_id: config.merchantId,
       merchant_key: config.merchantKey,
-      return_url: `${baseUrl}/gift-voucher/success?code=${giftVoucher.code}`,
+      return_url: `${baseUrl}/gift-voucher/success?codes=${codes.join(',')}`,
       cancel_url: `${baseUrl}/gift-voucher/cancelled`,
       notify_url: `${baseUrl}/api/gift-vouchers/payment/notify`,
       name_first: firstName,
       name_last: lastName,
       email_address: purchaserEmail.toLowerCase().trim(),
-      m_payment_id: merchantTransactionId,
+      m_payment_id: paymentGroupId,
       amount,
-      item_name: `Gift Voucher: ${serviceName}`,
-      item_description: `Gift voucher for ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'} · Valid until ${validUntilLabel}`,
+      item_name: qty > 1 ? `${qty} x Gift Voucher: ${serviceName}` : `Gift Voucher: ${serviceName}`,
+      item_description: `${qty > 1 ? `${qty} gift vouchers, each` : 'Gift voucher'} for ${peopleCount} ${peopleCount === 1 ? 'person' : 'people'} · Valid until ${validUntilLabel}`,
     }
 
     const paymentUrl = generatePayfastPaymentUrl(paymentData, config)
 
-    console.log(`[GiftVoucher] Created ${giftVoucher.code} for ${serviceSlug} x${peopleCount} — R${amount}`)
+    console.log(`[GiftVoucher] Created ${codes.join(', ')} for ${serviceSlug} x${peopleCount} (qty ${qty}) — R${amount}`)
 
     return NextResponse.json({
       success: true,
       paymentUrl,
-      voucherCode: giftVoucher.code,
+      voucherCode: codes[0],
+      voucherCodes: codes,
     })
   } catch (error) {
     console.error('[GiftVoucher] Creation error:', error)
